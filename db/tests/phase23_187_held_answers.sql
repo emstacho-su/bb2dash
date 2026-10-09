@@ -1,0 +1,642 @@
+-- bb2dash :: db/tests/phase23_187_held_answers.sql
+-- Phase 23 follow-ups (brief 110, Item 1, with Round 2's R3, R4 and the failed-close rule).
+-- Tests migration 187, section 1: an answer the apply worker could not apply is held, and a sync
+-- does not try it again. This is the FIRST of two units (the second is phase23_187_held_answers_b.sql);
+-- they are split to stay under 800 lines. THIS FILE HOLDS cases 0 to 9 and 18:
+--
+--   0. installed: the hold table, inbox_apply_held_items(), the three re-created bodies
+--   1. a close whose skip lists an item, with the resolved_at the run was handed, holds it
+--   2. with only that item waiting, sync_request_inbox_apply files nothing; with a second, unheld
+--      row it files one request
+--   3. prepare returns the id under `held` for a request with a trigger, [] for one with none; R3:
+--      a retry follow-up is handed its own skip, and only a JSON true retry_held counts
+--   4. once the item is answered again it is not held
+--   5. an answer given again after the claim and before the close gets no hold
+--   6. a held item whose applied_at is then set, with no note, is not held, and a sync files for it
+--   7. a failed request with a skip list, inserted as `authenticated` (the owner) and as the test
+--      login, holds nothing
+--   8. a done close keeps `inbox-apply-failed` open while an item is held, and archives it once
+--      none is
+--   9. the `not_applied` notice says a sync does not try the answers again, names a new answer and
+--      the button, and holds no "Undo", when a hold stands for an id of the close's skip (round 4:
+--      with an empty skip, or an id answered again before the close, it keeps 186's sentence);
+--      every other failure keeps its sentence
+--  18. R4: a failed close with a skip and NO skip_seen (the old worker) writes no hold, and a later
+--      done close still keeps `inbox-apply-failed` open while that answer waits
+--
+-- Every call to a worker function is made under `set local role inbox_apply_runner` (181 grants
+-- db_test_runner the role with inherit false); the sync's under `sync_runner` (094).
+-- RUN IT: `node scripts/db-test.mjs --only phase23_187_held_answers.sql`.
+-- NOTHING IS COMMITTED: the last statement is `rollback`.
+
+begin;
+
+create temp table _t187 (label text primary key, id bigint) on commit drop;
+
+-- One claimed request of the worker's at a time (183): each close below needs a fresh one.
+create function pg_temp.t187_request(p_params jsonb default '{"trigger": "sync", "after": 1}'::jsonb)
+  returns bigint language sql as $$
+  insert into agent_requests (kind, scope, state, claimed_at, claimed_by, claim_attempts, params, note)
+  values ('inbox_feedback', 'all', 'claimed', now(), 'inbox-apply-runner', 1, p_params, 'phase23_187')
+  returning id
+$$;
+
+create function pg_temp.t187_sync() returns bigint language sql as $$
+  insert into agent_requests (kind, scope, state, claimed_at, claimed_by, finished_at, note)
+  values ('sync', 'all', 'done', now(), 'sync-runner', now(), 'phase23_187')
+  returning id
+$$;
+
+-- An answered row, given an hour ago.
+create function pg_temp.t187_item(p_ref text, p_note text default null) returns bigint language sql as $$
+  insert into attention_items (kind, entity, ref, question, state, resolved_at, resolution, resolution_note)
+  values ('stack_must_confirm', 'assignment', p_ref, '187 ' || p_ref, 'resolved',
+          now() - interval '1 hour', '{"value":"yes","value_type":"text"}', p_note)
+  returning id
+$$;
+
+-- Answered again: a new answer carries a new resolved_at, later than the transaction's now() (the
+-- failed requests of this unit finish at now(), so an older time would still read as held by 186's arm).
+create function pg_temp.t187_reanswer(p_id bigint) returns void language sql as $$
+  update attention_items set resolved_at = greatest(resolved_at, now()) + interval '1 minute' where id = p_id
+$$;
+
+create function pg_temp.t187_archive(p_id bigint) returns void language sql as $$
+  update attention_items
+     set state = 'archived', archived_at = now(), archived_by = 'phase23_187 setup',
+         decision = '{"change": "test setup"}'::jsonb
+   where id = p_id
+$$;
+
+-- The queue row as prepare hands it to the worker: {id, resolved_at}.
+create function pg_temp.t187_seen(p_id bigint) returns jsonb language sql as $$
+  select jsonb_build_object('id', q.id, 'resolved_at', q.resolved_at) from v_inbox_queue q where q.id = p_id
+$$;
+
+-- plpgsql, so that creating it does not need 187 (section 0 says "not applied" first).
+create function pg_temp.t187_held() returns bigint[] language plpgsql as $$
+declare v_ids bigint[];
+begin
+  select coalesce(array_agg(h order by h), '{}'::bigint[]) into v_ids from public.inbox_apply_held_items() h;
+  return v_ids;
+end $$;
+
+create function pg_temp.t187_close(p_req bigint, p_state text, p_result jsonb) returns bigint
+  language plpgsql as $$
+declare v_follow bigint;
+begin
+  set local role inbox_apply_runner;
+  v_follow := inbox_apply_close(p_req, p_state, p_result);
+  reset role;
+  return v_follow;
+end $$;
+
+create function pg_temp.t187_prepare(p_req bigint) returns jsonb language plpgsql as $$
+declare v_prep jsonb;
+begin
+  set local role inbox_apply_runner;
+  v_prep := inbox_apply_prepare(p_req);
+  reset role;
+  return v_prep;
+end $$;
+
+create function pg_temp.t187_sync_request(p_sync bigint) returns bigint language plpgsql as $$
+declare v_id bigint;
+begin
+  set local role sync_runner;
+  v_id := sync_request_inbox_apply(p_sync);
+  reset role;
+  return v_id;
+end $$;
+
+-- A run that could not apply `p_item`: it was handed `p_seen` for it.
+create function pg_temp.t187_skip_result(p_ids bigint[], p_seen jsonb, p_error text default 'not_applied')
+  returns jsonb language sql as $$
+  select jsonb_build_object('lines', jsonb_build_array('1 could not be applied'), 'error', p_error,
+                            'archived', 0, 'skip', to_jsonb(p_ids), 'skip_seen', p_seen,
+                            'claude', jsonb_build_object('started', true))
+$$;
+
+-- Open notices of the two kinds, as "failed/login".
+create function pg_temp.t187_open() returns text language sql as $$
+  select count(*) filter (where ref = 'inbox-apply-failed') || '/' ||
+         count(*) filter (where ref = 'apply-login-required')
+    from attention_items
+   where state = 'open' and ref in ('inbox-apply-failed', 'apply-login-required')
+$$;
+
+create function pg_temp.t187_archive_notices() returns void language sql as $$
+  update attention_items
+     set state = 'archived', archived_at = now(), archived_by = 'phase23_187 setup',
+         decision = '{"change": "test setup"}'::jsonb
+   where state = 'open' and ref in ('inbox-apply-failed', 'apply-login-required')
+$$;
+
+-- =============================================================================================
+-- 0. Installed
+-- =============================================================================================
+do $$
+declare
+  f text;
+  r record;
+begin
+  if to_regclass('public.inbox_apply_holds') is null
+     or to_regprocedure('public.inbox_apply_held_items()') is null then
+    raise exception 'FAIL phase23_187_held_answers: migration 187 is not applied (the hold table or inbox_apply_held_items() is missing)';
+  end if;
+  if position('session_link' in (select prosrc from pg_proc
+                                  where oid = 'public.inbox_apply_prepare(bigint)'::regprocedure)) = 0
+     or position('inbox_apply_held_items' in (select prosrc from pg_proc
+                                               where oid = 'public.inbox_apply_prepare(bigint)'::regprocedure)) = 0 then
+    raise exception 'FAIL phase23_187_held_answers: migration 187 is not applied (inbox_apply_prepare is not its body)';
+  end if;
+  if position('c_signed_in' in (select prosrc from pg_proc
+                                 where oid = 'public.inbox_apply_close(bigint, text, jsonb)'::regprocedure)) = 0
+     or position('skip_seen' in (select prosrc from pg_proc
+                                  where oid = 'public.inbox_apply_close(bigint, text, jsonb)'::regprocedure)) = 0 then
+    raise exception 'FAIL phase23_187_held_answers: migration 187 is not applied (inbox_apply_close is not its body)';
+  end if;
+  if position('inbox_apply_held_items' in (select prosrc from pg_proc
+                                            where oid = 'public.sync_request_inbox_apply(bigint)'::regprocedure)) = 0 then
+    raise exception 'FAIL phase23_187_held_answers: migration 187 is not applied (sync_request_inbox_apply is still 180''s body)';
+  end if;
+
+  foreach f in array array['public.inbox_apply_held_items()',
+                           'public.inbox_apply_prepare(bigint)',
+                           'public.inbox_apply_close(bigint, text, jsonb)',
+                           'public.sync_request_inbox_apply(bigint)'] loop
+    select p.prosecdef, pg_get_userbyid(p.proowner) as owner, coalesce(p.proconfig, '{}') as cfg
+      into r from pg_proc p where p.oid = f::regprocedure;
+    if not r.prosecdef or r.owner <> 'postgres' or not r.cfg @> array['search_path=public, pg_temp'] then
+      raise exception 'FAIL phase23_187_held_answers (shape): % lost SECURITY DEFINER, its owner or its search_path', f;
+    end if;
+  end loop;
+end $$;
+
+-- =============================================================================================
+-- Setup (not an assertion): no real open inbox_feedback request, no real answered row and no real
+-- open notice is in the way. Changed inside this transaction only; the rollback restores them.
+-- =============================================================================================
+update agent_requests set state = 'cancelled'
+ where kind = 'inbox_feedback' and state in ('queued', 'claimed');
+
+update attention_items
+   set state = 'archived', archived_at = now(), archived_by = 'phase23_187 setup',
+       decision = '{"change": "test setup"}'::jsonb
+ where state in ('resolved', 'dismissed')
+    or (state = 'open' and ref in ('inbox-apply-failed', 'apply-login-required'));
+
+-- =============================================================================================
+-- 1. A close that lists an item with the time the run was handed holds it
+-- =============================================================================================
+do $$
+declare
+  v_x    bigint := pg_temp.t187_item('test187:x');
+  v_r    bigint := pg_temp.t187_request();
+  v_prep jsonb;
+  v_seen jsonb;
+  v_hold record;
+begin
+  insert into _t187 values ('x', v_x);
+  if pg_temp.t187_held() <> '{}' then
+    raise exception 'FAIL 1 (setup): something is held before any close: %', pg_temp.t187_held();
+  end if;
+
+  -- The run reads the queue through prepare, as the worker does, and is handed X's resolved_at.
+  v_prep := pg_temp.t187_prepare(v_r);
+  v_seen := (select q from jsonb_array_elements(v_prep->'queue') q where (q->>'id')::bigint = v_x);
+  if v_seen is null then
+    raise exception 'FAIL 1: prepare did not hand over X: %', v_prep;
+  end if;
+
+  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(
+    array[v_x], jsonb_build_array(jsonb_build_object('id', v_x, 'resolved_at', v_seen->'resolved_at'))));
+
+  if pg_temp.t187_held() <> array[v_x] then
+    raise exception 'FAIL 1: after the close the held set is %, expected {%}', pg_temp.t187_held(), v_x;
+  end if;
+  select h.* into v_hold from inbox_apply_holds h where h.item_id = v_x;
+  if v_hold.request_id is distinct from v_r
+     or v_hold.resolved_at is distinct from (select resolved_at from attention_items where id = v_x)
+     or v_hold.held_at is null then
+    raise exception 'FAIL 1: the hold row reads %', row_to_json(v_hold);
+  end if;
+end $$;
+
+-- =============================================================================================
+-- 2. A queue of held answers alone files nothing; with one unheld row it files one request
+-- =============================================================================================
+do $$
+declare
+  v_x    bigint := (select id from _t187 where label = 'x');
+  v_sync bigint := pg_temp.t187_sync();
+  v_id   bigint;
+  v_y    bigint;
+  v_row  record;
+begin
+  v_id := pg_temp.t187_sync_request(v_sync);
+  if v_id is not null then
+    raise exception 'FAIL 2: a queue that holds a held answer alone returned request %', v_id;
+  end if;
+  if exists (select 1 from agent_requests where kind = 'inbox_feedback' and state in ('queued', 'claimed')) then
+    raise exception 'FAIL 2: a queue that holds a held answer alone filed a request';
+  end if;
+
+  v_y := pg_temp.t187_item('test187:y');
+  insert into _t187 values ('y', v_y);
+  v_id := pg_temp.t187_sync_request(v_sync);
+  if v_id is null then
+    raise exception 'FAIL 2: with a second, unheld row waiting the sync filed nothing';
+  end if;
+  select kind, state, params into v_row from agent_requests where id = v_id;
+  if v_row.kind <> 'inbox_feedback' or v_row.state <> 'queued'
+     or v_row.params is distinct from jsonb_build_object('trigger', 'sync', 'after', v_sync) then
+    raise exception 'FAIL 2: the filed request reads %', row_to_json(v_row);
+  end if;
+  if (select count(*) from agent_requests where kind = 'inbox_feedback' and state in ('queued', 'claimed')) <> 1 then
+    raise exception 'FAIL 2: more than one request is open';
+  end if;
+  update agent_requests set state = 'cancelled' where id = v_id;
+end $$;-- =============================================================================================
+-- 3. prepare: `held` for a request with a trigger, [] for one with none (and R3's retry requests)
+-- =============================================================================================
+do $$
+declare
+  v_x    bigint := (select id from _t187 where label = 'x');
+  v_case record;
+  v_r    bigint;
+  v_prep jsonb;
+  v_want jsonb;
+begin
+  -- want: 'set' is the held set ([X]), 'empty' is [], anything else is the JSON it must be.
+  for v_case in
+    select * from (values
+      ('a sync request',        '{"trigger": "sync", "after": 1}'::jsonb,    'set'),
+      ('a follow-up request',   '{"trigger": "followup", "after": 1, "skip": []}'::jsonb, 'set'),
+      ('the fallback skill''s', '{"trigger": "skill", "after": 1}'::jsonb,   'set'),
+      ('a button request',      '{}'::jsonb,                                  'empty'),
+      ('a trigger of null',     '{"trigger": null}'::jsonb,                   'empty'),
+      -- R3: a follow-up of a retry chain is handed back its own skip, and only that.
+      ('a retry follow-up',     '{"trigger": "followup", "after": 1, "skip": [999001, 999002], "retry_held": true}'::jsonb, '[999001, 999002]'),
+      ('a retry follow-up whose skip holds a non-number', '{"trigger": "followup", "skip": [999003, "x", null], "retry_held": true}'::jsonb, '[999003]'),
+      ('a retry follow-up with no skip', '{"trigger": "followup", "retry_held": true}'::jsonb, '[]'),
+      ('retry_held with no trigger', '{"retry_held": true, "skip": [999004]}'::jsonb, 'empty'),
+      -- Only the JSON boolean true counts.
+      ('retry_held as the text "true"', '{"trigger": "followup", "skip": [999005], "retry_held": "true"}'::jsonb, 'set'),
+      ('retry_held as 1',       '{"trigger": "followup", "skip": [999005], "retry_held": 1}'::jsonb, 'set'),
+      ('retry_held false',      '{"trigger": "followup", "skip": [999005], "retry_held": false}'::jsonb, 'set')
+    ) t(label, params, want)
+  loop
+    v_want := case v_case.want when 'set' then jsonb_build_array(v_x) when 'empty' then '[]'::jsonb else v_case.want::jsonb end;
+    v_r := pg_temp.t187_request(v_case.params);
+    v_prep := pg_temp.t187_prepare(v_r);
+    if not (v_prep ? 'held') or jsonb_typeof(v_prep->'held') <> 'array' then
+      raise exception 'FAIL 3: prepare for % returned no held array: %', v_case.label, v_prep;
+    end if;
+    if v_prep->'held' is distinct from v_want then
+      raise exception 'FAIL 3: prepare for % returned held %, expected %', v_case.label, v_prep->'held', v_want;
+    end if;
+    -- The numbers are numbers, and the rest of what prepare sent is still there.
+    if jsonb_array_length(v_prep->'held') > 0 and jsonb_typeof(v_prep->'held'->0) <> 'number' then
+      raise exception 'FAIL 3: held holds a % and not a number', jsonb_typeof(v_prep->'held'->0);
+    end if;
+    if not (v_prep ?& array['params', 'queue', 'runs_today'])
+       or exists (select 1 from jsonb_array_elements(v_prep->'queue') q where not (q ? 'resolved_at')) then
+      raise exception 'FAIL 3: prepare for % lost a key: %', v_case.label, v_prep;
+    end if;
+    perform pg_temp.t187_close(v_r, 'done', '{"lines": ["Nothing new"], "archived": 0, "skip": []}'::jsonb);
+  end loop;
+  -- The hold survived those closes: they asked nothing of it.
+  if pg_temp.t187_held() <> array[v_x] then
+    raise exception 'FAIL 3: the closes of section 3 changed the held set to %', pg_temp.t187_held();
+  end if;
+end $$;
+
+
+-- =============================================================================================
+-- 4. Answered again: not held
+-- =============================================================================================
+do $$
+declare
+  v_x    bigint := (select id from _t187 where label = 'x');
+  v_sync bigint := pg_temp.t187_sync();
+  v_id   bigint;
+  v_r    bigint;
+  v_prep jsonb;
+begin
+  perform pg_temp.t187_reanswer(v_x);
+  if pg_temp.t187_held() <> '{}' then
+    raise exception 'FAIL 4: an answer given again is still held: %', pg_temp.t187_held();
+  end if;
+  v_r := pg_temp.t187_request();
+  v_prep := pg_temp.t187_prepare(v_r);
+  if v_prep->'held' is distinct from '[]'::jsonb then
+    raise exception 'FAIL 4: prepare still returns held %', v_prep->'held';
+  end if;
+  perform pg_temp.t187_close(v_r, 'done', '{"lines": ["Nothing new"], "archived": 0, "skip": []}'::jsonb);
+
+  -- X alone in the queue: the sync files because X itself is no longer held (Y, unheld, is set aside).
+  perform pg_temp.t187_archive((select id from _t187 where label = 'y'));
+  if (select array_agg(q.id) from v_inbox_queue q) is distinct from array[v_x] then
+    raise exception 'FAIL 4 (setup): the queue is not X alone';
+  end if;
+  v_id := pg_temp.t187_sync_request(v_sync);
+  if v_id is null then
+    raise exception 'FAIL 4: with X answered again, and X alone waiting, the sync filed nothing';
+  end if;
+  update agent_requests set state = 'cancelled' where id = v_id;
+end $$;
+
+-- =============================================================================================
+-- 5. An answer given again after the claim and before the close gets no hold
+-- =============================================================================================
+do $$
+declare
+  v_x    bigint := (select id from _t187 where label = 'x');
+  v_r    bigint := pg_temp.t187_request();
+  v_seen jsonb;
+begin
+  v_seen := pg_temp.t187_seen(v_x);          -- what the run was handed
+  perform pg_temp.t187_reanswer(v_x);        -- Stack answers again while the run is open
+  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(array[v_x], jsonb_build_array(v_seen)));
+  if exists (select 1 from inbox_apply_holds where item_id = v_x) then
+    raise exception 'FAIL 5: an answer given again during the run was held: %',
+      (select row_to_json(h) from inbox_apply_holds h where h.item_id = v_x);
+  end if;
+  if pg_temp.t187_held() <> '{}' then
+    raise exception 'FAIL 5: held set is %, expected none', pg_temp.t187_held();
+  end if;
+end $$;
+
+-- =============================================================================================
+-- 6. A held item that needs no reader is not held
+-- =============================================================================================
+do $$
+declare
+  v_x    bigint := (select id from _t187 where label = 'x');
+  v_y    bigint := (select id from _t187 where label = 'y');
+  v_sync bigint := pg_temp.t187_sync();
+  v_r    bigint := pg_temp.t187_request();
+  v_id   bigint;
+begin
+  -- Hold X on its current answer, and put Y aside so X is the whole queue.
+  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(
+    array[v_x], jsonb_build_array(pg_temp.t187_seen(v_x))));
+  perform pg_temp.t187_archive(v_y);
+  if pg_temp.t187_held() <> array[v_x] then
+    raise exception 'FAIL 6 (setup): X is not held: %', pg_temp.t187_held();
+  end if;
+  if pg_temp.t187_sync_request(v_sync) is not null then
+    raise exception 'FAIL 6 (setup): a queue of one held answer filed a request';
+  end if;
+
+  -- The fold applied it (applied_at set) and Stack left no note: the worker records it without a run.
+  update attention_items set applied_at = now() where id = v_x;
+  if pg_temp.t187_held() <> '{}' then
+    raise exception 'FAIL 6: a held item with applied_at and no note is still held: %', pg_temp.t187_held();
+  end if;
+  v_id := pg_temp.t187_sync_request(v_sync);
+  if v_id is null then
+    raise exception 'FAIL 6: the sync filed no request for an applied answer with no note';
+  end if;
+  update agent_requests set state = 'cancelled' where id = v_id;
+
+  -- With a note it still needs a reader, so it is held again (the hold row never went away).
+  update attention_items set resolution_note = 'please look at this' where id = v_x;
+  if pg_temp.t187_held() <> array[v_x] then
+    raise exception 'FAIL 6: a held item with applied_at and a note is not held: %', pg_temp.t187_held();
+  end if;
+  if pg_temp.t187_sync_request(v_sync) is not null then
+    raise exception 'FAIL 6: the sync filed a request for a held answer that has a note';
+  end if;
+end $$;
+
+-- =============================================================================================
+-- 7. A request written by another login holds nothing
+-- =============================================================================================
+do $$
+declare
+  v_z     bigint := pg_temp.t187_item('test187:z');
+  v_sync  bigint := pg_temp.t187_sync();
+  v_before int := (select count(*) from inbox_apply_holds);
+  v_params constant jsonb := '{"trigger": "sync", "after": 1}';
+  v_result jsonb;
+  v_id    bigint;
+begin
+  insert into _t187 values ('z', v_z);
+  v_result := pg_temp.t187_skip_result(array[v_z], jsonb_build_array(pg_temp.t187_seen(v_z)));
+
+  -- As the app's own login, with the owner's uid: it may insert a request row (038).
+  perform set_config('request.jwt.claim.sub', app_owner()::text, true);
+  set local role authenticated;
+  insert into agent_requests (kind, scope, state, claimed_by, claimed_at, finished_at, params, result, note)
+  values ('inbox_feedback', 'all', 'failed', 'inbox-apply-runner', now(), now(), v_params, v_result, 'phase23_187 as authenticated');
+  reset role;
+
+  -- As the test login, which can write the table too.
+  insert into agent_requests (kind, scope, state, claimed_by, claimed_at, finished_at, params, result, note)
+  values ('inbox_feedback', 'all', 'failed', 'inbox-apply-runner', now(), now(), v_params, v_result, 'phase23_187 as test login');
+
+  if (select count(*) from agent_requests where note like 'phase23_187 as %') <> 2 then
+    raise exception 'FAIL 7 (setup): the two requests were not inserted';
+  end if;
+  if exists (select 1 from inbox_apply_holds where item_id = v_z) or (select count(*) from inbox_apply_holds) <> v_before then
+    raise exception 'FAIL 7: a request written by another login created a hold';
+  end if;
+  if v_z = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 7: an item named in a hand-written failed request is held';
+  end if;
+  -- And the sync still sees Z as waiting.
+  v_id := pg_temp.t187_sync_request(v_sync);
+  if v_id is null then
+    raise exception 'FAIL 7: the hand-written requests parked an answered item: the sync filed nothing';
+  end if;
+  update agent_requests set state = 'cancelled' where id = v_id;
+end $$;
+
+-- =============================================================================================
+-- 8. The failure notice, and the held set
+-- =============================================================================================
+select pg_temp.t187_archive_notices();
+
+do $$
+declare
+  v_x    bigint := (select id from _t187 where label = 'x');
+  v_r    bigint;
+begin
+  -- Z (section 7) is set aside: the two hand-written failed requests of section 7 list it in their
+  -- skip, and 186's arm of the notice test (kept by R4) lets such a request keep the notice open.
+  perform pg_temp.t187_archive((select id from _t187 where label = 'z'));
+  -- X is answered again and then held on the new answer by a failing run (which raises the notice).
+  perform pg_temp.t187_reanswer(v_x);
+  update attention_items set applied_at = null, resolution_note = null where id = v_x;
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(
+    array[v_x], jsonb_build_array(pg_temp.t187_seen(v_x))));
+  if pg_temp.t187_open() <> '1/0' then
+    raise exception 'FAIL 8: a failed close left notices %, expected 1/0 (failed/login)', pg_temp.t187_open();
+  end if;
+  if pg_temp.t187_held() <> array[v_x] then
+    raise exception 'FAIL 8 (setup): X is not held: %', pg_temp.t187_held();
+  end if;
+
+  -- (a) A done close that lists nothing: X is held, so the notice stays.
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'done', '{"lines": ["Nothing new"], "archived": 0, "skip": []}'::jsonb);
+  if pg_temp.t187_open() <> '1/0' then
+    raise exception 'FAIL 8a: a done close closed the notice while an item is held (%)', pg_temp.t187_open();
+  end if;
+
+  -- (b) Stack answers X again: it is not held, and the next done close archives the notice.
+  perform pg_temp.t187_reanswer(v_x);
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'done', '{"lines": ["Nothing new"], "archived": 0, "skip": []}'::jsonb);
+  if pg_temp.t187_open() <> '0/0' then
+    raise exception 'FAIL 8b: with no item held the done close left notices %, expected 0/0', pg_temp.t187_open();
+  end if;
+  if not exists (select 1 from attention_items
+                  where ref = 'inbox-apply-failed' and state = 'archived' and archived_by = 'inbox-apply-runner'
+                    and decision->>'closed_itself' = 'true' and decision->>'trigger' = 'inbox_apply_close') then
+    raise exception 'FAIL 8b: the notice was not archived as closed_itself by the close';
+  end if;
+end $$;
+
+-- =============================================================================================
+-- 9. The words of the not_applied notice
+-- =============================================================================================
+select pg_temp.t187_archive_notices();
+
+do $$
+declare
+  v_r    bigint;
+  v_text text;
+  v_h    bigint := pg_temp.t187_item('test187:nah');
+  v_g    bigint := pg_temp.t187_item('test187:nag');
+  v_seen jsonb;
+begin
+  -- (c) A hold stands for an id of this close's skip: the new sentence.
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(
+    array[v_h], jsonb_build_array(pg_temp.t187_seen(v_h)), 'not_applied'));
+  if not v_h = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 9 (setup): no hold stands for the skipped id';
+  end if;
+  select question into v_text from attention_items where state = 'open' and ref = 'inbox-apply-failed';
+  if v_text is null then
+    raise exception 'FAIL 9: a not_applied failure raised no notice';
+  end if;
+  if v_text not ilike '%sync does not try%' or v_text not ilike '%new answer%' or v_text not ilike '%Apply answers%' then
+    raise exception 'FAIL 9: the not_applied notice reads "%"', v_text;
+  end if;
+  if v_text ilike '%undo%' or v_text ilike '%press Apply answers to run the rest%' then
+    raise exception 'FAIL 9: the not_applied notice still names Undo or the old sentence: "%"', v_text;
+  end if;
+
+  -- Round 4 (b): skip_seen is sent but nothing was skipped (a write left unarchived): no hold stands,
+  -- a sync will try again, so 186's sentence.
+  perform pg_temp.t187_archive_notices();
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(array[]::bigint[], '[]'::jsonb, 'not_applied'));
+  select question into v_text from attention_items where state = 'open' and ref = 'inbox-apply-failed';
+  if v_text is null or v_text not like '%failed: not_applied.%' or v_text not like '%press Apply answers to run the rest.'
+     or v_text ilike '%sync does not try%' then
+    raise exception 'FAIL 9b: a not_applied close with an empty skip carries "%"', v_text;
+  end if;
+
+  -- Round 4 (a): the one skipped id was answered again before the close, so it gets no hold and the
+  -- next sync tries it: 186's sentence.
+  perform pg_temp.t187_archive_notices();
+  v_seen := pg_temp.t187_seen(v_g);
+  perform pg_temp.t187_reanswer(v_g);
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(array[v_g], jsonb_build_array(v_seen), 'not_applied'));
+  if v_g = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 9a (setup): an answer given again was held';
+  end if;
+  select question into v_text from attention_items where state = 'open' and ref = 'inbox-apply-failed';
+  if v_text is null or v_text not like '%failed: not_applied.%' or v_text not like '%press Apply answers to run the rest.'
+     or v_text ilike '%sync does not try%' then
+    raise exception 'FAIL 9a: a not_applied close whose only skipped id was answered again carries "%"', v_text;
+  end if;
+
+  -- Every other failure keeps 186's sentence.
+  perform pg_temp.t187_archive_notices();
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(array[]::bigint[], '[]'::jsonb, 'cli_error'));
+  select question into v_text from attention_items where state = 'open' and ref = 'inbox-apply-failed';
+  if v_text is null or v_text not like '%press Apply answers to run the rest.' or v_text not like '%failed: cli_error.%' then
+    raise exception 'FAIL 9: a cli_error failure no longer keeps its sentence: "%"', v_text;
+  end if;
+
+  -- And the sign-in notice is untouched.
+  perform pg_temp.t187_archive_notices();
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'failed', '{"lines": [], "error": "sign_in_expired", "archived": 0, "skip": []}'::jsonb);
+  select question into v_text from attention_items where state = 'open' and ref = 'apply-login-required';
+  if v_text is null or v_text not like '%claude setup-token%' then
+    raise exception 'FAIL 9: the sign-in notice changed: "%"', v_text;
+  end if;
+  perform pg_temp.t187_archive_notices();
+end $$;
+-- =============================================================================================
+-- 18. An old worker: a skip and no skip_seen holds nothing, and the notice still waits (R4)
+-- =============================================================================================
+select pg_temp.t187_archive_notices();
+
+do $$
+declare
+  v_o    bigint := pg_temp.t187_item('test187:old');
+  v_r    bigint;
+  v_text text;
+begin
+  insert into _t187 values ('old', v_o);
+  -- Put everything else aside: the old-worker answer is the whole queue.
+  update attention_items
+     set state = 'archived', archived_at = now(), archived_by = 'phase23_187 setup', decision = '{"change": "test setup"}'::jsonb
+   where state in ('resolved', 'dismissed') and id <> v_o;
+  -- The worker before its rebuild: it reports a skip and no skip_seen.
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'failed', jsonb_build_object(
+    'lines', jsonb_build_array('1 could not be applied'), 'error', 'not_applied', 'archived', 0,
+    'skip', jsonb_build_array(v_o), 'claude', jsonb_build_object('started', true)));
+  if exists (select 1 from inbox_apply_holds where item_id = v_o) or v_o = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 18: a failed close with no skip_seen wrote a hold';
+  end if;
+  if pg_temp.t187_open() <> '1/0' then
+    raise exception 'FAIL 18: the failed close left notices %, expected 1/0', pg_temp.t187_open();
+  end if;
+  -- Round 3: the old worker's notice keeps 186's sentence (every sync still retries for it); the new
+  -- sentence is for a close that sends skip_seen (case 9).
+  select question into v_text from attention_items where state = 'open' and ref = 'inbox-apply-failed';
+  if v_text not like '%press Apply answers to run the rest.' or v_text ilike '%sync does not try%' then
+    raise exception 'FAIL 18: the old worker''s not_applied notice reads "%"', v_text;
+  end if;
+
+  -- A later done close, listing nothing: 186's own arm (a failed request of the worker listed the
+  -- id and finished at or after the answer) still holds the notice open while the answer waits.
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'done', '{"lines": ["Nothing new"], "archived": 0, "skip": []}'::jsonb);
+  if pg_temp.t187_open() <> '1/0' then
+    raise exception 'FAIL 18: a done close closed the notice while the unapplied answer waited (%)', pg_temp.t187_open();
+  end if;
+  -- The sync and the worker still see the answer as unheld: the third arm decides nothing else.
+  if pg_temp.t187_sync_request(pg_temp.t187_sync()) is null then
+    raise exception 'FAIL 18: the sync filed nothing for an answer that holds no hold';
+  end if;
+  update agent_requests set state = 'cancelled' where kind = 'inbox_feedback' and state = 'queued';
+
+  -- Answered again after the failed run: a new answer, the arm no longer holds it.
+  perform pg_temp.t187_reanswer(v_o);
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'done', '{"lines": ["Nothing new"], "archived": 0, "skip": []}'::jsonb);
+  if pg_temp.t187_open() <> '0/0' then
+    raise exception 'FAIL 18: an answer given again still held the notice (%)', pg_temp.t187_open();
+  end if;
+end $$;
+
+-- =============================================================================================
+-- Pass
+-- =============================================================================================
+select 'phase23_187_held_answers: PASS' as result, current_user as ran_as;
+
+rollback;
