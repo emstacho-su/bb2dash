@@ -22,7 +22,7 @@
 
   Both folders are required and neither has a default; no default finds the harness on this laptop.
   The script checks that each folder exists, and that the harness one holds hooks/resolve-config.mjs,
-  BEFORE it registers anything (a path holding a double quote or a backtick is refused). When a check fails it prints one line, exits non-zero and registers
+  BEFORE it registers anything (a path holding a double quote, a backtick or a typographic single quote is refused). When a check fails it prints one line, exits non-zero and registers
   nothing. It opens no file in the secrets folder (the exporter reads the service key at run time)
   and it does not read .env.
 
@@ -62,14 +62,27 @@ function Fail {
     exit 2
 }
 
+# Characters that would break the quoting of a path inside the task's -Command string: a double
+# quote and a backtick, and the four typographic single quotes, which PowerShell reads as single
+# quotes (U+2018, U+2019, U+201A, U+201B). Written as code points so that this file stays ASCII.
+$UNSAFE_PATH_CHARS = @('"', '`', [string][char]0x2018, [string][char]0x2019, [string][char]0x201A, [string][char]0x201B)
+
+function Test-UnsafePath {
+    param([string] $Value)
+    foreach ($unsafe in $UNSAFE_PATH_CHARS) {
+        if ($Value.Contains($unsafe)) { return $true }
+    }
+    return $false
+}
+
 # A folder, as a full path without a trailing slash (a trailing backslash would escape the closing quote).
 function Resolve-Folder {
     param([string] $Value, [string] $ParamName)
     if ([string]::IsNullOrWhiteSpace($Value)) {
         Fail "-$ParamName is required and has no default." "Pass -$ParamName with a C:/... folder."
     }
-    if ($Value.Contains('"') -or $Value.Contains('`')) {
-        Fail "-$ParamName holds a double quote or a backtick." 'Pass a folder whose path holds neither.'
+    if (Test-UnsafePath $Value) {
+        Fail "-$ParamName holds a double quote, a backtick or a typographic single quote (U+2018 to U+201B)." 'Pass a folder whose path holds none of them.'
     }
     if (-not (Test-Path -LiteralPath $Value -PathType Container)) {
         Fail "-$ParamName '$Value' is not an existing folder." "Create it, or pass the real $ParamName."
@@ -95,11 +108,11 @@ $node = Get-Command node.exe -CommandType Application -ErrorAction SilentlyConti
 if ($null -eq $node) {
     Fail 'node.exe was not found on PATH.' 'Install Node 22 or later, then run this again.'
 }
-if ($node.Source.Contains('"') -or $node.Source.Contains('`')) {
-    Fail 'The path of node.exe holds a double quote or a backtick.' 'Install Node under a path that holds neither.'
+if (Test-UnsafePath $node.Source) {
+    Fail 'The path of node.exe holds a double quote, a backtick or a typographic single quote.' 'Install Node under a path that holds none of them.'
 }
 
-$powershell = Join-Path $env:SystemRoot 'System32WindowsPowerShell1.0powershell.exe'
+$powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 if (-not (Test-Path -LiteralPath $powershell -PathType Leaf)) {
     Fail "powershell.exe was not found at $powershell." 'This script targets Windows PowerShell 5.1.'
 }

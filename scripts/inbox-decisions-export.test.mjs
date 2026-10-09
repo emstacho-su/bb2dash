@@ -21,6 +21,8 @@ import {
   readConfig,
   readServiceKey,
   resolveVault,
+  runCommand,
+  writeAtomic,
 } from './inbox-decisions-export.mjs';
 
 const KEY = 'sb_secret_TESTONLY_not_a_real_key';
@@ -69,7 +71,11 @@ function fakeRpc(rows, marks = {}, extra = {}) {
     calls,
     unfiled: async (limit) => {
       calls.push(['unfiled', limit]);
-      return rows;
+      // The first read is `rows`; a later read (after a refused skip) is `extra.reread` when given.
+      const first = calls.filter((c) => c[0] === 'unfiled').length === 1;
+      if (first || extra.reread === undefined) return rows;
+      if (extra.reread instanceof Error) throw extra.reread;
+      return extra.reread;
     },
     unlogged: async (limit) => {
       calls.push(['unlogged', limit]);
@@ -636,4 +642,83 @@ test('a note that differs anywhere but applied_at is still refused, and nothing 
   assert.equal(fs.readFileSync(noteFile, 'utf8'), edited);
   assert.ok(lines.some((l) => l.startsWith('not filed item 3101: a different note already exists')));
   assert.equal(d.rpc.calls.some((c) => c[0] === 'filed'), false);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Round 3 (brief 110): every unlogged row gets its entry; a refused skip is told apart from a row
+// another run took; timeouts say so; one copy of runCommand and writeAtomic.
+// ---------------------------------------------------------------------------------------------
+
+test('R5: a test-shaped row filed by --notes-only after a refused skip gets its entry and its log stamp at the next default run', async (t) => {
+  // First run (notes-only): the skip is refused, so the row is filed with a note and no log path.
+  const first = deps(t, [testQuestion(3782)], { logDir: null, options: { notesOnly: true }, extra: { skipped: { 3782: false } } });
+  assert.deepEqual((await exportDecisions(first.deps)).filed, [3782]);
+  assert.equal(fs.existsSync(first.dirs.logDir), false);
+
+  // Next run (default): the database lists it as unlogged. It gets the entry and the stamp.
+  const next = deps(t, [], { extra: { unlogged: [testQuestion(3782)] } });
+  const result = await exportDecisions(next.deps);
+  assert.deepEqual(result, { filed: [], skipped: [], logged: [3782], failed: [] });
+  assert.match(fs.readFileSync(path.join(next.dirs.logDir, '2026-10-07.md'), 'utf8'), /^## 3782 — /m);
+  assert.deepEqual(next.deps.rpc.calls.filter((c) => c[0] === 'logged'), [['logged', 3782, 'docs/inbox-decisions/2026-10-07.md']]);
+});
+
+test('a refused skip whose row is gone from the re-read list was taken by another run: not skipped, not failed, no file', async (t) => {
+  const { deps: d, dirs, lines, runs } = deps(t, [testQuestion(3782)], { extra: { skipped: { 3782: false }, reread: [] } });
+  const result = await exportDecisions(d);
+  assert.deepEqual(result, { filed: [], skipped: [], logged: [], failed: [] });
+  assert.deepEqual(d.rpc.calls.map((c) => c[0]), ['unfiled', 'unlogged', 'skipped', 'unfiled']);
+  assert.deepEqual(d.rpc.calls[3], ['unfiled', DEFAULT_LIMIT], 'the same read, the same limit');
+  assert.deepEqual(filesUnder(dirs.root), ['vault']);
+  assert.equal(runs.length, 0);
+  assert.equal(lines.filter((l) => l.includes('another run')).length, 1);
+  assert.ok(!lines.some((l) => l.startsWith('not filed')));
+});
+
+test('a refused skip whose row is still on the re-read list has a logged write and is filed like any other', async (t) => {
+  const { deps: d, dirs } = deps(t, [testQuestion(3782)], { extra: { skipped: { 3782: false }, reread: [testQuestion(3782)] } });
+  assert.deepEqual(await exportDecisions(d), { filed: [3782], skipped: [], logged: [], failed: [] });
+  assert.ok(fs.existsSync(path.join(dirs.vault, ...NOTES_REL.split('/'), 'inbox-3782.md')));
+});
+
+test('a re-read that throws counts the refused row as not filed and writes nothing for it', async (t) => {
+  const { deps: d, dirs } = deps(t, [testQuestion(3782)], { logDir: null, options: { notesOnly: true }, extra: { skipped: { 3782: false }, reread: new Error('connection reset') } });
+  const result = await exportDecisions(d);
+  assert.deepEqual(result.filed, []);
+  assert.deepEqual(result.skipped, []);
+  assert.deepEqual(result.failed.map((f) => f.id), [3782]);
+  assert.deepEqual(filesUnder(dirs.root), ['vault']);
+  assert.equal(d.rpc.calls.some((c) => c[0] === 'filed'), false);
+});
+
+test('runCommand puts a spawn error in stderr (a timeout says ETIMEDOUT), and hands env and timeout to the spawn', () => {
+  const seen = [];
+  const timedOut = (command, args, options) => {
+    seen.push({ command, args, options });
+    return { status: null, stdout: '', stderr: '', error: { message: 'spawnSync node ETIMEDOUT' } };
+  };
+  const answer = runCommand('node', ['x.js'], 'cwd', { env: { A: '1' }, timeout: 5000, spawn: timedOut });
+  assert.equal(answer.status, 1);
+  assert.match(answer.stderr, /ETIMEDOUT/);
+  assert.equal(seen[0].options.cwd, 'cwd');
+  assert.deepEqual(seen[0].options.env, { A: '1' });
+  assert.equal(seen[0].options.timeout, 5000);
+  assert.equal(seen[0].options.shell, false);
+  // A real stderr is kept, with the error after it.
+  const both = runCommand('node', [], 'cwd', { spawn: () => ({ status: 1, stdout: '', stderr: 'boom', error: { message: 'E_X' } }) });
+  assert.equal(both.stderr, 'boom\nE_X');
+  // No error: stderr as given.
+  assert.equal(runCommand('node', [], 'cwd', { spawn: () => ({ status: 0, stdout: 'o', stderr: '' }) }).stderr, '');
+  // The real thing, once: the env reaches the child.
+  const real = runCommand(process.execPath, ['-e', 'process.stdout.write(process.env.RUNCOMMAND_TEST ?? "")'], process.cwd(), { env: { ...process.env, RUNCOMMAND_TEST: 'ok' } });
+  assert.equal(real.stdout, 'ok');
+});
+
+test('writeAtomic creates the folder, replaces a file whole and leaves no temporary file', (t) => {
+  const { root } = tempDirs(t);
+  const file = path.join(root, 'a', 'b', 'state.json');
+  writeAtomic(fs, file, 'one');
+  writeAtomic(fs, file, 'two');
+  assert.equal(fs.readFileSync(file, 'utf8'), 'two');
+  assert.deepEqual(fs.readdirSync(path.dirname(file)), ['state.json']);
 });

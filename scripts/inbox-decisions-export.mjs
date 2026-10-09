@@ -130,10 +130,19 @@ export function readServiceKey(secretsDir, fsImpl = fs) {
   return key;
 }
 
-/** `run(command, args, cwd)` -> { status, stdout, stderr }: the real one, replaced in tests. */
-export function runCommand(command, args, cwd) {
-  const result = spawnSync(command, args, { cwd, encoding: 'utf8', shell: false, windowsHide: true });
-  return { status: result.status ?? 1, stdout: result.stdout ?? '', stderr: result.stderr ?? String(result.error?.message ?? '') };
+const MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
+
+/**
+ * `run(command, args, cwd, { env, timeout, spawn })` -> { status, stdout, stderr }: the real one,
+ * replaced in tests. `spawn` is the process start itself (spawnSync), replaceable for a test. When
+ * the child could not run or was killed (a timeout is ETIMEDOUT), spawnSync returns an empty
+ * stderr and sets `error`: its message is added to stderr so the caller's log says why.
+ */
+export function runCommand(command, args, cwd, { env, timeout, spawn = spawnSync } = {}) {
+  const result = spawn(command, args, { cwd, env, timeout, encoding: 'utf8', shell: false, windowsHide: true, maxBuffer: MAX_OUTPUT_BYTES });
+  const reason = result.error ? String(result.error.message ?? result.error) : '';
+  const stderr = [result.stderr ?? '', reason].filter((part) => part !== '').join('\n');
+  return { status: result.status ?? 1, stdout: result.stdout ?? '', stderr };
 }
 
 /** The vault and the ingest project, from the harness resolver; refuses anything but the `projects` realm. */
@@ -214,7 +223,7 @@ export function createRpc({ supabaseUrl, serviceKey, fetchImpl = fetch }) {
 }
 
 /** Write a file through a temporary one beside it, so a reader never sees half of it. */
-function writeAtomic(fsImpl, file, textBody) {
+export function writeAtomic(fsImpl, file, textBody) {
   fsImpl.mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.tmp-${process.pid}`;
   fsImpl.writeFileSync(temp, textBody, 'utf8');
@@ -277,24 +286,40 @@ function ingestNotes({ notes, vault, ingestProject, run, log }) {
 }
 
 /**
- * Mark each test question skipped: no note and no entry are written for it. A skip the database
- * refuses (the item has a logged write, so the decision is a real one) is returned in `refused`:
- * the caller files that row like any other. Returns its own { skipped, failed, refused }.
+ * Mark each test question skipped: no note and no entry are written for it. The database answers
+ * false both when the item has a logged write (a real decision) and when another run already filed
+ * or skipped the row, so on a false the unfiled list is read again, with the same limit: a row still
+ * on it has a logged write and is returned in `kept` (the caller files it like any other); a row gone
+ * from it was taken by another run and is counted as nothing. Returns its own { skipped, failed, kept }.
  */
-async function skipTestQuestions({ rows, rpc, log }) {
-  const outcome = { skipped: [], failed: [], refused: [] };
+async function skipTestQuestions({ rows, rpc, limit, log }) {
+  const outcome = { skipped: [], failed: [], kept: [] };
+  const refused = [];
   for (const row of rows) {
     try {
       if (await rpc.skipped(row.id, SKIP_WHY)) {
         outcome.skipped.push(row.id);
         log(`skipped item ${row.id}: an acceptance test question`);
-      } else {
-        outcome.refused.push(row);
-        log(`item ${row.id}: the database kept it (its item has a logged write); it is filed like any other`);
-      }
+      } else refused.push(row);
     } catch (error) {
       outcome.failed.push({ id: row.id, why: String(error?.message ?? error) });
     }
+  }
+  if (refused.length === 0) return outcome;
+
+  let stillUnfiled;
+  try {
+    stillUnfiled = new Set((await rpc.unfiled(limit)).map((row) => row.id));
+  } catch (error) {
+    // Cannot tell a logged write from a row another run took: write nothing for these.
+    const why = `could not tell why the skip was refused: ${String(error?.message ?? error)}`;
+    return { ...outcome, failed: [...outcome.failed, ...refused.map((row) => ({ id: row.id, why }))] };
+  }
+  for (const row of refused) {
+    if (stillUnfiled.has(row.id)) {
+      outcome.kept.push(row);
+      log(`item ${row.id}: the database kept it (its item has a logged write); it is filed like any other`);
+    } else log(`item ${row.id}: taken by another run; nothing written`);
   }
   return outcome;
 }
@@ -341,11 +366,8 @@ async function logRows({ rows, deps }) {
   const { rpc, logDir, fsImpl = fs, log } = deps;
   const outcome = { logged: [], failed: [] };
   for (const row of rows) {
-    // A test question is skipped before it can have a note; if one is listed here anyway, it gets no entry.
-    if (isTestQuestion(row)) {
-      log(`not logged item ${row.id}: an acceptance test question gets no day-file entry`);
-      continue;
-    }
+    // Every unlogged row was filed with a note (a skipped row is on neither list), test-shaped or not:
+    // a test-shaped one is a refused skip (R5), and its write must reach that day's log.
     try {
       if (row?.decision?.schema !== DECISION_SCHEMA) {
         outcome.failed.push({ id: row?.id, why: 'not an inbox-decision/1 record' });
@@ -384,10 +406,10 @@ export async function exportDecisions(deps) {
     return { filed: [], skipped: [], logged: [], failed: [] };
   }
 
-  const skips = await skipTestQuestions({ rows: unfiled.filter(isTestQuestion), rpc, log });
-  const refusedIds = new Set(skips.refused.map((row) => row.id));
-  // Original order is kept: a refused test-shaped row is filed in its place among the others.
-  const toFile = unfiled.filter((row) => !isTestQuestion(row) || refusedIds.has(row.id));
+  const skips = await skipTestQuestions({ rows: unfiled.filter(isTestQuestion), rpc, limit: options.limit, log });
+  const keptIds = new Set(skips.kept.map((row) => row.id));
+  // Original order is kept: a test-shaped row the database kept is filed in its place among the others.
+  const toFile = unfiled.filter((row) => !isTestQuestion(row) || keptIds.has(row.id));
   const filing = await fileRows({ rows: toFile, deps });
   const logging = await logRows({ rows: unlogged, deps });
 
@@ -402,7 +424,7 @@ export async function exportDecisions(deps) {
 }
 
 /** One line to stdout: this is a command-line script, and its lines are its report. */
-function printLine(line) {
+export function printLine(line) {
   process.stdout.write(`${line}\n`);
 }
 

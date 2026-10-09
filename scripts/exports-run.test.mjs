@@ -200,8 +200,10 @@ test('the only command the runner starts is the exporter, with --notes-only and 
 
   // And the source starts one command only: no git, no gh, no docker.
   const source = fs.readFileSync(path.join(import.meta.dirname, 'exports-run.mjs'), 'utf8');
-  assert.equal((source.match(/spawnSync\(/g) ?? []).length, 1);
-  assert.equal((source.match(/node:child_process/g) ?? []).length, 1);
+  // The one copy of the process start is the exporter's runCommand; the runner has none of its own.
+  assert.equal((source.match(/spawnSync/g) ?? []).length, 0);
+  assert.equal((source.match(/node:child_process/g) ?? []).length, 0);
+  assert.equal((source.match(/\brunCommand\(/g) ?? []).length, 1);
   assert.doesNotMatch(source, /['"`](git|gh|docker|docker-compose|uv)['"`]/);
 });
 
@@ -253,4 +255,25 @@ test('a state folder that cannot be written is exit 1 with one line, never a thr
   const code = await main(w.argv, w.deps(exporterOk(0, { exit_code: 0, filed: 0, skipped: 0, not_filed: 0 })));
   assert.equal(code, 1);
   assert.ok(w.lines.some((l) => l.includes('could not write')));
+});
+
+// Round 3: a timed-out exporter says so in the log, and only in the log.
+test('a timed-out exporter logs its spawn error, and no message reaches the state file', async (t) => {
+  const w = world(t);
+  const deps = w.deps(null);
+  delete deps.run;
+  const spawn = (command, args, options) => {
+    w.runs.push({ command, args, options });
+    return { status: null, stdout: '', stderr: '', error: { message: 'spawnSync node ETIMEDOUT' } };
+  };
+  const code = await main(w.argv, { ...deps, spawn });
+  assert.equal(code, 1);
+  assert.equal(w.runs.length, 1);
+  assert.equal(w.runs[0].options.timeout, 14 * 60 * 1000);
+  assert.match(w.logText(), /ETIMEDOUT/);
+  const state = w.state();
+  assertShape(state);
+  assert.equal(state.exit_code, 1);
+  assert.equal(state.reason, 'error');
+  assert.ok(!fs.readFileSync(path.join(w.stateDir, STATE_FILE), 'utf8').includes('ETIMEDOUT'));
 });
