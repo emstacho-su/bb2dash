@@ -309,3 +309,6 @@
   }
 }
 .tip[data-tip]:focus-visible::after { opacity: 1; }
+/* No label while its own button is open: the panel covers that spot, and a label behind or beside it
+   says nothing. Last, so it wins over the hover and focus rules above (same weight). */
+.tip[data-tip][aria-expanded='true']::after { display: none; }

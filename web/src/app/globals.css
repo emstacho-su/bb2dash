@@ -526,7 +526,9 @@ img {
 /* One focus ring everywhere: the ink, --size-focus thick, --size-focus-gap off.
    It appears at once; nothing eases it. */
 :focus { outline: none; }
-:focus-visible {
+/* A dialog container that takes focus by script (the popout, the popover, the scope dialog) draws no
+   ring: that focus is not the person's to see. The first Tab inside shows the ring on a real control. */
+:focus-visible:not(:where([role='dialog'], [role='alertdialog'])) {
   outline: var(--size-focus) solid var(--color-accent);
   outline-offset: var(--size-focus-gap);
 }
@@ -585,6 +587,10 @@ img {
 }
 :where([type='checkbox']:checked) { background: currentColor; }
 :where([type='checkbox']:checked)::before { transform: scale(1); }
+
+/* A radio keeps the browser's own round box and is drawn in the ink: its accent is the ink, never
+   the browser's blue. */
+:where(input[type='radio']) { accent-color: var(--color-accent); }
 
 /* The theme switch does not animate: the script marks the two frames around it. */
 :root[data-theme-switching] *, :root[data-theme-switching] *::before, :root[data-theme-switching] *::after { transition: none !important; }
