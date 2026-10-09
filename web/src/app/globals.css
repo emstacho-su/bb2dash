@@ -451,6 +451,25 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* The desktop shell's window has no title bar of its own: the app's bar is the title bar, with
+   Windows' three buttons laid over it. A page with no bar (sign-in, privacy, terms, not found) gets
+   this strip as the mouse's handle on the window. It is as tall as the title-bar area, which a
+   browser reports as 0px, so a browser draws and reserves nothing. It is the first box of body and
+   out of the flow: drag regions are collected in document order and a no-drag control later in the
+   page takes its own box back out, so a strip that came after the bar would cover the bar's
+   controls. It never takes a click. */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(titlebar-area-height, 0px);
+  pointer-events: none;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
 h1,
 h2,
 h3,
