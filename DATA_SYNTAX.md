@@ -133,6 +133,9 @@ Two retrieval tiers over the corpus, both scoped by course when wanted:
   **Hub default mode = hybrid** per `EVAL_EMBEDDING_POC.md` (hybrid/vector hit@1 9/10 vs FTS
   1/10 on conversational queries). Evidence for the 021–023 round:
   `docs/planning/sprint-0-foundation/51_W10_VERIFICATION.md`.
+* **The store behind uploads and memory** (migrations 190–198: a second vector table with its HNSW
+  index, one search over three kinds, the model rule): see "The pgvector store, scoped to bb2dash"
+  under Workspace.
 
 ## Enums
 
@@ -276,7 +279,7 @@ the Google mirror sees patches, never delete + insert.
   run does not carry, on the same path with the same `item_kind`, share the row (old id to
   `detail.previous_ids`, link and children kept), counted as `rekeyed`.
 
-## Workspace (migrations 140-143)
+## Workspace (migrations 140-143, 190-198)
 
 The Workspace is a chat: a question is a row the browser writes, an answer is a row the container
 runner writes, and a queue row joins them. Read-only v1: nothing here can write planner state or a
@@ -405,6 +408,179 @@ write `claude_session_id`, `tier`, `provider`, `model`, `tool_calls`, `cost_usd`
 its five functions. Its password is set out of band and is in no file. `db_test_runner` holds
 `insert, update, delete` on the four tables and the role `workspace_runner` with inherit false, for
 the `phase21_*` units.
+
+**Phase 24a objects (migrations 190–198).** Everything below is additive; 198 drops one policy. A new
+table in `public` starts with every command open to `anon` and `authenticated`, so each is revoked
+first and then granted what the owner needs. Every policy names `app_owner()` in the initplan form.
+
+* **`workspace_documents`** (190) — one row for each upload and each remembered item: `id bigint`,
+  `kind` (`upload` | `memory`), `title` (1–200), `course_id` → `courses` (set null),
+  `conversation_id` → conversations (cascade), `storage_key`, `mime` (the six types), `byte_size`
+  (1–20971520), `sha256`, `state` (`stored`, `reading`, `text_ready`, `indexed`, `failed`,
+  `deleting`), `error_code` (`too_large`, `bad_type`, `bad_bytes`, `no_text`, `extract_timeout`,
+  `extract_failed`, `too_many_units`, `link_expired`, `download_failed`, `embed_failed`), `attempts`
+  (0–3), `signed_url` and `signed_url_expires_at` (written and cleared together), `claimed_at`,
+  `claimed_by` (the ingest lease), `created_at`, `updated_at`. Three CHECKs: `storage_key` holds
+  lower-case letters, digits and `/ . _ -` only; `signed_url` is null or this project's host, the
+  bucket's signed path, this row's own `storage_key`, then a query string; an upload's `sha256` is 64
+  lower-case hex characters and its `storage_key` is `u/` + the hash. A unique index on `sha256`
+  where `kind = 'upload'`, and one on `conversation_id` where `kind = 'memory'`. The owner selects
+  and updates `title` and `course_id` (column grant); nothing else is written directly.
+* **`workspace_document_text`** (190) — the text units: `id`, `document_id` (cascade), `unit_kind`,
+  `unit_no`, `text`, `fts` (generated, GIN `workspace_document_text_fts_idx`), `embedded_at` (null
+  until the unit's vector is stored). Unique on `(document_id, unit_kind, unit_no)`. The owner selects.
+* **`workspace_text_embeddings`** (190) — one vector for each part of such a unit: `text_id`
+  (cascade), `part_no`, `part_range`, `model` (not null), `embedding extensions.vector(384)` (not
+  null), `embedded_at`. Unique on `(text_id, model, part_no)`; HNSW cosine index
+  `workspace_text_embeddings_hnsw`. The browser holds no privilege on it.
+* **`v_workspace_memory`** (190, security invoker) — `document_id`, `conversation_id`, `state`,
+  `created_at`, `updated_at`, `summary` for each remembered item.
+* **The owner's functions** (SECURITY DEFINER, `search_path = public, pg_temp`, `authenticated` only,
+  each refusing anyone but the owner first with 42501): `workspace_upload_register(p_sha256,
+  p_title, p_mime, p_byte_size, p_signed_url, p_signed_url_expires_at, p_course_id)` → `{id, state,
+  existing}` (an upsert on the hash: a second call returns the first row with `existing` true),
+  `workspace_upload_retry(p_document_id, p_signed_url, p_signed_url_expires_at)` (a `failed` upload
+  goes back to `stored`), `workspace_document_delete(p_document_id, p_object_removed)` (a memory item
+  goes whole and sets `memory_opt_out`; an upload goes in two steps: `false` removes its units and
+  vectors and leaves the row in `deleting` with its key, `true` drops a row in `deleting`), and
+  `workspace_ask_with(p_conversation_id, p_text, p_options)` (194; calls `workspace_ask` and stores
+  the options and attachments).
+* **`workspace-uploads`** (191) — a private bucket, 20 MiB a file, six types, four owner policies on
+  `storage.objects`; an object is put under `u/` + the SHA-256 of its bytes.
+* **Search** (192, SECURITY INVOKER, `service_role` only): `workspace_search(p_q, p_query_embedding,
+  p_kinds, p_courses, p_limit, p_min_similarity, p_model)`, its twin `hybrid_search_workspace_text`
+  (ranks as `hybrid_search_file_text` does, uses no index) and `workspace_attachment_read(p_kind,
+  p_id, p_max_chars)`.
+* **The ingest worker** (193): login role `workspace_ingest_runner` (no table grant, password set out
+  of band, in no file) and its four functions `workspace_ingest_claim`, `workspace_ingest_put_text`,
+  `workspace_ingest_finish`, `workspace_ingest_heartbeat`; the table `workspace_ingest_heartbeat`
+  (one row, `id = 1`). A claim hands over one document at a time, with a 10-minute lease and
+  `for update skip locked`; a step is tried 3 times.
+* **Options and routines** (194): `workspace_routines` (six rows: `quiz`, `study-guide`,
+  `explain-file`, `summarise-reading`, `plan-week`, `draft-help`; `needs` is `nothing`, `file` or
+  `course_or_file`), `workspace_request_options` (`course_display_id`, `course_ids`, `depth` `auto` |
+  `quick` | `standard` | `deep`, `routine_id`, `format` `plain` | `rich`) and
+  `workspace_request_attachments` (up to five, files first, then uploads).
+* **Turn state** (195): `workspace_profile` (one row; `about_me` up to 2,000 characters, the owner's
+  only direct write there; `memory_since`, stamped once by the first memory job claim),
+  `workspace_conversation_state` (rolling summary and its through-point, the job lease and failures,
+  `memory_opt_out`, `memory_written_at`), `workspace_turns` (one row for each answered request: ids,
+  counts and timings, no text) and `workspace_sources` (at most 40 rows for each request: kind
+  `material` | `upload` | `memory` | `feed`, origin `auto` | `attached` | `tool`, ids and a title,
+  never a passage).
+* **The runner's six new functions** (196, SECURITY DEFINER, `workspace_runner` only, which now
+  executes eleven and still holds no table, view or sequence grant): `workspace_claim_v2`,
+  `workspace_turn_context` (a jsonb of eleven keys), `workspace_turn_put`, `workspace_planner_feed`
+  (a jsonb of eight keys; the window is clamped to 180 days either side of today in New York and the
+  courses are the request's own stored scope), `workspace_job_claim` and `workspace_job_finish` (a
+  rolling summary, or a remembered item written as an upsert on its conversation).
+
+### The pgvector store, scoped to bb2dash
+
+One retrieval store inside the bb2dash project, schema `public`, vector type from the `vector`
+extension in schema `extensions`. It holds three kinds of content, all embedded with `gte-small` at 384
+dimensions so cosine similarity orders hits across kinds: `material` (course files), `upload` and
+`memory`. No second project and no schema of its own; nothing in it reads or copies the vault's
+`harness-memory` store.
+
+**Its objects.** `vector` (extension); `bb_file_text` and `bb_text_embeddings` with the HNSW cosine
+index `bb_text_embeddings_hnsw` (course files); `search_file_text`, `match_file_text` and
+`hybrid_search_file_text` (their searches); `v_embedding_status`; the edge functions `embed-corpus`
+and `search`; and, new in 24a, `workspace_documents`, `workspace_document_text`,
+`workspace_text_embeddings` with the index `workspace_text_embeddings_hnsw`, `v_workspace_memory`,
+`workspace_upload_register`, `workspace_upload_retry`, `workspace_document_delete` (190),
+`workspace_search`, `hybrid_search_workspace_text`, `workspace_attachment_read` (192),
+`workspace_ingest_claim`, `workspace_ingest_put_text`, `workspace_ingest_finish`,
+`workspace_ingest_heartbeat` and the table `workspace_ingest_heartbeat` (193), `workspace_job_finish`
+(196), `v_workspace_index_status` (197) and the edge functions `workspace-embed` and
+`workspace-search`. The five **content tables** are `bb_file_text`, `bb_text_embeddings`,
+`workspace_documents`, `workspace_document_text` and `workspace_text_embeddings`.
+`workspace_ingest_heartbeat` is the sixth table and holds no content.
+
+**One search, the kind on every hit.** `workspace_search` returns rows of kind `material`, `upload` or
+`memory`, never null, each with its unit id (`bb_file_text.id` with `file_id`, or
+`workspace_document_text.id` with `document_id`), course, title, unit, part, `similarity`, `score`, a
+passage of at most 2,000 characters and `has_notes`. It calls `hybrid_search_file_text` once for each
+course of the scope and `hybrid_search_workspace_text`, and keeps at most `p_limit` rows of each kind.
+With a scope, course materials and course-tagged uploads are filtered; untagged uploads and every
+remembered item are always searched. A document in `deleting` or `failed` is never returned.
+
+**The model rule, and its limit.** Every vector row names its `model` (not null) and the model is part
+of the key `(text_id, model, part_no)`, so vectors of two models can stand side by side. The search
+ranks one model at a time (`p_model`, default `gte-small`, handed to both arms). So a re-embed is
+rows, not schema: write the corpus again under the new name, switch `p_model`, delete the old rows.
+That holds for a model of **384 dimensions**; a model of another size needs a new column and a new
+index (011 did that while the table was empty). `gte-small` stays; no model is changed in 24a.
+
+**What the index does today.** Both vector columns have an HNSW cosine index. The hybrid searches
+(`hybrid_search_file_text`, `hybrid_search_workspace_text`) measure every part in scope and keep the
+best part of each unit: an exact comparison, never an index scan, and the ranking Phase 18 timed and
+pinned. The index serves a nearest-first query with a limit, the shape of `match_file_text`
+(mode `vector` of the `search` function). Moving the hybrid search onto the index is a change to two
+function bodies in a new migration; the moment for it is when the hybrid search's timed median passes
+the 60 ms ceiling of Phase 15.
+
+**Every write is an upsert on a key, so a second write of the same thing changes no count.**
+
+| what is written twice | the key | what the second write does |
+|---|---|---|
+| a part of a course unit | `(text_id, model, part_no)` | nothing: `embed-corpus` takes a duplicate as stored |
+| the same file from his device | the SHA-256 of its bytes (unique among uploads) | nothing: `workspace_upload_register` returns the row that holds the hash |
+| the units of one document | `(document_id, unit_kind, unit_no)` | `workspace_ingest_put_text` replaces the set in one transaction |
+| a part of an upload's or a remembered item's unit | `(text_id, model, part_no)` | nothing: `workspace-embed` takes a duplicate as stored |
+| a conversation's remembered item | one memory row for each conversation | the same summary writes nothing; a new one replaces the unit, removes its vectors and puts the document back in `text_ready` with attempts 0 |
+
+**The queue and the status.** An upload moves `stored` → `reading` → `text_ready` → `indexed`, or ends
+`failed`; a remembered item starts at `text_ready`. `v_workspace_index_status` (197, security invoker)
+is one row with these columns: `course_units_indexed`, `course_units_waiting`, `course_last_embedded`,
+`course_files_text_pending`, `uploads_indexed`, `uploads_waiting`, `uploads_failed`,
+`upload_links_expired`, `uploads_deleting`, `memory_indexed`, `memory_waiting`, `memory_failed` and
+`ingest_polled_age_seconds`. It reads no table of the `storage` schema. A course unit has no failed
+state: one that could not be embedded still waits and is tried at the next sync.
+
+**Direct touches.** Three older ones stand, one is closed by 24a, and 24a adds two (both the
+page's). (1) The sync inserts a course file's units into `bb_file_text` over REST with the publishable
+key, under the insert-only policy `bb_file_text_anon_insert` (007). (2) `get_material_text` reads one
+course unit from `bb_file_text` over REST with the service key. (3) The owner's session holds the owner
+policy on both course tables, for every command (020). (4) *Closed by 198:* the policy
+`bb_text_embeddings_anon_insert` (010) let a holder of the publishable key insert a vector row; 198
+drops it, and `embed-corpus` writes with the service role, which bypasses row security. (5) The page
+reads remembered summaries through `v_workspace_memory`, a view over a table the owner's session may
+read; that grant also lets the owner's session read the units of his own uploads, which no page code
+does. (6) The page selects the catalog rows of `workspace_documents` and updates two columns of it,
+`title` and `course_id`. No service built in 24a reads or writes a unit or a vector except through a
+named function.
+
+**The two exceptions that come through the public keys.** "Reached only with bb2dash's own
+credentials" is not true without them: the publishable key may insert into `bb_file_text` (touch 1),
+and any valid JWT, the public anon JWT included, reads course passages through `search` and may start
+the two embedders, which write only vectors of text that is already stored. Uploads and memory never
+pass through `search`.
+
+**It reads no other project.** No foreign server and no foreign table exist; `dblink`,
+`postgres_fdw` and `wrappers` are not installed; no function that names a store table calls out. The
+proofs are `db/tests/phase24_store_proof.sql`.
+
+**What would have to change to lift it into a project of its own.** The largest piece is on the course
+side: `hybrid_search_file_text`, `match_file_text`, `search_file_text` and `v_embedding_status` join
+`bb_files` for a unit's course, bucket, file name and whether the file was replaced, and
+`bb_file_text.file_id` is a foreign key to it. A store in its own project would need those four values
+on its own side, kept current by the sync. The upload and memory half has no such join. Five objects
+span both sides, and a move splits each one or leaves it calling across:
+
+| object | its store side | its app side |
+|---|---|---|
+| `workspace_document_delete` | removes a remembered item, its unit and its vectors | sets `memory_opt_out` in `workspace_conversation_state`, in the same transaction |
+| `workspace_job_finish` | writes a remembered item and its unit | writes the job's columns in `workspace_conversation_state` |
+| `workspace_turn_context` | reads an attached upload's title and state from `workspace_documents` | the runner's read of a request: options, messages, course list |
+| `workspace_ask_with` | checks that an attached upload exists in `workspace_documents` | stores the request's options and attachments |
+| `v_workspace_index_status` | counts the store's rows and reads `workspace_ingest_heartbeat` | reads `bb_files.text_status` for `course_files_text_pending` |
+
+`workspace_documents` also carries two ids of app rows, `conversation_id` and `course_id`, which in a
+move are plain ids, as are the foreign keys from an app row to a store row (an attachment's and a
+source's `document_id`). A service holds function names and an address, not table names; the page holds
+one table and two views besides (`workspace_documents`, `v_workspace_memory`,
+`v_workspace_index_status`).
 
 ## Seed state (2026-09-02)
 
