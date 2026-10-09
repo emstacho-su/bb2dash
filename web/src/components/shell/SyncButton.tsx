@@ -56,6 +56,7 @@ import {
   watchedRequest,
   type SyncPhase,
 } from '@/lib/sync-request-phase';
+import { SyncIcon } from './icons';
 import styles from './SyncButton.module.css';
 
 /** How long a toast with nothing to act on stays up. */
@@ -234,13 +235,5 @@ export function SyncButton() {
         </span>
       )}
     </span>
-  );
-}
-
-function SyncIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 5V2L8 6l4 4V7c2.76 0 5 2.24 5 5 0 .85-.21 1.65-.6 2.35l1.47 1.47A6.94 6.94 0 0 0 19 12c0-3.87-3.13-7-7-7zm0 12c-2.76 0-5-2.24-5-5 0-.85.21-1.65.6-2.35L6.13 8.18A6.94 6.94 0 0 0 5 12c0 3.87 3.13 7 7 7v3l4-4-4-4v3z" />
-    </svg>
   );
 }
