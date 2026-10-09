@@ -354,8 +354,10 @@ const SURFACES: readonly Surface[] = [
     nn: '16',
     slug: 'not-found',
     window: 'document',
-    reach: async (page, context) => {
-      await openSignedOut(page, context, '/no-such-page');
+    // Signed in, as phone-width.spec.ts opens it: the proxy sends a signed-out visitor to /login.
+    quiet: true,
+    reach: async (page) => {
+      await openAt(page, '/no-such-page');
       await expect(page.getByRole('heading', { name: 'Not found' })).toBeVisible();
     },
   },
@@ -611,7 +613,8 @@ test('motion off under reduced motion', async ({ page, context }) => {
   expect(first.opacity, "the panel's opacity on its first frame").toBe('1');
   expect(first.duration.split(',').every((part) => part.trim() === '0s'), `transition-duration ${first.duration}`).toBe(true);
   const exit = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--motion-exit').trim());
-  expect(exit, 'the exit duration under reduced motion').toBe('0ms');
+  // The build's minifier writes a zero time as `0s`; both spellings are zero.
+  expect(exit, 'the exit duration under reduced motion').toMatch(/^0(ms|s)$/);
 });
 
 test('planner targets', async ({ page, context }) => {
