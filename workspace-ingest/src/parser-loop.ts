@@ -14,13 +14,15 @@ import path from 'node:path';
 
 import { extractUnits } from '../../ingest/pull_files.mjs';
 import { EXCHANGE_POLL_MS, EXTRACT_LIMIT_MS, type ErrorCode } from './constants.js';
-import { DOC_FILE_NAME, EXCHANGE_FILES, docFileName, writeJsonAtomic } from './exchange.js';
+import { DOC_FILE_NAME, EXCHANGE_FILES, docFileName, isRegularFileStat, readRegularFile, writeJsonAtomic } from './exchange.js';
 import { asUnits, type Unit } from './units.js';
 
 /** The parts of the environment `uv` needs to find itself, its cache and Python; nothing else. */
 const UV_ENV_KEYS = /^(PATH|Path|HOME|USERPROFILE|SYSTEMROOT|SystemRoot|TEMP|TMP|TMPDIR|LANG|LC_ALL|XDG_CACHE_HOME|XDG_DATA_HOME|UV_[A-Z_]+|PYTHON[A-Z_]*)$/;
 const TIMED_OUT = 'ETIMEDOUT';
 const MAX_BUFFER_BYTES = 64 * 1024 * 1024;
+/** A request is a few dozen bytes; a larger file is not one. */
+const REQUEST_MAX_BYTES = 4096;
 
 export function uvEnv(parent: Record<string, string | undefined>): Record<string, string> {
   const out: Record<string, string> = {};
@@ -85,9 +87,18 @@ function answer(dir: string, documentId: number, body: { ok: true; units: Unit[]
   writeJsonAtomic(dir, EXCHANGE_FILES.answer, { document_id: documentId, ...body });
 }
 
+/** The named file must be a regular file, not a link to somewhere else. */
+function isRegularDocument(file: string): boolean {
+  try {
+    return isRegularFileStat(fs.lstatSync(file));
+  } catch {
+    return false;
+  }
+}
+
 async function extractOne(request: Request, d: ServeDeps): Promise<{ ok: true; units: Unit[] } | { ok: false; error: ErrorCode }> {
   const file = path.join(d.dir, request.file);
-  if (!fs.existsSync(file)) return { ok: false, error: 'extract_failed' };
+  if (!isRegularDocument(file)) return { ok: false, error: 'extract_failed' };
   try {
     return { ok: true, units: await d.extract(file) };
   } catch (error) {
@@ -100,14 +111,10 @@ async function extractOne(request: Request, d: ServeDeps): Promise<{ ok: true; u
 export async function serveOne(d: ServeDeps): Promise<boolean> {
   const now = d.now ?? Date.now;
   const requestFile = path.join(d.dir, EXCHANGE_FILES.request);
-  let text: string;
-  try {
-    text = fs.readFileSync(requestFile, 'utf8');
-  } catch {
-    return false;
-  }
-  fs.rmSync(requestFile, { force: true });
-  const request = parseRequest(text);
+  const bytes = readRegularFile(requestFile, REQUEST_MAX_BYTES);
+  if (bytes === 'absent') return false;
+  fs.rmSync(requestFile, { recursive: true, force: true });
+  const request = bytes === 'refused' ? null : parseRequest(bytes.toString('utf8'));
   if (request === null) {
     d.log('parser: a request was not the agreed shape and was dropped');
     return true;
