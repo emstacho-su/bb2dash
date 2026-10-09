@@ -148,3 +148,120 @@ Merged `origin/feat/styling-22` (a merge). The five start checks each printed on
   `--size-4, ...` bullet of the notes under the table, which starts with a backticked name.)
 * **The gradebook hook, closed.** W-68's spec now reads it. Run `20261009T001508Z` printed
   `route /course/IST.466/grades [dark]: box scrollWidth=620 clientWidth=345` (the same in light). The box scrolls.
+
+## ui-ux-pro-max
+
+Required by the brief's working rules (amendment 3, H-1). One row per task that changes what is drawn.
+
+| Task | Skill loaded | Files read first | Searches run | Advice set aside, and the rule that won |
+|---|---|---|---|---|
+| 19, 28, 31, 34, 37 | yes (Skill tool, `ui-ux-pro-max`, once at the start of the resume, before task 19) | `design-system/bb2dash/MASTER.md` (all of it), `design-system/bb2dash/pages/grades.md`, `design-system/bb2dash/pages/workspace.md`; `direction-d.json` and `component-changes.json` for every value and entry | none. The brief names every rule these tasks write, the component-changes entries give each change word for word, and `direction-d.json` holds every value, so a query would only have returned advice the brief already overrides. No `--persist` was passed and no script ran | `touch-target-size` (44 px) and `web-target-size` lose to `--size-target` (task 36, not mine); `readable-font-size` (16 px body) and the type-floor advice lose to the seven pinned `--text-*` sizes and the brief's "no 11px floor" (D-2); `weight-hierarchy` loses to the sweep's rule that weights are `--font-weight-*` tokens at today's value; `truncation-strategy` and `spring-physics` do not apply (these tasks truncate and animate nothing new); the icon-package advice (a Phosphor import) loses to "no new dependency": the marks are the inline SVGs of `icons.tsx`; `grades.md` lines 21-22, 34, 36 and 37 ("waits", "needs his word") are read against D-2, D-3, D-5 and H-5 and the brief's table of overtaken lines: all of them are now in (tasks 28, 31, 34, 37) |
+
+## Task 19: the sweep of screens B
+
+Commit `18dd4ce`. Every size literal, `color-mix()` and literal weight in the 66 files of the cluster is a token
+reference at today's value. `screens-b.json` is set to 0 for all ten files in the same commit.
+
+* **Dead rules deleted, and the Serif check.** `GradeModel.module.css` held 31 classes; its two renderers
+  (`LinkColumnControl.tsx`, `ScoreHistory.tsx`) use seven. The other 24 (the "Our model" container with the 6% mix, the
+  what-if cell, the solver, the actions, the old table, `.srOnly`) were dead since Phase 12b and went, **its table head
+  with them**. So the Serif check's target reads `7 0 0`, not `8 0 0`. `GradesTables.layout.test.tsx` (unedited) still
+  finds `modelStyles.link`, which stays.
+* **Entries applied.** 29 `.openLink` and 30 `.itemLink` on the global link style (the colour, `text-decoration: none`
+  and the hover rules are gone; `.itemLink` keeps one `:active` rule for the dim). 42: `.tabActive` and `.weekCurrent`
+  name `--color-accent-500` (`.weekCurrent` also `--color-on-accent`). 23: the six boxed error rules compose
+  `errorNotice` and drop their own fill and colour (padding, radius and size stay). 59: `user-select: none` on the
+  course tabs (with `-webkit-user-drag: none`, they are anchors) and on the gradebook head. 60: the focus rules of the
+  cluster draw `var(--size-focus) solid var(--color-accent)` with `--size-focus-gap` (inset on the rows that sit flush
+  in a clipped box, as before). 64: `transition: var(--motion-control)` on the course tabs. 65: `opacity: 0.7` while
+  held on `.openLink`, `.itemLink`, both `.bbLink` and `.emptyLink`.
+* **Kept as they were (A3, A5 and pins).** The `.laneHead` and `.weekRow` tracks with their `72px minmax(240px, 1fr)`
+  floors, `.asgRow`'s `32px minmax(0, 1fr) minmax(7.5rem, 9rem)`, the `@container (max-width: 600px)` step, and
+  `CourseClasswork.tsx`'s one `marginLeft` key. `course-timeline-css.test.ts`, `Workspace.layout.test.tsx` and
+  `CourseClasswork.test.tsx` are unedited and green.
+* **Not done here (task 26).** `CourseTimeline.module.css`'s `.rail` `position: sticky` (my line of task 26) is as it was.
+
+### The named commands, as printed
+
+| Command | Exit | Printed |
+|---|---|---|
+| Baseline sum, `F=/^screens-b\.json$/` | 0 | `0` |
+| Time check over the screens B stylesheets | 1 | nothing |
+| No-select check over `CourseSubBar.module.css` and `GradebookTable.module.css` | 0 | `2 0 0` |
+| `grep -c "transition: var(--motion-control)" "web/src/app/(app)/course/[id]/CourseSubBar.module.css"` | 0 | `1` |
+| Weight check over `"web/src/app/(app)/materials" web/src/components/course web/src/components/grades` (and over the other five folders of the cluster) | 1 | nothing |
+| Red files over `"web/src/app/(app)/course" web/src/components/course` | 0 | `CourseSubBar.module.css` and `CourseTimeline.module.css` (2 lines) |
+| Notice files over the five paths of the row | 0 | six lines: `CourseAssignment`, `Materials`, `Workspace` (under `app/(app)`), `UploadDropZone`, `ConversationList`, `ServiceStatus` |
+| `grep -c "var(--color-on-accent)" web/src/components/course/CourseTimeline.module.css` | 0 | `1` |
+| Ring check | 0 | `29 21 3` over all of `web/src`; none of the 21 is in the cluster |
+| `cd web && npx vitest run test/token-audit.test.ts` | 0 | 89 passed |
+| `cd web && npm test` | 0 | 164 files, 3238 passed, 0 failed |
+| `npm run typecheck`; `npx eslint . --max-warnings 0` | 0; 0 | no error; no output |
+
+RED was the audit itself: with the sweep in and the JSON still at 72, `token-audit.test.ts` failed on
+`screens-b: every file is at its baseline` with ten "counts 0, below its baseline" lines; setting the JSON to 0 made
+it green.
+
+## Task 28: type, titles and dates
+
+Commit `f9040e7`. The gradebook head takes `--font-body` at `--font-weight-medium` (a small-capital head, so the Weight
+check stays empty); the "seen" stamp loses `tokens.mono`. `git grep -c "font-family: var(--font-heading)" --
+GradebookTable.module.css GradeModel.module.css` prints nothing (exit 1); `grep -c "tokens.mono"
+web/src/components/grades/GradebookTable.tsx` prints `0`; the Weight check over the cluster prints nothing; the Serif
+check over my two rules prints `1 0 0` (one block found, since `GradeModel`'s head is gone). `npm test`: 164 files,
+3238 passed; typecheck and eslint exit 0.
+
+## Task 34: captions and codes
+
+Commit `7e2099a`. `GradebookTable.tsx` prints `submission.attemptText` inside the `submission.attemptStatus &&` it had.
+`GradebookTable.test.tsx` changed on lines 61 and 119 only.
+
+| Command | Exit | Printed |
+|---|---|---|
+| `grep -c "submission.attemptText" web/src/components/grades/GradebookTable.tsx` | 0 | `1` |
+| `grep -c "last attempt: needs grading" web/test/GradebookTable.test.tsx` | 0 | `2` |
+| `git diff --numstat origin/main...HEAD -- web/test/GradebookTable.test.tsx` | 0 | `2	2	web/test/GradebookTable.test.tsx` |
+| `cd web && npx vitest run test/GradebookTable.test.tsx test/status-vocabulary.test.ts` | 0 | 2 files, 36 passed |
+
+## Task 37: busy says busy
+
+Commit `9d85a10`. `aria-busy` beside the five `disabled` sites of the row. `git grep -c -E
+"aria-busy=\{(pending|busy)\}"` over the four files prints `LinkColumnControl.tsx:2`, `UploadDropZone.tsx:1`,
+`OpenStoredButton.tsx:1`, `ConversationList.tsx:1`; `grep -c "aria-busy" web/src/components/shell/TopNav.tsx` prints
+`1`. `npm test`: 164 files, 3238 passed. No stylesheet of mine carries a rule for it (the five rules of the busy look
+belong to other workers).
+
+## Task 31: marks
+
+Commit `19f7ba3`, after W-68's `icons.tsx` commit (`git grep -c "export function Mark"` printed `:2`, `git grep -c
+"export const MARK_CHAR"` printed `:1`). 18 characters in 9 files drawn by `Mark`: `TimelineRows.tsx` (close),
+`CourseGradeCard.tsx` (fold caret, "Open ... →"), `FileOpenAction.tsx`, `MaterialsBrowser.tsx` (two fold carets, "Open
+in Classwork →", "Blackboard ↗"), `CourseSubBar.tsx`, `CourseClasswork.tsx`, `CourseGrades.tsx`, `CourseInfo.tsx`,
+`CourseStream.tsx`.
+
+* **Mark characters, before and after** (the command over all of `web/src`): before `41 20`, after `23 11`. W-70's fall
+  is 18 characters in 9 files, as the brief says; the 23 and 11 left are the other workers'.
+* A right arrow after a link's words is `<Mark name="caretRight" char={MARK_CHAR.arrowRight} />`, so the glyph stands in
+  `icons.tsx` only. The two carets that were `aria-hidden` sit in the same `aria-hidden` span.
+* `CourseStream.tsx`'s two labels keep their values (`` `Open ${MARK_CHAR.arrowUpRight}` `` is `'Open ↗'`) and are drawn
+  through `MarkedLabel`; so is `FileOpenAction.tsx`'s fallback.
+* `grep -c "<MarkedLabel"`: `FileOpenAction.tsx` 1, `MaterialsBrowser.tsx` 2, `CourseStream.tsx` 1.
+* `cd web && npx vitest run test/course-stream.history.test.tsx test/FileOpenAction.test.tsx
+  test/MaterialsCourseLinks.test.tsx test/CourseClasswork.test.tsx` → exit 0, 4 files, 57 passed, unedited.
+* `cd web && npm test` → exit 0, 167 files, 3301 passed; typecheck exit 0; eslint exit 0; audit exit 0.
+* **Default.** `MaterialsBrowser.tsx` renders `STAGED_LABEL` twice (the link, and a plain span when there is no
+  Blackboard link). The brief's "stays typed" rule is for `SubmissionBlock.tsx:98` and its `getByText`; no test reads
+  `MaterialsBrowser`'s span that way (no test mentions `STAGED_LABEL`), so both are drawn through `MarkedLabel`.
+
+## Harness run: owed
+
+`node scripts/walk-box.mjs web/e2e/phone-width.spec.ts -- -g "route /course/|route /grades |route /materials |route /workspace "`
+from this worktree at `19f7ba3`: run `20261009T005344Z`, `exit_code` 1, **16 failed**. Every case fails before it
+measures anything, at `bodyFontLoaded` (`phone-width.spec.ts:182`): `a face of Source Sans 3 with status "loaded"`,
+30 s timeout. A repeat of `route /grades ` alone (run `20261009T010534Z`) failed the same way, so it is not a flake.
+The cause is not in my files: the failing precondition is the page's body font, which comes from the Google Fonts
+`@import` in `web/src/app/globals.css` (W-67's, task 8) and the box. W-67's own run `20261009T004202Z` of the public
+pages fails at the same line. I did not wait or poll for it. Widths are therefore **not re-measured** since the sweep;
+the last measured widths are the GREEN run of task 14 (`20261008T235232Z`, all 16 at 390). The sweep swaps literals
+for tokens at the same value and the marks are 1em inline SVGs where a one-character glyph stood, so no box is
+expected to move. **Owed:** this run, 16 passed, once the font loads in the box.
