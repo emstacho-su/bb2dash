@@ -49,11 +49,15 @@ Pass when all of this is true:
   `offline_item_id` are each a whole number above 0, and the four item numbers are all different.
   `cards_seen_open` is 4, `confirmed` is true and `dismissed` is true. `answered_tab_shows` holds
   `confirm` and `dismiss`.
-- `1-raised.png` shows the `Needs you` tab selected and the card labelled `confirm` at the top of
-  the list. Its source line holds `accept/` and a number. The picture may cut off the cards that
-  follow it; `cards_seen_open` in `1.json` is what counts them.
-- `1-answered.png` shows the `Answered, not applied` tab selected, with the card labelled
-  `confirm` in the list. The cards labelled `note` and `offline` are not in this tab.
+- In `1.json`: `tab_at_raised` is `Needs you` and `tab_at_answered` is `Answered, not applied`.
+  The test checked which tab was selected when it took each picture. A picture holds the row of
+  tabs only when its card stands near the top of the list, so a picture without that row is not
+  a fault.
+- `1-raised.png` has the card labelled `confirm` whole: its title, and its source line, which
+  holds `accept/` and a number. Other cards may stand above it, and the picture may cut off the
+  cards that follow it; `cards_seen_open` in `1.json` is what counts them.
+- `1-answered.png` has the card labelled `confirm` whole. No card labelled `note` or `offline`
+  is in the picture.
 
 If `test_error` in `1.json` begins `inbox_accept_question`, the database refused to raise a
 question. The verdict is `fail`.
@@ -98,12 +102,14 @@ Pass, way one (the test saw the request run), when all of this is true:
 
 Pass, way two (the request had closed before the page opened), when all of this is true:
 
-- In `3.json`: `closed_before_the_page_opened` is true, `count_at_start` is `0 answered` and
-  `status_line` is null.
+- In `3.json`: `closed_before_the_page_opened` is true, `count_at_start` is `0 answered`,
+  `status_line` is null, `tab_at_done` is `Archived`, and `archived_tab_shows` holds `confirm`
+  and `dismiss`.
 - `3-watching.png` shows the footer with the count `0 answered`.
-- `3-done.png` shows the `Archived` tab selected with the cards labelled `confirm` and
-  `dismiss` in the list, the count `0 answered` in the footer, and no box with a command that
-  starts `claude`. The picture may cut off the second card; `3.json` is what counts it.
+- `3-done.png` has the card labelled `confirm` whole, the count `0 answered` in the footer, and
+  no box with a command that starts `claude`. The picture may cut off the card labelled
+  `dismiss`, and it holds the row of tabs only when the card stands near the top of the list;
+  `3.json` is what says both cards were under the `Archived` tab.
 - In `saw`, say that the request had closed before the page opened, so the page showed no result
   line. That is not a fault: the host checks the request itself in the database.
 
@@ -120,13 +126,14 @@ The test opens the Inbox and looks at two tabs. It presses nothing but the tabs.
 
 Pass when all of this is true:
 
-- In `4.json`: `answered_tab_empty` is true, and `archived_tab_shows` holds `confirm` and
-  `dismiss`.
+- In `4.json`: `answered_tab_empty` is true, `archived_tab_shows` holds `confirm` and `dismiss`,
+  and `tab_at_archived` is `Archived`.
 - `4-answered.png` shows the `Answered, not applied` tab selected, the text
   `Every answer has been applied.` in the list, and the count `0 answered` in the footer.
-- `4-archived.png` shows the `Archived` tab selected, with the cards labelled `confirm` and
-  `dismiss` in the list, each with a chip that has the word `archived`. The picture may cut off
-  the second card; `archived_tab_shows` in `4.json` is what counts them.
+- `4-archived.png` has the card labelled `confirm` whole, with a chip that has the word
+  `archived`. The picture may cut off the card labelled `dismiss`, and it holds the row of tabs
+  only when the card stands near the top of the list; `archived_tab_shows` and
+  `tab_at_archived` in `4.json` are what say both cards were under the `Archived` tab.
 
 ### Step 6: `6 note and apply`
 
@@ -147,13 +154,14 @@ Pass when all of this is true:
 
 - In `6.json`: `saved_with_a_reason` is true, `request_id` is a whole number above 0, `ended_as`
   is `done`, `status_line` is a line of text and not null, and `labels_seen` does not hold
-  `waiting on the worker…` and ends with `done`.
-- `6-saved.png` shows the `Answered, not applied` tab selected, the card labelled `note` in the
-  list, and the count `1 answered` in the footer.
-- `6-done.png` shows the `Archived` tab selected with the card labelled `note` in the list, and
-  the footer with the count `0 answered`, the button labelled `done`, and beside the button the
-  line of text that `status_line` holds. No box with a command that starts `claude` is in the
-  picture.
+  `waiting on the worker…` and ends with `done`. `tab_at_saved` is `Answered, not applied` and
+  `tab_at_done` is `Archived`: the test checked which tab was selected when it took each
+  picture, and a picture holds the row of tabs only when its card stands near the top of the
+  list.
+- `6-saved.png` has the card labelled `note` whole, and the count `1 answered` in the footer.
+- `6-done.png` has the card labelled `note` whole, and the footer with the count `0 answered`,
+  the button labelled `done`, and beside the button the line of text that `status_line` holds.
+  No box with a command that starts `claude` is in the picture.
 
 If `test_error` in `6.json` begins `the press filed no request`, a request was already open when
 the button was pressed. That is not the product's fault: the verdict is `blocked`, and `saw` says
@@ -209,9 +217,12 @@ checks that in the database.
 
 Pass when all of this is true:
 
-- In `7b.json`: `archived_tab_shows` holds `offline` and `nothing_answered` is true.
-- `7b-archived.png` shows the `Archived` tab selected with the card labelled `offline` in the list,
-  with a chip that has the word `archived`, and the footer with the count `0 answered`.
+- In `7b.json`: `archived_tab_shows` holds `offline`, `nothing_answered` is true and
+  `tab_at_archived` is `Archived`.
+- `7b-archived.png` has the card labelled `offline` whole, with a chip that has the word
+  `archived`, and the footer with the count `0 answered`. The picture holds the row of tabs only
+  when the card stands near the top of the list; `tab_at_archived` is what says which tab was
+  selected.
 
 `label_on_the_button` and `status_line` in `7b.json` may hold anything, or be null. The page was
 opened after the request may already have closed, so it may show no result line. That is not a

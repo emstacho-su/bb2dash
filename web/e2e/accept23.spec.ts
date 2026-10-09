@@ -90,6 +90,9 @@ const SYNC_UNCLAIMED = 'waiting on the container…';
 const TAB_NEEDS_YOU = /^Needs you/;
 const TAB_ANSWERED = /^Answered, not applied/;
 const TAB_ARCHIVED = /^Archived/;
+/** The three tabs by the name each shows before its count: what a step's facts say was selected when a shot was taken. */
+type TabName = 'Needs you' | 'Answered, not applied' | 'Archived';
+const TAB_BY_NAME: Readonly<Record<TabName, RegExp>> = { 'Needs you': TAB_NEEDS_YOU, 'Answered, not applied': TAB_ANSWERED, Archived: TAB_ARCHIVED };
 
 /** The word typed into a card's Answer box, and the reason typed into step 6's "why": the pack's own, no course text. */
 const ANSWER_WORD = 'accepted';
@@ -223,8 +226,27 @@ async function openTab(page: Page, name: RegExp): Promise<void> {
   await expect(page.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
 }
 
-async function bringToTop(card: Locator): Promise<void> {
-  await card.evaluate((element) => element.scrollIntoView({ block: 'start' }));
+/** The top bar and the footer both lie over the page: a card is whole in a picture only when it is this far clear of each edge. */
+const SHOT_CLEAR_PX = 72;
+
+/**
+ * Takes a shot that is about one card. The card is brought whole into the picture, clear of the top
+ * bar and the footer, and the page moves no further than that takes: a card near the top of its
+ * list leaves the tab row in the picture, one far down the list does not. So the tab that is
+ * selected is checked here and noted in the facts (`tab_at_<shot>`), and no picture has to show it.
+ * (Run 20261009T122929Z: the card was scrolled to the very top, its title under the top bar and the
+ * tab row out of the picture, and the operator could not judge the step.)
+ */
+async function shootCard(page: Page, rec: Recorder, card: Locator, shot: string, tab: TabName): Promise<void> {
+  await expect(page.getByRole('tab', { name: TAB_BY_NAME[tab] }), `the ${tab} tab is selected`).toHaveAttribute('aria-selected', 'true');
+  await card.evaluate((element, clear) => {
+    // Scroll margins change where a scroll stops and nothing the page shows.
+    element.style.scrollMarginTop = `${clear}px`;
+    element.style.scrollMarginBottom = `${clear}px`;
+    element.scrollIntoView({ block: 'nearest' });
+  }, SHOT_CLEAR_PX);
+  rec.note({ [`tab_at_${shot}`]: tab });
+  await rec.shot(page, shot);
 }
 
 const textOf = async (locator: Locator): Promise<string | null> => ((await locator.count()) === 0 ? null : ((await locator.first().innerText()).trim() || null));
@@ -349,8 +371,7 @@ acceptStep('1 raise questions', { shots: ['raised', 'answered'] }, async ({ page
   await openInbox(page);
   for (const label of ['confirm', 'dismiss', 'note', 'offline'] as const) await expect(cardOf(page, label)).toBeVisible();
   rec.note({ cards_seen_open: 4 });
-  await bringToTop(cardOf(page, 'confirm'));
-  await rec.shot(page, 'raised');
+  await shootCard(page, rec, cardOf(page, 'confirm'), 'raised', 'Needs you');
 
   await saveCard(page, cardOf(page, 'confirm'), null);
   await expect(cardOf(page, 'confirm')).toHaveCount(0);
@@ -364,8 +385,7 @@ acceptStep('1 raise questions', { shots: ['raised', 'answered'] }, async ({ page
   await expect(cardOf(page, 'note')).toHaveCount(0);
   await expect(cardOf(page, 'offline')).toHaveCount(0);
   rec.note({ answered_tab_shows: ['confirm', 'dismiss'] });
-  await bringToTop(cardOf(page, 'confirm'));
-  await rec.shot(page, 'answered');
+  await shootCard(page, rec, cardOf(page, 'confirm'), 'answered', 'Answered, not applied');
 });
 
 // Step 2: Sync is pressed in the top bar, and the sync container takes the request.
@@ -410,9 +430,8 @@ acceptStep('3 watch apply', { shots: ['watching', 'done'] }, async ({ page }, re
     await expect(cardOf(page, 'confirm')).toBeVisible();
     await expect(cardOf(page, 'dismiss')).toBeVisible();
     await expect(page.locator('code').filter({ hasText: PASTE_COMMAND }), 'nothing was pasted: no command is shown').toHaveCount(0);
-    rec.note({ closed_before_the_page_opened: true, labels_seen: [await applyLabel(page)], ended_as: null, status_line: await statusLine(page) });
-    await bringToTop(cardOf(page, 'confirm'));
-    await rec.shot(page, 'done');
+    rec.note({ closed_before_the_page_opened: true, labels_seen: [await applyLabel(page)], ended_as: null, status_line: await statusLine(page), archived_tab_shows: ['confirm', 'dismiss'] });
+    await shootCard(page, rec, cardOf(page, 'confirm'), 'done', 'Archived');
     return;
   }
 
@@ -441,8 +460,7 @@ acceptStep('4 archived', { shots: ['answered', 'archived'] }, async ({ page }, r
   await expect(cardOf(page, 'confirm')).toContainText('archived');
   await expect(cardOf(page, 'dismiss')).toContainText('archived');
   rec.note({ archived_tab_shows: ['confirm', 'dismiss'] });
-  await bringToTop(cardOf(page, 'confirm'));
-  await rec.shot(page, 'archived');
+  await shootCard(page, rec, cardOf(page, 'confirm'), 'archived', 'Archived');
 });
 
 // Step 6: the third question is confirmed with a reason; a press of Apply answers runs by itself, through one Claude run.
@@ -459,8 +477,7 @@ acceptStep('6 note and apply', { shots: ['saved', 'done'] }, async ({ page, cont
   await expect(cardOf(page, 'note')).toBeVisible();
   await expect(footerCount(page)).toHaveText('1 answered');
   rec.note({ saved_with_a_reason: true });
-  await bringToTop(cardOf(page, 'note'));
-  await rec.shot(page, 'saved');
+  await shootCard(page, rec, cardOf(page, 'note'), 'saved', 'Answered, not applied');
 
   const button = applyButton(page);
   await expect(button).toHaveText(APPLY_LABEL);
@@ -476,8 +493,7 @@ acceptStep('6 note and apply', { shots: ['saved', 'done'] }, async ({ page, cont
   await expectClosedClean(page, rec, watch);
   await openTab(page, TAB_ARCHIVED);
   await expect(cardOf(page, 'note')).toBeVisible();
-  await bringToTop(cardOf(page, 'note'));
-  await rec.shot(page, 'done');
+  await shootCard(page, rec, cardOf(page, 'note'), 'done', 'Archived');
 });
 
 /* ---------------------------------------------------------------------------
@@ -540,6 +556,5 @@ acceptStep('7b taken after', { shots: ['archived'] }, async ({ page }, rec) => {
   await expect(cardOf(page, 'offline')).toContainText('archived');
   await expect(footerCount(page)).toHaveText(NOTHING_ANSWERED);
   rec.note({ archived_tab_shows: ['offline'], nothing_answered: true });
-  await bringToTop(cardOf(page, 'offline'));
-  await rec.shot(page, 'archived');
+  await shootCard(page, rec, cardOf(page, 'offline'), 'archived', 'Archived');
 });
