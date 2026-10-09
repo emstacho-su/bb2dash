@@ -315,7 +315,7 @@ describe('TopNav.module.css — the 720 px step', () => {
   });
 
   it('does not draw the icon labels at 720px and under (an unseen label would widen the bar)', () => {
-    expect(phone ?? '').toMatch(/.bar .ic[data-tip]::afters*{[^}]*displays*:s*none/);
+    expect(phone ?? '').toMatch(/\.bar \.ic\[data-tip\]::after\s*\{[^}]*display\s*:\s*none/);
   });
 
   it('keeps the brand word clipped only in the (max-width: 480px) block', () => {
