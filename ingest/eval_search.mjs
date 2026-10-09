@@ -12,8 +12,15 @@
 //
 // The rank rule is the POC's: a truth with `text_ids` is matched by unit (another unit of the same
 // file is not the answer); a truth with only `file_ids` is matched by any unit of those files.
-// db/tests/phase18_golden_truth.sql proves the truth still holds on prod (every id current, the
+// db/tests/phase18_golden_truth.sql proves the truth still holds on prod (every id exists, the
 // answer phrase in the unit); eval_search.test.mjs fails if the two files drift apart.
+//
+// A truth file is the file named or the current end of its supersession chain (115). The SQL unit
+// follows the chain; this eval cannot: it reaches prod only through the `search` edge function with
+// the anon JWT, and search hides superseded files, so a stale id here can never be a hit. The ids in
+// golden_set.json are therefore kept at the chain ends (Q7: 2509 and 2773 on 2026-10-09), and the SQL
+// unit is what tells a maintainer to refresh them: when a named truth file has been superseded it
+// prints a NOTE (a raise notice and the `note` column of its PASS row) without failing.
 //
 // It writes the report to --out (default ingest/eval/reports/<YYYY-MM-DD>.json), prints
 // `scored=27` (queries x modes) when every call answered 200, and exits 1 if any call failed or hybrid MRR is below
