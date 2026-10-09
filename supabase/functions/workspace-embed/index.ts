@@ -24,31 +24,19 @@
 //     with a unit that has no vector.
 //   * Every vector row names the model `gte-small`.
 //
-// The chunking, the unit picker and the write step are pure functions in `_shared/` (tested
-// under Node: node --test supabase/functions/_shared/chunk_test.ts). This file is the I/O.
+// A call is proportional to the work left: it reads only the document's UNMARKED units, no more
+// than the call can use, and the part numbers of those units (`_shared/embed-call.ts` says how the
+// two counts stay exact where it matters). The chunking, the unit picker, the write step and the
+// whole call are in `_shared/` and tested under Node (chunk_test.ts, embed_call_test.ts); this
+// file is the I/O: a store over supabase-js and the gte-small session.
 //
 // Logs carry ids, counts and timings only -- never a unit's text.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { codePoints } from "../_shared/chunk.ts";
-import {
-  buildAnswer,
-  buildEmbeddingRow,
-  EMBED_MODEL,
-  embeddingHeader,
-  type DocumentRow,
-  type FailedUnit,
-  type PartOutcome,
-  parseEmbedBody,
-  pickUnits,
-  planEmbedWork,
-  settleUnit,
-  type UnitRow,
-} from "../_shared/embed-plan.ts";
+import { type EmbedStore, runEmbedCall } from "../_shared/embed-call.ts";
+import { type DocumentRow, EMBED_MODEL, parseEmbedBody, type UnitRow } from "../_shared/embed-plan.ts";
 
-const EMBEDDING_DIMENSIONS = 384;
-const PAGE = 500;
 const ID_BATCH = 200; // ids per `in (...)` read, to keep the request line short
 
 const JSON_HEADERS = {
@@ -64,59 +52,66 @@ const json = (body: unknown, status = 200) =>
 // deno-lint-ignore no-explicit-any
 type Sb = any;
 
-async function readDocument(sb: Sb, id: number): Promise<DocumentRow | null> {
-  const { data, error } = await sb
-    .from("workspace_documents")
-    .select("id, kind, title, course_id, state")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) throw new Error(`read workspace_documents: ${error.message}`);
-  return (data as DocumentRow | null) ?? null;
-}
-
-async function readUnits(sb: Sb, documentId: number): Promise<UnitRow[]> {
-  const units: UnitRow[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await sb
-      .from("workspace_document_text")
-      .select("id, document_id, text, embedded_at")
-      .eq("document_id", documentId)
-      .order("id", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`read workspace_document_text: ${error.message}`);
-    const rows = (data ?? []) as UnitRow[];
-    units.push(...rows);
-    if (rows.length < PAGE) break;
-  }
-  return units;
-}
-
-/** The part numbers already stored under gte-small, per unit. */
-async function readDoneParts(sb: Sb, unitIds: number[]): Promise<Map<number, Set<number>>> {
-  const done = new Map<number, Set<number>>();
-  for (let i = 0; i < unitIds.length; i += ID_BATCH) {
-    const ids = unitIds.slice(i, i + ID_BATCH);
-    const { data, error } = await sb
-      .from("workspace_text_embeddings")
-      .select("text_id, part_no")
-      .eq("model", EMBED_MODEL)
-      .in("text_id", ids);
-    if (error) throw new Error(`read workspace_text_embeddings: ${error.message}`);
-    for (const r of data ?? []) {
-      const set = done.get(r.text_id as number) ?? new Set<number>();
-      set.add(r.part_no as number);
-      done.set(r.text_id as number, set);
-    }
-  }
-  return done;
-}
-
-async function markEmbedded(sb: Sb, unitId: number): Promise<void> {
-  const { error } = await sb
-    .from("workspace_document_text")
-    .update({ embedded_at: new Date().toISOString() })
-    .eq("id", unitId);
-  if (error) throw new Error(`mark unit ${unitId} embedded: ${error.message}`);
+function supabaseStore(sb: Sb): EmbedStore {
+  return {
+    async readDocument(id) {
+      const { data, error } = await sb
+        .from("workspace_documents")
+        .select("id, kind, title, course_id, state")
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throw new Error(`read workspace_documents: ${error.message}`);
+      return (data as DocumentRow | null) ?? null;
+    },
+    async countUnmarked(documentId) {
+      const { count, error } = await sb
+        .from("workspace_document_text")
+        .select("id", { count: "exact", head: true })
+        .eq("document_id", documentId)
+        .is("embedded_at", null);
+      if (error) throw new Error(`count workspace_document_text: ${error.message}`);
+      return count ?? 0;
+    },
+    async readUnmarked(documentId, max) {
+      const { data, error } = await sb
+        .from("workspace_document_text")
+        .select("id, document_id, text, embedded_at")
+        .eq("document_id", documentId)
+        .is("embedded_at", null)
+        .order("id", { ascending: true })
+        .limit(max);
+      if (error) throw new Error(`read workspace_document_text: ${error.message}`);
+      return (data ?? []) as UnitRow[];
+    },
+    async readDoneParts(unitIds) {
+      const done = new Map<number, Set<number>>();
+      for (let i = 0; i < unitIds.length; i += ID_BATCH) {
+        const { data, error } = await sb
+          .from("workspace_text_embeddings")
+          .select("text_id, part_no")
+          .eq("model", EMBED_MODEL)
+          .in("text_id", unitIds.slice(i, i + ID_BATCH));
+        if (error) throw new Error(`read workspace_text_embeddings: ${error.message}`);
+        for (const r of data ?? []) {
+          const set = done.get(r.text_id as number) ?? new Set<number>();
+          set.add(r.part_no as number);
+          done.set(r.text_id as number, set);
+        }
+      }
+      return done;
+    },
+    async insertPart(row) {
+      const { error } = await sb.from("workspace_text_embeddings").insert(row);
+      return error ? { code: error.code, message: error.message } : null;
+    },
+    async markEmbedded(unitId) {
+      const { error } = await sb
+        .from("workspace_document_text")
+        .update({ embedded_at: new Date().toISOString() })
+        .eq("id", unitId);
+      if (error) throw new Error(`mark unit ${unitId} embedded: ${error.message}`);
+    },
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -131,7 +126,6 @@ Deno.serve(async (req: Request) => {
   }
   const parsed = parseEmbedBody(raw);
   if (!parsed.ok) return json({ error: parsed.error }, 400);
-  const { documentId, limit, maxParts, dryRun } = parsed.body;
   const startedAt = Date.now();
 
   try {
@@ -140,84 +134,29 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       { auth: { persistSession: false, autoRefreshToken: false } },
     );
-
-    const document = await readDocument(sb, documentId);
-    if (!document) return json({ error: `no such document: ${documentId}` }, 404);
-
-    const units = pickUnits(documentId, document, await readUnits(sb, documentId));
-    const done = await readDoneParts(sb, units.map((u) => u.id));
-    const plan = planEmbedWork({ units, done, limit, maxParts });
-    const failed: FailedUnit[] = [...plan.scanFailed];
-
-    let processedUnits = 0;
-    let unitsCompleted = 0;
-    let insertedRows = 0;
-    let storedRows = 0;
-
-    if (!dryRun) {
-      for (const unitId of plan.markOnly) await markEmbedded(sb, unitId);
-
+    // The model loads only when there is something to embed; the session is made on first use.
+    // deno-lint-ignore no-explicit-any
+    let session: any = null;
+    const embed = async (input: string): Promise<number[]> => {
       // deno-lint-ignore no-explicit-any
-      const session: any = plan.jobs.length > 0
-        // deno-lint-ignore no-explicit-any
-        ? new (globalThis as any).Supabase.ai.Session(EMBED_MODEL)
-        : null;
-      const head = embeddingHeader(document);
+      session ??= new (globalThis as any).Supabase.ai.Session(EMBED_MODEL);
+      return await session.run(input, { mean_pool: true, normalize: true });
+    };
 
-      // One part at a time, so a CPU kill keeps its progress.
-      for (const job of plan.jobs) {
-        const attempted: PartOutcome[] = [];
-        // Slice from the same code-point array the offsets were computed against.
-        const cps = codePoints(job.unit.text);
-        for (const part of job.parts) {
-          try {
-            const vec: number[] = await session.run(head + cps.slice(part.start, part.end).join(""), {
-              mean_pool: true,
-              normalize: true,
-            });
-            if (!Array.isArray(vec) || vec.length !== EMBEDDING_DIMENSIONS) {
-              throw new Error(`unexpected embedding shape: ${Array.isArray(vec) ? vec.length : typeof vec}`);
-            }
-            const { error } = await sb
-              .from("workspace_text_embeddings")
-              .insert(buildEmbeddingRow(job.unit.id, part, vec));
-            attempted.push({ part_no: part.part_no, error: error ? { code: error.code, message: error.message } : null });
-          } catch (e) {
-            attempted.push({ part_no: part.part_no, error: { message: e instanceof Error ? e.message : String(e) } });
-          }
-          if (attempted[attempted.length - 1]!.error && attempted[attempted.length - 1]!.error!.code !== "23505") break;
-        }
-
-        const settled = settleUnit({ allParts: job.allParts, have: job.have, attempted });
-        insertedRows += settled.inserted;
-        storedRows += settled.inserted + settled.duplicates;
-        if (settled.error) {
-          failed.push({ text_id: job.unit.id, error: settled.error });
-          continue;
-        }
-        processedUnits++;
-        if (job.parts.length === job.missingTotal) unitsCompleted++;
-        if (settled.markEmbedded) await markEmbedded(sb, job.unit.id);
-      }
-    } else {
-      processedUnits = plan.jobs.length;
-    }
-
+    const result = await runEmbedCall(supabaseStore(sb), embed, parsed.body);
+    const a = result.answer as { inserted_rows?: number; failed?: unknown[]; missing_parts_before?: number };
     console.log("workspace-embed", {
-      document_id: documentId,
-      units: units.length,
-      jobs: plan.jobs.length,
-      inserted_rows: insertedRows,
-      failed: failed.length,
+      document_id: parsed.body.documentId,
+      status: result.status,
+      inserted_rows: a.inserted_rows ?? null,
+      failed: a.failed?.length ?? null,
+      missing_parts_before: a.missing_parts_before ?? null,
       ms: Date.now() - startedAt,
     });
-    return json(buildAnswer({
-      documentId, dryRun, limit, maxParts, processedUnits, unitsCompleted,
-      insertedRows, storedRows, failed, missingPartsBefore: plan.missingPartsBefore,
-    }));
+    return json(result.answer, result.status);
   } catch (e) {
     // The caller gets a short message; the log gets the document id and timing, never text.
-    console.error("workspace-embed failed", { document_id: documentId, ms: Date.now() - startedAt });
+    console.error("workspace-embed failed", { document_id: parsed.body.documentId, ms: Date.now() - startedAt });
     return json({ error: e instanceof Error ? e.message : String(e) }, 500);
   }
 });
