@@ -245,7 +245,7 @@ end
 $function$;
 
 -- =============================================================================================
--- 2. link_file_sessions: the pick it applies is stamped
+-- 2. link_file_sessions: every fold ends by stamping the answers whose pick the file carries
 -- =============================================================================================
 create or replace function public.link_file_sessions(p_sync_run_id bigint)
 returns jsonb
@@ -522,9 +522,10 @@ comment on function public.supersede_replaced_files(uuid, bigint) is
 
 comment on function public.link_file_sessions(bigint) is
   'Links files to class sessions (123, 162, 163, 188): by reading date, by the week''s only session, by '
-  'Stack''s answer (resolved or archived, not self-closed), by lecture number. Since 188 an answer it '
-  'applies carries applied_at; an answer of "none" or a pick outside the week''s sessions writes nothing '
-  'and is not stamped. service_role only.';
+  'Stack''s answer (resolved, dismissed or archived, not self-closed), by lecture number. Since 188 every '
+  'fold ends by stamping applied_at on each such answer whose pick is the session its current file '
+  'carries, however the file came by it; an answer of "none" or a pick the file does not carry is not '
+  'stamped. service_role only.';
 
 revoke all on function public.supersede_replaced_files(uuid, bigint) from public, anon, authenticated;
 grant execute on function public.supersede_replaced_files(uuid, bigint) to service_role, db_test_runner;
