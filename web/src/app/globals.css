@@ -441,9 +441,6 @@ body {
   margin: 0;
 }
 
-/* A focused control is not left under the sticky bar (WCAG 2.2, focus not obscured). */
-html { scroll-padding-top: var(--nav-height); }
-
 body {
   background: var(--color-bg);
   color: var(--color-text);
