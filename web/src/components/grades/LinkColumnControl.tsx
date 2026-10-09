@@ -65,6 +65,7 @@ export function LinkColumnControl({
         aria-label={`${LINK_LABEL} ${columnName}`}
         value={selectedLinkValue(state)}
         disabled={pending}
+        aria-busy={pending}
         onChange={handle}
       >
         <option value={NONE_VALUE}>{LINK_LABEL}</option>
@@ -82,6 +83,7 @@ export function LinkColumnControl({
           className={styles.historyToggle}
           aria-label={`${CONFIRM_LINK_LABEL}: ${columnName}`}
           disabled={pending}
+          aria-busy={pending}
           onClick={() => onChange(state, { kind: 'component', componentId: state.componentId as number })}
         >
           {CONFIRM_LINK_LABEL}

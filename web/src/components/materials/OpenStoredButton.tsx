@@ -56,6 +56,7 @@ export function OpenStoredButton({
         className={className}
         onClick={handleOpen}
         disabled={pending}
+        aria-busy={pending}
         title={title}
       >
         {pending ? 'Opening…' : text}

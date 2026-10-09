@@ -76,6 +76,7 @@ function Row({ conversation, actionLabel, onAction, selectedId, now, busy }: Row
         className={styles.rowAction}
         aria-describedby={titleId}
         disabled={busy}
+        aria-busy={busy}
         onClick={() => onAction(conversation)}
       >
         {actionLabel}

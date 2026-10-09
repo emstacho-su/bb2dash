@@ -95,6 +95,7 @@ export function UploadDropZone({
         className={styles.input}
         type="file"
         disabled={busy}
+        aria-busy={busy}
         onChange={(event) => send(event.target.files)}
       />
 
