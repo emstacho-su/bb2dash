@@ -446,7 +446,7 @@
     {
       "id": "16",
       "kind": "host",
-      "text": "The store's five reads (task 49, proofs 1, 2, 3, 6 and 7) pass. Proofs 1, 2, 3 and 7 are the part of the catalog reads that the proofs script can make; proof 6 is whole.",
+      "text": "The store's five reads (task 49, proofs 1, 2, 3, 6 and 7) pass. Proofs 1, 2, 3 and 7 are read from the view v_workspace_store_proof (migration 199, applied before the run); proof 6 is whole.",
       "stage": "store-proofs",
       "proofs": [
         {

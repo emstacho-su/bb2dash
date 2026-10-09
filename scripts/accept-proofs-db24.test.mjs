@@ -8,7 +8,7 @@
 // against the migrations. v_workspace_index_status is migration 197's own text, cut out of the file
 // and run here: a proof is held to the view as built. The two vector columns are plain arrays here
 // (PGlite has no pgvector in this test), which is all `embedding is null` needs; the type itself is
-// the extension's, and `store-extension` is shown to fail without it and pass with a type of that name.
+// the extension's. The four catalog proofs (1, 2, 3, 7) read v_workspace_store_proof, a stand-in table here.
 //
 // Every row is synthetic. Pack 24's cases make their own rows and share nothing with the other packs'.
 
@@ -107,6 +107,22 @@ const STATUS_COLUMNS = [
   'uploads_failed', 'upload_links_expired', 'uploads_deleting', 'memory_indexed', 'memory_waiting', 'memory_failed', 'ingest_polled_age_seconds',
 ];
 
+/** The columns of migration 199's v_workspace_store_proof, in order (the unit's section 5 holds the same string). */
+const STORE_PROOF_COLUMNS = [
+  'extension_version', 'extension_schema', 'extension_ok', 'vector_columns', 'vector_columns_ok', 'vector_indexes', 'vector_indexes_ok',
+  'foreign_servers', 'foreign_tables', 'link_extensions', 'store_functions_that_call_out', 'no_links_ok',
+];
+/**
+ * A STAND-IN, a table with the view's columns and one row the case sets. The view itself reads pg_*
+ * and the type extensions.vector, which an in-process Postgres without pgvector cannot run: its
+ * answers are the unit's (db/tests/phase24_199_review_round.sql, section 5), so this file holds the
+ * proofs' statements to the columns and to what each says, not the catalog.
+ */
+const STORE_PROOF_STAND_IN = `create table public.v_workspace_store_proof (
+  extension_version text, extension_schema text, extension_ok boolean, vector_columns text, vector_columns_ok boolean,
+  vector_indexes text, vector_indexes_ok boolean, foreign_servers integer, foreign_tables integer, link_extensions integer,
+  store_functions_that_call_out integer, no_links_ok boolean);`;
+
 let db;
 
 before(async () => {
@@ -115,12 +131,11 @@ before(async () => {
   await db.exec(Object.entries(TABLES).map(ddlOf).join('\n'));
   await db.exec(`create table public.v_embedding_status (${Object.entries(EMBEDDING_STATUS).map(([name, type]) => `${name} ${type}`).join(', ')});`);
   await db.exec(VIEW_STATUS);
+  await db.exec(STORE_PROOF_STAND_IN);
 });
 
 beforeEach(async () => {
   await db.exec(`truncate ${Object.keys(TABLES).map((table) => `public.${table}`).join(', ')}, public.v_embedding_status restart identity;`);
-  await db.exec('drop schema if exists extensions cascade; drop function if exists public.dblink_connect(text);');
-  await db.exec('drop index if exists public.bb_text_embeddings_hnsw; drop index if exists public.workspace_text_embeddings_hnsw;');
 });
 
 after(async () => {
@@ -425,30 +440,6 @@ test('conversations-unarchived: at least the expected number made in this run an
  * The store
  * ------------------------------------------------------------------------------------------ */
 
-test('store-extension: passes when the type exists in the extensions schema, fails when it does not', async () => {
-  const absent = await fails('store-extension');
-  assert.equal(absent.detail.vector_type, null);
-  await db.exec('create schema extensions; create domain extensions.vector as real[];');
-  await passes('store-extension');
-});
-
-test('store-vector-columns: both tables exist and neither holds a row with no vector passes; a null vector fails', async () => {
-  await passes('store-vector-columns');
-  await db.query('insert into public.workspace_text_embeddings (text_id, embedding) values (1, $1::real[])', ['{0.1,0.2}']);
-  await passes('store-vector-columns');
-  await db.query('insert into public.bb_text_embeddings (text_id, embedding) values (2, null)');
-  const result = await fails('store-vector-columns');
-  assert.equal(result.detail.course_null_vectors, 1);
-});
-
-test('store-vector-indexes: both indexes under their names pass; a missing one fails', async () => {
-  await fails('store-vector-indexes');
-  await db.exec('create index bb_text_embeddings_hnsw on public.bb_text_embeddings (text_id);');
-  assert.equal((await fails('store-vector-indexes')).detail.workspace_index, false);
-  await db.exec('create index workspace_text_embeddings_hnsw on public.workspace_text_embeddings (text_id);');
-  await passes('store-vector-indexes');
-});
-
 test('store-counts: the status view agrees with the direct counts passes, on an empty store too; a course vector the view does not count fails', async () => {
   await passes('store-counts');
   await db.exec('insert into public.bb_file_text (id) values (1), (2), (3)');
@@ -474,10 +465,57 @@ test('store-counts: it compares a count only with a direct count of the same sta
   assert.deepEqual(PACK_24['store-counts'].params, {});
 });
 
-test('store-no-links: no function of the three ways out passes; a dblink function in the search path fails', async () => {
+const VIEW_ROW = {
+  extension_version: '0.8.2', extension_schema: 'extensions', extension_ok: true,
+  vector_columns: 'public.bb_text_embeddings.embedding:384:t, public.workspace_text_embeddings.embedding:384:t', vector_columns_ok: true,
+  vector_indexes: 'public.bb_text_embeddings.bb_text_embeddings_hnsw:hnsw:vector_cosine_ops:t, public.workspace_text_embeddings.workspace_text_embeddings_hnsw:hnsw:vector_cosine_ops:t', vector_indexes_ok: true,
+  foreign_servers: 0, foreign_tables: 0, link_extensions: 0, store_functions_that_call_out: 0, no_links_ok: true,
+};
+
+/** Sets the stand-in view's one row: the expected row of the unit (section 5), with the changes the case makes. */
+async function setViewRow(change = {}) {
+  const row = { ...VIEW_ROW, ...change };
+  await db.exec('truncate public.v_workspace_store_proof');
+  await db.query(`insert into public.v_workspace_store_proof values (${STORE_PROOF_COLUMNS.map((_, i) => `$${i + 1}`).join(', ')})`, STORE_PROOF_COLUMNS.map((name) => row[name]));
+}
+
+test('the stand-in for v_workspace_store_proof has the columns of the migration 199 view, in its order', () => {
+  assert.deepEqual([...columnsOf('v_workspace_store_proof')], STORE_PROOF_COLUMNS);
+});
+
+test('store-extension: ok is extension_ok, and the version and the schema are in the detail', async () => {
+  await setViewRow();
+  const result = await passes('store-extension');
+  assert.equal(result.detail.extension_version, '0.8.2');
+  assert.equal(result.detail.extension_schema, 'extensions');
+  await setViewRow({ extension_ok: false, extension_schema: 'public' });
+  assert.equal((await fails('store-extension')).detail.extension_schema, 'public');
+  await db.exec('truncate public.v_workspace_store_proof');
+  assert.equal((await fails('store-extension')).detail.error, 'expected_one_row');
+});
+
+test('store-vector-columns: ok is vector_columns_ok; the list and its count are in the detail', async () => {
+  await setViewRow();
+  const result = await passes('store-vector-columns');
+  assert.equal(result.detail.vector_columns_n, 2);
+  assert.deepEqual(result.detail.vector_columns_list, ['public.bb_text_embeddings.embedding:384:t', 'public.workspace_text_embeddings.embedding:384:t']);
+  await setViewRow({ vector_columns: 'public.bb_text_embeddings.embedding:384:t', vector_columns_ok: false });
+  assert.equal((await fails('store-vector-columns')).detail.vector_columns_n, 1);
+});
+
+test('store-vector-indexes: ok is vector_indexes_ok; the count is in the detail (a long element is withheld)', async () => {
+  await setViewRow();
+  const result = await passes('store-vector-indexes');
+  assert.equal(result.detail.vector_indexes_n, 2);
+  assert.equal(result.detail.vector_indexes_list.length, 2);
+  await setViewRow({ vector_indexes: '', vector_indexes_ok: false });
+  await fails('store-vector-indexes');
+});
+
+test('store-no-links: ok is no_links_ok; the four counts are in the detail', async () => {
+  await setViewRow();
   await passes('store-no-links');
-  await db.exec('create function public.dblink_connect(text) returns text language sql as $$ select $1 $$;');
+  await setViewRow({ link_extensions: 1, no_links_ok: false });
   const result = await fails('store-no-links');
-  assert.equal(result.detail.no_dblink, false);
-  assert.equal(result.detail.no_http_extension, true);
+  assert.deepEqual([result.detail.foreign_servers, result.detail.foreign_tables, result.detail.link_extensions, result.detail.store_functions_that_call_out], [0, 0, 1, 0]);
 });

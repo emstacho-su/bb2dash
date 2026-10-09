@@ -136,18 +136,18 @@
   },
   "store-extension": {
     "params": {},
-    "sql": "select (to_regtype('extensions.vector') is not null) as ok,\n       to_regtype('extensions.vector')::text as vector_type",
-    "expect": "One row. Task 49's proof 1, as far as a proof of this script can read it. ok when the type vector of the extensions schema exists, that is, the extension is installed there. The script reads schema public only and refuses the catalog, so the version and the schema row of pg_extension are the unit db/tests/phase24_store_proof.sql's."
+    "sql": "select v.extension_ok as ok, v.extension_version, v.extension_schema\n  from public.v_workspace_store_proof v",
+    "expect": "One row. Task 49's proof 1, whole, read from the view v_workspace_store_proof (migration 199), which gives the catalog's answers as columns. ok is extension_ok: the vector extension is installed in the extensions schema. The version and the schema are in the detail."
   },
   "store-vector-columns": {
     "params": {},
-    "sql": "select (to_regclass('public.bb_text_embeddings') is not null\n        and to_regclass('public.workspace_text_embeddings') is not null\n        and not exists (select 1 from public.bb_text_embeddings e where e.embedding is null)\n        and not exists (select 1 from public.workspace_text_embeddings w where w.embedding is null)) as ok,\n       (to_regclass('public.bb_text_embeddings') is not null) as course_table,\n       (to_regclass('public.workspace_text_embeddings') is not null) as workspace_table,\n       (select count(*) from public.bb_text_embeddings e where e.embedding is null)::integer as course_null_vectors,\n       (select count(*) from public.workspace_text_embeddings w where w.embedding is null)::integer as workspace_null_vectors",
-    "expect": "One row. Task 49's proof 2, as far as a proof of this script can read it. ok when both tables that hold a vector exist and neither holds a row with no vector. That exactly two columns are of the vector type, and that each is vector(384), is read from the catalog (pg_attribute), which this script does not read: that half is the unit db/tests/phase24_store_proof.sql's."
+    "sql": "select v.vector_columns_ok as ok, string_to_array(replace(v.vector_columns, ', ', ','), ',') as vector_columns_list,\n       cardinality(string_to_array(v.vector_columns, ', ')) as vector_columns_n\n  from public.v_workspace_store_proof v",
+    "expect": "One row. Task 49's proof 2, whole, read from v_workspace_store_proof. ok is vector_columns_ok: exactly two columns are of the vector type, public.bb_text_embeddings.embedding and public.workspace_text_embeddings.embedding, each vector(384) and not null. The list (one element each: schema.table.column:dimensions:not-null) and its count are in the detail."
   },
   "store-vector-indexes": {
     "params": {},
-    "sql": "select (to_regclass('public.bb_text_embeddings_hnsw') is not null\n        and to_regclass('public.workspace_text_embeddings_hnsw') is not null) as ok,\n       (to_regclass('public.bb_text_embeddings_hnsw') is not null) as course_index,\n       (to_regclass('public.workspace_text_embeddings_hnsw') is not null) as workspace_index",
-    "expect": "One row. Task 49's proof 3, as far as a proof of this script can read it. ok when the two indexes exist under their names. That each is of method hnsw, of class vector_cosine_ops and valid is read from the catalog (pg_index, pg_am), which this script does not read: that half is the unit db/tests/phase24_store_proof.sql's."
+    "sql": "select v.vector_indexes_ok as ok, string_to_array(replace(v.vector_indexes, ', ', ','), ',') as vector_indexes_list,\n       cardinality(string_to_array(v.vector_indexes, ', ')) as vector_indexes_n\n  from public.v_workspace_store_proof v",
+    "expect": "One row. Task 49's proof 3, whole, read from v_workspace_store_proof. ok is vector_indexes_ok: exactly two indexes of method hnsw or ivfflat exist, the two named hnsw ones on the two embedding tables, each of class vector_cosine_ops and valid. The list (table.index:method:class:valid) and its count are in the detail; a long element shows as withheld, and its count stands."
   },
   "store-counts": {
     "params": {},
@@ -156,7 +156,7 @@
   },
   "store-no-links": {
     "params": {},
-    "sql": "select (to_regprocedure('dblink_connect(text)') is null\n        and to_regprocedure('extensions.dblink_connect(text)') is null\n        and to_regprocedure('postgres_fdw_handler()') is null\n        and to_regprocedure('extensions.postgres_fdw_handler()') is null\n        and to_regprocedure('http_get(character varying)') is null\n        and to_regprocedure('extensions.http_get(character varying)') is null) as ok,\n       (to_regprocedure('dblink_connect(text)') is null and to_regprocedure('extensions.dblink_connect(text)') is null) as no_dblink,\n       (to_regprocedure('postgres_fdw_handler()') is null and to_regprocedure('extensions.postgres_fdw_handler()') is null) as no_postgres_fdw,\n       (to_regprocedure('http_get(character varying)') is null and to_regprocedure('extensions.http_get(character varying)') is null) as no_http_extension",
-    "expect": "One row. Task 49's proof 7, as far as a proof of this script can read it. ok when no function of the three ways out that the proof names (the dblink extension, the postgres_fdw extension and the http extension) can be found, in the search path or in the extensions schema. The counts of foreign servers, foreign tables and of functions of the store that call out are read from the catalog (pg_foreign_server, pg_foreign_table, pg_proc), which this script does not read: that half is the unit db/tests/phase24_store_proof.sql's."
+    "sql": "select v.no_links_ok as ok, v.foreign_servers, v.foreign_tables, v.link_extensions, v.store_functions_that_call_out\n  from public.v_workspace_store_proof v",
+    "expect": "One row. Task 49's proof 7, whole, read from v_workspace_store_proof. ok is no_links_ok: no foreign server, no foreign table, no link extension (dblink, postgres_fdw, wrappers, http) and no function of the store that calls out. The four counts are in the detail."
   }
 }
