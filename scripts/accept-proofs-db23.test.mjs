@@ -265,6 +265,11 @@ test('apply-quiet: nothing open, nothing of his waiting and no login item passes
   assert.equal((await prove('apply-quiet')).detail.answers_held, 0);
   await db.query('delete from public.attention_items');
 
+  // Only the login item counts: the same ref on an item that names a field is some other question.
+  await addItem({ ...LOGIN_ITEM, field: 'due_at' });
+  assert.equal((await prove('apply-quiet')).code, EXIT.pass);
+  await db.query('delete from public.attention_items');
+
   // A Blackboard login that is dead blocks: an open sync-login-required item.
   await addItem(LOGIN_ITEM);
   const login = await prove('apply-quiet');
@@ -432,6 +437,7 @@ async function recordedAfterSyncCase2() {
   await bad('the first is in the wrong bucket', () => afterSync({ first: { bucket: 'dismissed' } }));
   await bad('the second is in the wrong bucket', () => afterSync({ second: { bucket: 'recorded_elsewhere' } }));
   await bad('the first was archived by another request', () => afterSync().then(async (w) => { await db.query("update public.attention_items set archived_by = 'inbox-apply request 999' where id = $1", [w.confirm]); return w; }));
+  await bad('the second was archived by another request', () => afterSync().then(async (w) => { await db.query("update public.attention_items set archived_by = 'inbox-apply request 999' where id = $1", [w.dismiss]); return w; }));
   await bad('the second is not archived', () => afterSync().then(async (w) => { await db.query("update public.attention_items set state = 'dismissed', archived_by = null, decision = null where id = $1", [w.dismiss]); return w; }));
 }
 
