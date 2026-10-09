@@ -1,6 +1,6 @@
 // bb2dash :: scripts/accept-proofs-kit.mjs
-// What the test files of the proofs script share: the packs as the working tree has them (Phase 21's
-// and Phase 23's), a command line for one proof, the face of the in-process database, and what the
+// What the test files of the proofs script share: the packs as the working tree has them (Phase 21's,
+// Phase 23's and Phase 24's), a command line for one proof, the face of the in-process database, and what the
 // migrations say a table's or a view's columns are. No test here.
 
 import fs from 'node:fs';
@@ -10,6 +10,7 @@ export const REPO = path.resolve(import.meta.dirname, '..');
 const readPack = (phase) => JSON.parse(fs.readFileSync(path.join(REPO, 'acceptance', phase, 'proofs.json'), 'utf8'));
 export const PACK_21 = readPack('21');
 export const PACK_23 = readPack('23');
+export const PACK_24 = readPack('24');
 export const SHA = '4ed9eee0c1a2b3c4d5e6f708192a3b4c5d6e7f80';
 
 /** The command line of one proof of a phase: `<phase> <name> --sha <commit> --param key=value …`. */
