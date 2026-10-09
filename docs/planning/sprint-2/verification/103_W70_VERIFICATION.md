@@ -265,3 +265,17 @@ pages fails at the same line. I did not wait or poll for it. Widths are therefor
 the last measured widths are the GREEN run of task 14 (`20261008T235232Z`, all 16 at 390). The sweep swaps literals
 for tokens at the same value and the marks are 1em inline SVGs where a one-character glyph stood, so no box is
 expected to move. **Owed:** this run, 16 passed, once the font loads in the box.
+
+## Harness run: done
+
+After W-67's fonts fix (`ca52b96`), merged with `origin/feat/styling-22` (merge, no rebase). Before the run on the
+merged tree: `npm test` exit 0 (169 files, 3307 passed), typecheck 0, eslint 0, `token-audit.test.ts` 0 failures
+(89 passed), Baseline sum for `screens-b.json` still `0`. The tree was committed and pushed.
+
+`node scripts/walk-box.mjs web/e2e/phone-width.spec.ts -- -g "route /course/|route /grades |route /materials |route /workspace "`
+from the worktree root: run `20261009T012804Z`, commit `e1bd30a`, `dirty` false, `exit_code` 0, `result` `passed`,
+count line `16 passed (52.9s)`, 0 failed. Printed widths: `page scrollWidth=390` on all eight routes in dark and light
+(`/course/IST.352/stream`, `/course/IST.471/classwork`, `/course/IST.466/grades`, `/course/IST.466/info`,
+`/course/IST.471/assignment/IST.471/a1-proposal`, `/grades`, `/materials`, `/workspace`). On `/course/IST.466/grades`
+the gradebook box prints `box scrollWidth=588 clientWidth=345` in both themes, so the table scrolls inside its box.
+No route is too wide with the new font; nothing owed from the harness. The line of task 26 is not started.
