@@ -59,8 +59,10 @@ const RAIL_WIDTH = { width: 1280, height: 900 } as const;
 const DRAWER_WIDTH = { width: 800, height: 900 } as const;
 const PHONE = { width: 390, height: 844 } as const;
 
-const ACTIVITY_BUTTON = 'nav button[title^="Activity"]';
-const ANNOUNCEMENTS_BUTTON = 'nav button[title="Announcements"]';
+// Found by role and name, never by `title` (task 32 takes the title off). Their names carry a count badge
+// when something is unseen, so the match is not exact.
+const activityButton = (page: Page): Locator => page.getByRole('button', { name: 'Activity' });
+const announcementsButton = (page: Page): Locator => page.getByRole('button', { name: 'Announcements' });
 
 /** Inventory row 12's fixture: one answered question, in sample text. */
 const WORKSPACE_CONVERSATION = '22222222-2222-4222-8222-222222222201';
@@ -352,8 +354,10 @@ const SURFACES: readonly Surface[] = [
     nn: '16',
     slug: 'not-found',
     window: 'document',
-    reach: async (page, context) => {
-      await openSignedOut(page, context, '/no-such-page');
+    // Signed in, as phone-width.spec.ts opens it: the proxy sends a signed-out visitor to /login.
+    quiet: true,
+    reach: async (page) => {
+      await openAt(page, '/no-such-page');
       await expect(page.getByRole('heading', { name: 'Not found' })).toBeVisible();
     },
   },
@@ -439,7 +443,7 @@ const SURFACES: readonly Surface[] = [
     quiet: true,
     reach: async (page) => {
       await openAt(page, '/');
-      await page.locator(ANNOUNCEMENTS_BUTTON).click();
+      await announcementsButton(page).click();
       await expect(page.getByRole('menu', { name: 'Announcements' })).toBeVisible();
     },
   },
@@ -450,7 +454,7 @@ const SURFACES: readonly Surface[] = [
     quiet: true,
     reach: async (page) => {
       await openAt(page, '/');
-      await page.locator(ACTIVITY_BUTTON).click();
+      await activityButton(page).click();
       await expect(page.getByRole('menu').filter({ hasText: 'Activity' })).toBeVisible();
     },
   },
@@ -609,7 +613,8 @@ test('motion off under reduced motion', async ({ page, context }) => {
   expect(first.opacity, "the panel's opacity on its first frame").toBe('1');
   expect(first.duration.split(',').every((part) => part.trim() === '0s'), `transition-duration ${first.duration}`).toBe(true);
   const exit = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--motion-exit').trim());
-  expect(exit, 'the exit duration under reduced motion').toBe('0ms');
+  // The build's minifier writes a zero time as `0s`; both spellings are zero.
+  expect(exit, 'the exit duration under reduced motion').toMatch(/^0(ms|s)$/);
 });
 
 test('planner targets', async ({ page, context }) => {
