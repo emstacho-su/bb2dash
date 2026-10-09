@@ -53,18 +53,22 @@ function persist(): void {
  * its data may still be arriving, and a pane cannot scroll further than its content is tall. The
  * reader's own scroll ends the wait. Returns the function that stops it.
  */
-function putBack(node: HTMLElement, target: number): () => void {
+function putBack(node: HTMLElement, target: number, setRestoring: (restoring: boolean) => void): () => void {
   node.scrollTop = target;
   if (target === 0 || node.scrollTop >= target) return () => undefined;
+  // While the hook is still asking, what the pane reports is its own doing, not the reader's.
+  setRestoring(true);
   let frames = 0;
   let frame = 0;
   function settle() {
     node.scrollTop = target;
     frames += 1;
     if (node.scrollTop < target && frames < RESTORE_FRAMES) frame = window.requestAnimationFrame(settle);
+    else setRestoring(false);
   }
   function stop() {
     window.cancelAnimationFrame(frame);
+    setRestoring(false);
   }
   frame = window.requestAnimationFrame(settle);
   node.addEventListener('wheel', stop, { passive: true, once: true });
@@ -80,6 +84,8 @@ export function usePaneScroll(pane: RefObject<HTMLElement | null>): void {
   const pathname = usePathname();
   // The pathname React has committed: the page the pane shows.
   const committed = useRef(pathname);
+  // True while `putBack` is still asking for a position the page is not yet tall enough for.
+  const restoring = useRef(false);
   // Set by a `popstate` that changes the pathname, read and cleared by that change.
   const cameBack = useRef(false);
 
@@ -89,7 +95,9 @@ export function usePaneScroll(pane: RefObject<HTMLElement | null>): void {
     if (node === null) return;
     load();
     function onScroll() {
-      if (node !== null) memory.set(window.location.pathname, node.scrollTop);
+      // Under the page React has committed, never the address: on Back the address already names the
+      // destination while the pane still shows the page being left. And not while the hook restores.
+      if (node !== null && !restoring.current) memory.set(committed.current, node.scrollTop);
     }
     node.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('pagehide', persist);
@@ -119,7 +127,9 @@ export function usePaneScroll(pane: RefObject<HTMLElement | null>): void {
     const known = memory.get(pathname);
     const target = cameBack.current && known !== undefined ? known : 0;
     cameBack.current = false;
-    const stop = putBack(node, target);
+    const stop = putBack(node, target, (value) => {
+      restoring.current = value;
+    });
     memory.set(pathname, target);
     persist();
     return stop;

@@ -186,3 +186,59 @@ describe('usePaneScroll — Back across a query alone (S-1)', () => {
     expect(top).toBe(600);
   });
 });
+
+describe('usePaneScroll — what is recorded, and under which page (S-6)', () => {
+  it('does not record a scroll in the gap of a Back under the destination’s address', () => {
+    const view = mount();
+    scrollTo(view, 300);
+    navigate(view, '/b');
+    scrollTo(view, 40);
+
+    // Back: the address already names '/a', the pane still shows '/b' and is still moving.
+    popTo('/a');
+    scrollTo(view, 45);
+    showPath(view, '/a');
+
+    expect(top).toBe(300);
+  });
+
+  it('does not record the hook’s own restoring writes as the reader’s scroll', () => {
+    const frames: Array<() => void> = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: () => void) => frames.push(callback));
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const view = mount();
+    let limit = 1000;
+    let value = 0;
+    Object.defineProperty(view.pane as HTMLElement, 'scrollTop', {
+      get: () => value,
+      set: (next: number) => (value = Math.min(next, limit)),
+      configurable: true,
+    });
+    value = 0;
+    top = 0;
+    // The page was scrolled to 300 and left.
+    limit = 1000;
+    value = 300;
+    act(() => {
+      view.pane?.dispatchEvent(new Event('scroll'));
+    });
+    navigate(view, '/b');
+
+    // Back to '/a', whose content is still short: the pane can only reach 80 for now.
+    limit = 80;
+    popTo('/a');
+    showPath(view, '/a');
+    expect(value).toBe(80);
+    // The browser reports the clamped position as a scroll event, which is the hook's own doing.
+    act(() => {
+      view.pane?.dispatchEvent(new Event('scroll'));
+    });
+    // The reader leaves again before the content has grown.
+    navigate(view, '/b');
+    limit = 1000;
+    navigate(view, '/a', { pop: true });
+
+    expect(value).toBe(300);
+    vi.unstubAllGlobals();
+  });
+});
