@@ -10,7 +10,7 @@
  */
 
 import { prefixWithin, utf8Bytes } from './budget.js';
-import { makeBlock, oneLine } from './fence.js';
+import { guardText, makeBlock, oneLine } from './fence.js';
 import { attachmentLine } from '../lines.js';
 import type { AttachmentRef } from '../turn-context.js';
 import type { AttachmentRead, AttachmentUnit } from '../store-types.js';
@@ -56,20 +56,28 @@ interface Taken {
   readonly text: string;
   readonly taken: readonly AttachmentUnit[];
   readonly dropped: readonly AttachmentUnit[];
+  /** True when the first unit was itself cut, because it alone was larger than the room. */
+  readonly unitCut: boolean;
 }
 
-/** Whole units while they fit in `room` bytes; the first unit alone is cut when it is larger. */
-function takeUnits(units: readonly AttachmentUnit[], room: number): Taken {
+/**
+ * Whole units while they fit in `room` bytes; the first unit alone is cut when it is larger. The
+ * room is measured on the text as the block will hold it: each unit is guarded first, because the
+ * guard adds two bytes to every line that could pass for a block line or a label.
+ */
+function takeUnits(units: readonly AttachmentUnit[], room: number, marker: string): Taken {
   const parts: string[] = [];
   const taken: AttachmentUnit[] = [];
   let used = 0;
+  let unitCut = false;
   for (const unit of units) {
-    const text = unitText(unit);
+    const text = guardText(unitText(unit), marker);
     const size = utf8Bytes(text) + 1;
     if (used + size > room) {
       if (taken.length === 0 && room > 0) {
         parts.push(prefixWithin(text, room));
         taken.push(unit);
+        unitCut = true;
       }
       break;
     }
@@ -77,12 +85,13 @@ function takeUnits(units: readonly AttachmentUnit[], room: number): Taken {
     taken.push(unit);
     used += size;
   }
-  return { text: parts.join('\n'), taken, dropped: units.slice(taken.length) };
+  return { text: parts.join('\n'), taken, dropped: units.slice(taken.length), unitCut };
 }
 
 function trailerOf(read: AttachmentRead, taken: Taken): string {
   const total = Math.max(read.unitsTotal, taken.taken.length + taken.dropped.length);
-  const base = `[read in part: ${taken.taken.length} of ${total} ${unitsWord(read.units, total)}`;
+  const cutNote = taken.unitCut ? '; the unit itself was cut short' : '';
+  const base = `[read in part: ${taken.taken.length} of ${total} ${unitsWord(read.units, total)}${cutNote}`;
   if (read.kind !== 'file') return `${base}]`;
   const ids = [...taken.dropped.map((unit) => unit.unitId), ...read.leftOutUnitIds].slice(0, LEFT_OUT_IDS_MAX);
   return ids.length === 0 ? `${base}]` : `${base}; units left out, open them with get_material_text: ${ids.join(', ')}]`;
@@ -131,8 +140,8 @@ export function buildAttachedBlocks(refs: readonly AttachmentRef[], reads: reado
     const hasNotes = read.units.some((unit) => unit.text.includes(NOTES_MARKER));
     const header = headerOf(read, ref, hasNotes);
     const overhead = utf8Bytes(makeBlock(marker, 'attachment', null, header, '')) + BLOCK_GAP_BYTES;
-    const taken = takeUnits(read.units, Math.max(0, share - overhead - TRAILER_RESERVE_BYTES));
-    const whole = taken.dropped.length === 0 && read.state === 'read' && read.unitsRead >= read.unitsTotal;
+    const taken = takeUnits(read.units, Math.max(0, share - overhead - TRAILER_RESERVE_BYTES), marker);
+    const whole = !taken.unitCut && taken.dropped.length === 0 && read.state === 'read' && read.unitsRead >= read.unitsTotal;
     const body = whole ? taken.text : `${taken.text}\n${trailerOf(read, taken)}`;
     const block = makeBlock(marker, 'attachment', null, header, body);
     blocks.push(block);

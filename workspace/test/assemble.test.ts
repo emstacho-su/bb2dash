@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { assemblePrompt } from '../src/context/assemble.js';
+import { buildAttachedBlocks } from '../src/context/attachments.js';
 import {
   ATTACHED_FLOOR_BYTES,
   PROMPT_TARGET_BYTES,
@@ -351,6 +352,41 @@ describe('the attached documents', () => {
     const context = emptyContext({ attachments: [{ ord: 1, kind: 'file', id: 9, title: 'z.pdf', state: 'ready' }] });
     const out = assemblePrompt({ ...base, context });
     expect(out.attachments[0]?.state).toBe('failed');
+  });
+});
+
+describe('a unit larger than its share, and lines the guard grows', () => {
+  const oneFile = (units: Array<{ unitId: number; unitKind: string; unitNo: number; text: string }>) =>
+    attachmentFixture({ kind: 'file', id: 1, title: 'big.pdf', units, unitsTotal: units.length, unitsRead: units.length, state: 'read', leftOutUnitIds: [] });
+  const ref = [{ ord: 1, kind: 'file' as const, id: 1, title: 'big.pdf', state: 'ready' }];
+
+  it('reports a single 70,000-byte unit cut to a 40,000-byte share as cut, with the trailer and the fixed line', () => {
+    const out = buildAttachedBlocks(ref, [oneFile([{ unitId: 5, unitKind: 'page', unitNo: 1, text: 'w'.repeat(70_000) }])], MARKER, 40_000);
+    expect(out.outcomes[0]?.state).toBe('cut');
+    expect(out.blocks[0]).toContain('[read in part: 1 of 1 page; the unit itself was cut short]');
+    expect(out.lines).toEqual(['The attached file "big.pdf" was read in part: 1 of 1 page.']);
+    expect(utf8Bytes(out.blocks[0] ?? '')).toBeLessThanOrEqual(40_000);
+  });
+
+  it('measures the block as built: thousands of label-shaped lines stay inside the share', () => {
+    const text = Array.from({ length: 20_000 }, (_, i) => (i % 2 === 0 ? '[P]' : '[M1]')).join('\n');
+    const out = buildAttachedBlocks(ref, [oneFile([{ unitId: 5, unitKind: 'page', unitNo: 1, text }])], MARKER, 33_600);
+    expect(utf8Bytes(out.blocks[0] ?? '') + 2).toBeLessThanOrEqual(33_600);
+    expect(out.outcomes[0]?.state).toBe('cut');
+  });
+
+  it('keeps the whole prompt under 131,072 bytes with an attachment made only of label-shaped lines', () => {
+    const lines = Array.from({ length: 60_000 }, (_, i) => (i % 3 === 0 ? '[P]' : i % 3 === 1 ? '[M1]' : '[R7] x')).join('\n');
+    const units = Array.from({ length: 5 }, (_, i) => ({ unitId: i + 1, unitKind: 'page', unitNo: i + 1, text: lines }));
+    const context = contextFixture({
+      messages: [],
+      rollingSummary: 'r'.repeat(5000),
+      attachments: [1, 2].map((id) => ({ ord: id, kind: 'upload' as const, id, title: 'f.pdf', state: 'indexed' })),
+    });
+    const reads = [1, 2].map((id) => attachmentFixture({ kind: 'upload', id, units, unitsTotal: 5, unitsRead: 5, state: 'read', leftOutUnitIds: [] }));
+    const hits = Array.from({ length: 14 }, (_, i) => hitFixture({ unitId: i + 1, passage: '[P]\n'.repeat(900) }));
+    const out = assemblePrompt({ marker: MARKER, question: 'q'.repeat(30_000), context, hits, attachmentReads: reads, feed: parseFeed(bigFeedJson(60, 60)) });
+    expect(out.bytes).toBeLessThan(ARG_MAX_BYTES);
   });
 });
 
