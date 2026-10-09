@@ -166,6 +166,7 @@ export function CardNoteField({
         value={draft}
         maxLength={CARD_NOTE_MAX_LENGTH}
         disabled={disabled || save.isPending}
+        aria-busy={save.isPending}
         placeholder="No note yet"
         onChange={(e) => {
           setDirty(true);
