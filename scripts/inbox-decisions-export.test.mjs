@@ -462,16 +462,12 @@ for (const notesOnly of [true, false]) {
   });
 }
 
-test('a test question alone writes no file at all, and a skip the database refuses is counted as not filed', async (t) => {
+test('a test question alone writes no file at all, and a skip that throws is counted as not filed', async (t) => {
   const only = deps(t, [testQuestion(3782)]);
   assert.deepEqual(await exportDecisions(only.deps), { filed: [], skipped: [3782], logged: [], failed: [] });
   assert.deepEqual(filesUnder(only.dirs.root), ['vault']);
   assert.equal(only.runs.length, 0);
 
-  const refused = deps(t, [testQuestion(3782)], { extra: { skipped: { 3782: false } } });
-  const result = await exportDecisions(refused.deps);
-  assert.deepEqual(result.skipped, []);
-  assert.equal(result.failed[0].id, 3782);
   const thrown = deps(t, [testQuestion(3783)], { extra: { skipped: { 3783: new Error('connection reset') } } });
   assert.equal((await exportDecisions(thrown.deps)).failed[0].id, 3783);
 });
@@ -560,4 +556,84 @@ test('main reports a failure as exit 1 with the counts, and a configuration erro
   const lines = [];
   assert.equal(await main([], { env: {}, log: (l) => lines.push(l) }), 2);
   assert.equal(lines.at(-1), 'inbox-decisions-result {"exit_code":2,"filed":0,"skipped":0,"not_filed":0}');
+});
+
+// ---------------------------------------------------------------------------------------------
+// Round 2 (brief 110): a refused skip files the row; a note that differs only in applied_at is rewritten.
+// ---------------------------------------------------------------------------------------------
+
+test('R5: a test-shaped row whose skip the database refuses is filed like any other in --notes-only: note and mark, not skipped, not failed', async (t) => {
+  const { deps: d, dirs, runs } = deps(t, [testQuestion(3782), row(3101)], {
+    logDir: null,
+    options: { notesOnly: true },
+    extra: { skipped: { 3782: false } },
+  });
+  const result = await exportDecisions(d);
+
+  assert.deepEqual(result, { filed: [3782, 3101], skipped: [], logged: [], failed: [] });
+  const notes = path.join(dirs.vault, ...NOTES_REL.split('/'));
+  assert.deepEqual(fs.readdirSync(notes).sort(), ['inbox-3101.md', 'inbox-3782.md']);
+  assert.deepEqual(d.rpc.calls.filter((c) => c[0] === 'skipped'), [['skipped', 3782, SKIP_WHY]]);
+  assert.deepEqual(d.rpc.calls.find((c) => c[0] === 'filed' && c[1] === 3782), ['filed', 3782, { note_path: `${NOTES_REL}/inbox-3782.md`, ingested: true }]);
+  assert.equal(fs.existsSync(dirs.logDir), false);
+  assert.equal(runs.length, 1);
+  assert.ok(runs[0].args.includes(`${NOTES_REL}/inbox-3782.md`));
+});
+
+test('R5: in the default mode a refused skip gets the note, the day-file entry and the full mark', async (t) => {
+  const { deps: d, dirs } = deps(t, [testQuestion(3782)], { extra: { skipped: { 3782: false } } });
+  const result = await exportDecisions(d);
+
+  assert.deepEqual(result, { filed: [3782], skipped: [], logged: [], failed: [] });
+  assert.ok(fs.existsSync(path.join(dirs.vault, ...NOTES_REL.split('/'), 'inbox-3782.md')));
+  assert.match(fs.readFileSync(path.join(dirs.logDir, '2026-10-07.md'), 'utf8'), /^## 3782 — /m);
+  assert.deepEqual(d.rpc.calls.find((c) => c[0] === 'filed')[2], {
+    note_path: `${NOTES_REL}/inbox-3782.md`,
+    log_path: 'docs/inbox-decisions/2026-10-07.md',
+    ingested: true,
+  });
+});
+
+test('R5: a test-shaped row whose skip is accepted still writes no file', async (t) => {
+  const { deps: d, dirs, runs } = deps(t, [testQuestion(3782)], { logDir: null, options: { notesOnly: true } });
+  assert.deepEqual(await exportDecisions(d), { filed: [], skipped: [3782], logged: [], failed: [] });
+  assert.deepEqual(filesUnder(dirs.root), ['vault']);
+  assert.equal(runs.length, 0);
+});
+
+test('an existing note that differs only in its applied_at line is written again and the row is marked', async (t) => {
+  // The first run wrote the note while applied_at was null; the mark failed; a fold then stamped the row.
+  const first = deps(t, [row(3101)], { marks: { 3101: new Error('connection reset') } });
+  assert.equal((await exportDecisions(first.deps)).failed[0].id, 3101);
+  const noteFile = path.join(first.dirs.vault, ...NOTES_REL.split('/'), 'inbox-3101.md');
+  const old = fs.readFileSync(noteFile, 'utf8');
+  assert.match(old, /^applied_at: null$/m);
+
+  first.deps.rpc = fakeRpc([row(3101, { applied_at: '2026-10-08T03:30:00Z' })]);
+  const result = await exportDecisions(first.deps);
+  assert.deepEqual(result, { filed: [3101], skipped: [], logged: [], failed: [] });
+  const rewritten = fs.readFileSync(noteFile, 'utf8');
+  assert.notEqual(rewritten, old);
+  assert.match(rewritten, /^applied_at: .*2026-10-08/m);
+  assert.deepEqual(fs.readdirSync(path.dirname(noteFile)), ['inbox-3101.md'], 'no temporary file is left');
+});
+
+test('a note that differs anywhere but applied_at is still refused, and nothing is overwritten', async (t) => {
+  const { deps: d, dirs, lines } = deps(t, [row(3101, { applied_at: '2026-10-08T03:30:00Z' })]);
+  const noteFile = path.join(dirs.vault, ...NOTES_REL.split('/'), 'inbox-3101.md');
+  fs.mkdirSync(path.dirname(noteFile), { recursive: true });
+  // The note a fresh run would write, with its applied_at line left stale AND one other line changed by hand.
+  const edited = (await (async () => {
+    const probe = deps(t, [row(3101, { applied_at: '2026-10-08T03:30:00Z' })]);
+    await exportDecisions(probe.deps);
+    return fs.readFileSync(path.join(probe.dirs.vault, ...NOTES_REL.split('/'), 'inbox-3101.md'), 'utf8');
+  })()).replace(/^applied_at: .*$/m, 'applied_at: null').replace('Question 3101?', 'Question 3101, as Stack edited it?');
+  fs.writeFileSync(noteFile, edited);
+
+  const result = await exportDecisions(d);
+  assert.deepEqual(result.filed, []);
+  assert.equal(result.failed[0].id, 3101);
+  assert.equal(fs.readFileSync(noteFile, 'utf8'), edited);
+  assert.ok(lines.some((l) => l.startsWith('not filed item 3101: a different note already exists')));
+  assert.equal(d.rpc.calls.some((c) => c[0] === 'filed'), false);
 });

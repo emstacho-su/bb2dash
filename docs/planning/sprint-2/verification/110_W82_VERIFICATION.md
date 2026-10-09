@@ -206,3 +206,57 @@ brief says the PM tries it once with a missing folder at the cut-over.
   was read and no network call was made.
 * `scripts/package.json`'s test line is one line; the Phase 22 worker adds a name to the same line,
   so the second merge keeps both names.
+
+## Round 2 (the PM's four fixes after the code review)
+
+Step 0: `git merge origin/fix/phase23-followups` (clean; no file of the other workers touched). The
+brief's "Round 2" was read.
+
+**Fix 4 (R5) and fix 3 (applied_at): red** (commit bda77e1, tests only):
+
+```
+node --test scripts/inbox-decisions-export.test.mjs
+ℹ tests 30   ℹ pass 27   ℹ fail 3
+✖ R5: a test-shaped row whose skip the database refuses is filed like any other in --notes-only: ...
+✖ R5: in the default mode a refused skip gets the note, the day-file entry and the full mark
+✖ an existing note that differs only in its applied_at line is written again and the row is marked
+```
+
+**Green** (commit 2d70773): `node --test` on the runner, exporter, pr and render tests:
+`ℹ tests 60   ℹ pass 60   ℹ fail 0` (exporter file alone: 30 pass).
+
+| fix | test |
+|---|---|
+| 4: a refused skip is filed, note and mark, in `--notes-only`; not skipped, not failed | `R5: a test-shaped row whose skip the database refuses is filed like any other in --notes-only: ...` |
+| 4: in the default mode the entry and the full mark too | `R5: in the default mode a refused skip gets the note, the day-file entry and the full mark` |
+| 4: an accepted skip still writes no file | `R5: a test-shaped row whose skip is accepted still writes no file` (and the two earlier skip tests) |
+| 3: only `applied_at` differs, so the note is rewritten and the row marked | `an existing note that differs only in its applied_at line is written again and the row is marked` |
+| 3: any other difference is refused, nothing overwritten | `a note that differs anywhere but applied_at is still refused, and nothing is overwritten` (plus the existing `never overwrites a different note ...`) |
+
+The earlier test that expected a refused skip to be a failure was changed: a skip that THROWS is still
+`not filed` (the exporter cannot tell whether the database kept it), a skip that returns false files the
+row. The `isTestQuestion` comment now says the three fields narrow and do not prove origin; the
+database refusing to skip a decision with a logged write is what protects a real one.
+
+**Fix 2 (immutability)**: `skipTestQuestions`, `fileRows` and `logRows` each build and return their
+own result object (`{skipped, failed, refused}`, `{filed, failed}`, `{logged, failed}`);
+`exportDecisions` merges them into a new `{filed, skipped, logged, failed}`. No behaviour change, so no
+red run: the existing tests are the proof and stayed green (same commit 2d70773).
+
+**Fix 1 (no console window)**: `scripts/register-exports.ps1` (commit after 2d70773). The action is now
+`powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command "& 'node.exe' 'scripts/exports-run.mjs' '--secrets-dir' ... ; exit $LASTEXITCODE"`, working
+directory the checkout. Each value (node path, runner, both folders) is a single-quoted PowerShell
+string with `'` doubled. A double quote or a backtick in either folder (or in node's path) is refused
+before anything is registered, because the whole command sits inside double quotes. The header
+comment and the printed lines follow. PowerShell parse check (parser only, the script was NOT run):
+`parse errors: 0`.
+
+The quoting and the exit code were checked without touching the script or any task: a throwaway
+PowerShell snippet built the same command string (same helper, same format line) for a folder named
+`C:\a b\it's`, ran it in a hidden `powershell.exe -Command` against a stand-in script that printed its
+arguments and exited 7. The arguments arrived intact and the process exit code was 7.
+
+Defaults: the same-named `-WindowStyle Hidden` still flashes a console for a moment while PowerShell
+starts, as the logon task does; a refused skip that comes with a thrown error stays "not filed"; the
+`applied_at` rule compares the whole text with every line starting `applied_at: ` blanked (the note
+has one such line, in its front matter).
