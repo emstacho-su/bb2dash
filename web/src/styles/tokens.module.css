@@ -282,7 +282,8 @@
    keyboard focus. A button with no data-tip draws nothing. */
 .tip { position: relative; }
 .tip[data-tip]::after {
-  content: attr(data-tip);
+  /* the empty alternative text after the slash: the label is drawn and not spoken, so it adds nothing to the button's name */
+  content: attr(data-tip) / '';
   position: absolute;
   top: calc(100% + var(--space-2));
   left: 50%;
