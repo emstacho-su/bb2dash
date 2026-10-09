@@ -6,16 +6,15 @@
 # this file, edit that one and run the generator. Five literals differ and nothing else: this
 # line, the two ipset names, the run marker, and the database secrets, which here are the one
 # secret inbox_apply_db_url. Everything below is the Workspace script's own text, so where it says
-# the Workspace, the runner, the rag MCP server or harness_database_url, read the apply worker and
-# its one pooler connection: three names are allowed here, not four.
+# the Workspace or the runner, read the apply worker and its one pooler connection: the same
+# three names are allowed here (since Phase 24a the Workspace script reads one database secret too).
 #
 # Run once, as root, by docker/workspace/entrypoint.sh before any Node or `claude` process starts.
-# When it exits 0 the container can reach four names, each on one TCP port, and nothing else:
+# When it exits 0 the container can reach three names, each on one TCP port, and nothing else:
 #
 #   api.anthropic.com                   tcp/443   the `claude` CLI, on Stack's subscription token
 #   goultdzqcavefcgnifdy.supabase.co    tcp/443   the materials MCP server (the bb2dash project's API)
 #   the host of workspace_runner_db_url tcp/5432  the runner's own queue connection (the session pooler)
-#   the host of harness_database_url    tcp/5432  the rag MCP server (the harness store)
 #
 # The allowlist is by address, and each of these addresses serves other tenants too (a CDN's edge,
 # a shared pooler): the port rule narrows what an allowed address can be asked, not who answers.
@@ -43,7 +42,7 @@
 #   * a port rule (102a, PM rulings T1 c): the two HTTPS names are allowed on tcp/443 only and the pooler
 #     addresses on tcp/5432 only, each kind in a set of its own. No address is allowed on every
 #     port, and nothing but TCP leaves (DNS to the resolvers apart);
-#   * the two database hosts are read from the secret files, and each must end
+#   * the database host is read from the secret file, and it must end
 #     .pooler.supabase.com and name port 5432 or no port (102a, PM rulings U2); anything else
 #     stops the start. A connection string is never printed, whole or in part;
 #   * each name is resolved once and pinned in /etc/hosts, so every later connection uses the
@@ -285,7 +284,7 @@ main() {
   FIREWALL_UP=0
   trap 'status=$?; if [ "$FIREWALL_UP" != 1 ]; then deny_all; [ "$status" != 0 ] || status=1; fi; exit "$status"' EXIT
 
-  # 1. The database hosts, before any rule is touched. Each secret must be a Postgres URL whose
+  # 1. The database host, before any rule is touched. Each secret must be a Postgres URL whose
   #    host ends .pooler.supabase.com; a host of any other kind would put an address of someone
   #    else's choosing on the allowlist, so the start stops instead.
   for secret in "${DSN_SECRETS[@]}"; do
@@ -293,7 +292,7 @@ main() {
       reason="$host"
       fail "$secret: $reason"
     fi
-    # Both database secrets usually name the same pooler: one lookup, one pin.
+    # One lookup, one pin per distinct host.
     if [ -z "${seen[$host]:-}" ]; then
       seen[$host]=1
       postgres_hosts+=("$host")

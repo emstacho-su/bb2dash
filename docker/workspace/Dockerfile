@@ -1,33 +1,30 @@
 # Phase 21: the Workspace image (brief 102 task 12; P-85, P-88). The runner (`workspace/`, W-64) takes
 # queued questions from the database and answers each with one `claude -p` turn on Stack's
-# subscription token, with two stdio MCP servers beside it: the materials server (bb2dash's
-# `mcp-server/`) and the harness `rag` server (the harness repo's `mcp-server/`).
+# subscription token, with one stdio MCP server beside it: the materials server (bb2dash's
+# `mcp-server/`). Phase 24a removed the harness `rag` server and its model: retrieval is the runner's
+# own, through `workspace-search`, and the materials server's `batch.js`.
 #
 #   docker compose -p bb2dash-wt21 --profile workspace build workspace     (before the merge)
 #
 # Built from the repo root (compose.yaml's `context: .`) through docker/workspace/Dockerfile.dockerignore,
-# an allow-list of its own; the root .dockerignore, which is the sync image's, is not read. The harness
-# source arrives through two named build contexts compose.yaml declares: `harness-mcp` (its
-# mcp-server/ folder) and `harness-certs` (its certs/ folder). linux/amd64 only: the rag server's
-# tokenizer has no linux-arm64 build.
+# an allow-list of its own; the root .dockerignore, which is the sync image's, is not read. The pinned
+# CA arrives through the named build context `harness-certs` (the harness checkout's certs/ folder).
 #
 # The in-image layout is frozen (brief 102, Seams, "W-64 and W-65"); workspace/test/mcp-config.test.ts
 # pins the same literals:
 #
 #   /app/workspace/      package.json, node_modules, dist/ (runner.js, healthcheck.js, hooks/tool-gate.js),
-#                        claude/settings.json, prompts/system.md
-#   /app/mcp-materials/  package.json, node_modules, dist/index.js
-#   /app/mcp-rag/        package.json, node_modules, dist/, mcp-rag.sh
+#                        claude/settings.json, prompts/*.md
+#   /app/mcp-materials/  package.json, node_modules, dist/index.js, dist/batch.js
 #   /app/certs/          prod-ca.crt, root's and 0444: the one pinned CA. The runner checks the pooler's
-#                        certificate against it (WORKSPACE_DB_CA_FILE) and the rag launcher reads the same file
-#   /opt/fastembed/      the rag server's embedding model, baked in: nothing is downloaded at run time
+#                        certificate against it (WORKSPACE_DB_CA_FILE)
 #   /usr/local/share/npm-global/  Claude Code at its pinned version, owned by root
 #   /app/turn/           empty, root's and 0555: the working directory of every `claude -p` turn
-#   /home/node/.claude/  owned by node: the workspace-claude-home volume mounts here
+#   /home/node/.claude/  owned by node: compose mounts a tmpfs here (freeze amendment F-4)
 #
-# No secret is copied, passed as a build argument or set in the environment. The four secret files
+# No secret is copied, passed as a build argument or set in the environment. The three secret files
 # reach the container read-only under /run/secrets when it starts, and each is read by the one
-# process that needs it (the runner, the materials server, the rag launcher, the firewall).
+# process that needs it (the runner, the materials server, the firewall).
 
 ARG NODE_IMAGE=node:22-bookworm-slim
 
@@ -56,29 +53,7 @@ COPY mcp-server/src ./src
 RUN npm run build \
  && npm prune --omit=dev --no-audit --no-fund
 
-# --- rag: the harness rag MCP server, built from the harness checkout --------------------------------
-# Only its sources: never the host's node_modules, dist or .fastembed-cache (a Windows node_modules
-# holds Windows binaries). Whatever is checked out in the harness folder is what gets baked; 102a
-# records `git -C <harness> rev-parse HEAD` at build time.
-FROM ${NODE_IMAGE} AS rag
-WORKDIR /build
-# onnxruntime-node's install script otherwise downloads its CUDA provider, which a CPU-only
-# container never loads.
-ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
-COPY --from=harness-mcp package.json package-lock.json tsconfig.json ./
-RUN npm ci --no-audit --no-fund
-COPY --from=harness-mcp src ./src
-COPY --from=harness-mcp scripts ./scripts
-# The embedding model is baked by loading the built server's own embedder once: the script needs no
-# database, downloads the model into /opt/fastembed and fails the build if the vectors are not the
-# shape the store holds. At run time the firewall refuses the model's host, so the model must be
-# here. Readable by every user, writable by root alone.
-RUN npm run build \
- && FASTEMBED_CACHE_DIR=/opt/fastembed node scripts/verify-embedder.mjs \
- && npm prune --omit=dev --no-audit --no-fund \
- && chmod -R u=rwX,go=rX /opt/fastembed
-
-# --- cli: Claude Code at its pinned version ------------------------------------------------------------
+# --- cli ----------------------------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS cli
 
 # One exact version (brief 102, "CLI pin"): never the moving tag the dev container defaults to and
@@ -121,7 +96,7 @@ RUN apt-get update \
       procps \
  && rm -rf /var/lib/apt/lists/*
 
-# The CLI's config folder exists here, owned by node, so a new workspace-claude-home volume takes
+# The CLI's config folder exists here, owned by node, so a tmpfs mounted here (owned by node, by compose) takes
 # that owner. The turns' working directory is root's and 0555 (102a, PM rulings V2), so the runtime
 # user can neither write it nor change its mode: every turn loads project settings from its working
 # directory, and a `.claude` folder planted there would be read by every later turn. The CLI keeps
@@ -152,16 +127,9 @@ COPY --from=materials /build/package.json /app/mcp-materials/package.json
 COPY --from=materials /build/node_modules /app/mcp-materials/node_modules
 COPY --from=materials /build/dist /app/mcp-materials/dist
 
-# /app/mcp-rag: the harness rag MCP server and its launcher; the model beside it.
-COPY --from=rag /build/package.json /app/mcp-rag/package.json
-COPY --from=rag /build/node_modules /app/mcp-rag/node_modules
-COPY --from=rag /build/dist /app/mcp-rag/dist
-COPY --from=rag /opt/fastembed /opt/fastembed
-COPY docker/workspace/mcp-rag.sh /app/mcp-rag/mcp-rag.sh
-
-# /app/certs: the one pinned CA, for both database connections (102a, PM rulings V2). The runner
+# /app/certs: the one pinned CA, for the database connection (102a, PM rulings V2). The runner
 # verifies the bb2dash pooler's certificate against it whatever its DSN says (compose.yaml sets
-# WORKSPACE_DB_CA_FILE to this path), and the rag launcher hands the same file to the rag server.
+# WORKSPACE_DB_CA_FILE to this path). Phase 24a: the rag server is gone, so this is the only reader.
 # A public certificate from the harness checkout's certs/ folder. A plain COPY, so the file and
 # the folder COPY makes for it are root's; then 0444 whatever mode the build host gave the file.
 # The runtime user can read it and cannot replace it.
@@ -172,8 +140,8 @@ RUN chmod 0444 /app/certs/prod-ca.crt
 # node user can write is ever read by either.
 COPY docker/workspace/entrypoint.sh docker/workspace/init-firewall.sh /app/docker/workspace/
 # A Windows checkout may hand over CRLF; a shebang line must end in LF.
-RUN sed -i 's/\r$//' /app/docker/workspace/entrypoint.sh /app/docker/workspace/init-firewall.sh /app/mcp-rag/mcp-rag.sh \
- && chmod 0755 /app/docker/workspace/entrypoint.sh /app/docker/workspace/init-firewall.sh /app/mcp-rag/mcp-rag.sh
+RUN sed -i 's/\r$//' /app/docker/workspace/entrypoint.sh /app/docker/workspace/init-firewall.sh \
+ && chmod 0755 /app/docker/workspace/entrypoint.sh /app/docker/workspace/init-firewall.sh
 
 # The container starts as root on purpose: the entrypoint raises the default-deny firewall, makes
 # /run/workspace, then drops to `node` (setpriv, every capability gone) before any Node or `claude`

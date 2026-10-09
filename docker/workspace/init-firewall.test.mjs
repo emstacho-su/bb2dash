@@ -123,8 +123,8 @@ function redirectedScript(worldDir) {
 
 const BASE_WORLD = Object.freeze({
   dns: { [API]: [API_ADDRESS], [PROJECT]: PROJECT_ADDRESSES, [POOLER]: [POOLER_ADDRESS] },
-  // The second file as a Windows editor leaves it: a byte-order mark and CRLF.
-  secrets: { workspace_runner_db_url: dsn(POOLER), harness_database_url: `\uFEFF${dsn(POOLER)}\r\n` },
+  // The file as a Windows editor leaves it: a byte-order mark and CRLF.
+  secrets: { workspace_runner_db_url: `\uFEFF${dsn(POOLER)}\r\n` },
   hosts: '127.0.0.1 localhost\n172.20.0.2 abc123\n',
   resolvConf: `nameserver ${RESOLVER}\noptions ndots:0\n`,
   inet6: '00000000000000000000000000000001 01 80 10 80       lo\n',
@@ -379,8 +379,8 @@ describe('docker/workspace/init-firewall.sh, dry run against fake tools', { conc
   test('a database secret that is not a pooler URL stops the start at deny-all, and nothing of it is printed', async () => {
     const cases = [
       ['a host that is not a pooler', { workspace_runner_db_url: dsn('db.goultdzqcavefcgnifdy.supabase.co') }, /workspace_runner_db_url: its host does not end \.pooler\.supabase\.com/],
-      ['an unencoded / in the password', { harness_database_url: `postgresql://${FAKE_USER}:${FAKE_PASSWORD}/x@${POOLER}:5432/postgres` }, /harness_database_url: its host does not end/],
-      ['a missing file', { harness_database_url: null }, /harness_database_url: the secret file is missing or not readable/],
+      ['an unencoded / in the password', { workspace_runner_db_url: `postgresql://${FAKE_USER}:${FAKE_PASSWORD}/x@${POOLER}:5432/postgres` }, /workspace_runner_db_url: its host does not end/],
+      ['a missing file', { workspace_runner_db_url: null }, /workspace_runner_db_url: the secret file is missing or not readable/],
       ['a file holding only a byte-order mark and CRLF', { workspace_runner_db_url: '\uFEFF\r\n' }, /workspace_runner_db_url: the secret file is empty/],
     ];
     for (const [label, secrets, sentence] of cases) {
@@ -396,7 +396,7 @@ describe('docker/workspace/init-firewall.sh, dry run against fake tools', { conc
   test('a database secret on a port other than 5432 stops the start at deny-all, and nothing of it is printed (U2)', async () => {
     const cases = [
       ['the transaction pooler', { workspace_runner_db_url: dsn(POOLER, ':6543/postgres?sslmode=require') }, /workspace_runner_db_url: its port is not 5432/],
-      ['another port on the harness secret', { harness_database_url: dsn(POOLER, ':15439/postgres') }, /harness_database_url: its port is not 5432/],
+      ['another port', { workspace_runner_db_url: dsn(POOLER, ':15439/postgres') }, /workspace_runner_db_url: its port is not 5432/],
       ['a colon and no port', { workspace_runner_db_url: dsn(POOLER, ':/postgres') }, /workspace_runner_db_url: its port is not 5432/],
     ];
     for (const [label, secrets, sentence] of cases) {
@@ -518,17 +518,12 @@ describe('docker/workspace/init-firewall.sh, dry run against fake tools', { conc
     assertDenyAll(await raise(makeWorld(), { FAIL_IPTABLES: '-A OUTPUT -p tcp --dport 5432 -m set*' }), 4);
   });
 
-  test('two database secrets on two poolers: both are allowed on 5432, neither on 443', async () => {
+  test('Phase 24a: the one database secret is the runner database login; the harness URL is no longer read or named', async () => {
+    assert.doesNotMatch(SOURCE, /harness_database_url/);
     const run = await raise(makeWorld({ secrets: { harness_database_url: dsn(OTHER_POOLER) }, dns: { [OTHER_POOLER]: [OTHER_POOLER_ADDRESS] } }));
     assert.equal(run.status, 0, run.out);
-    assert.equal(lookups(run.calls).length, 4);
-    assert.match(run.out, /Firewall raised: 4 name\(s\) allowed/);
-    const chain = outputChain(run.calls);
-    assert.deepEqual([...chain.sets.get(POSTGRES_SET)].sort(), [POOLER_ADDRESS, OTHER_POOLER_ADDRESS].sort());
-    for (const address of [POOLER_ADDRESS, OTHER_POOLER_ADDRESS]) {
-      assert.equal(verdict(chain, address, 'tcp', 5432), 'open');
-      assert.equal(verdict(chain, address, 'tcp', 443), 'blocked');
-    }
+    assert.equal(lookups(run.calls).length, 3);
+    assert.equal(run.out.includes(OTHER_POOLER), false);
     assertNoSecret(run.out);
   });
 

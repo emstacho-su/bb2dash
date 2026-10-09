@@ -10,8 +10,8 @@
 #   3. drops to the `node` user with every capability gone, then runs the command (the runner).
 #
 # So no Node or `claude` process ever runs as root, and the NET_ADMIN and NET_RAW capabilities
-# compose.yaml adds exist only for step 1. No secret is read here: the firewall reads the two
-# database hosts from their files, the runner and the two MCP servers read their own.
+# compose.yaml adds exist only for step 1. No secret is read here: the firewall reads the
+# database host from its file, the runner and the materials server read their own.
 # Exit 78 (EX_CONFIG) on a refusal.
 
 set -euo pipefail

@@ -26,6 +26,8 @@ export interface ProcessDeps {
   readonly exchangeDir: string;
   readonly now: () => number;
   readonly sleep: (ms: number) => Promise<void>;
+  /** How often the exchange folder is looked at; the default when left out. Tests make it coarse. */
+  readonly exchangePollMs?: number;
   readonly log: (line: string) => void;
 }
 
@@ -72,7 +74,7 @@ async function textOf(
   const answer = await handOver(
     deps.exchangeDir,
     { documentId: claim.document_id, extension: reader.parsed, bytes },
-    { now: deps.now, sleep: deps.sleep },
+    { now: deps.now, sleep: deps.sleep, ...(deps.exchangePollMs ? { pollMs: deps.exchangePollMs } : {}) },
   );
   if (!answer.ok) return answer.code === 'extract_timeout' ? retry('extract_timeout') : retry('extract_failed');
   return { ok: true, value: answer.units };

@@ -13,7 +13,7 @@ const DOC = { documentId: 5, extension: 'pdf', bytes: Buffer.from('x') };
 
 function deps(dir: string, onSleep: (d: string) => void) {
   const t = fakeClock(onSleep, dir);
-  return { dir, now: t.now, sleep: t.sleep, pollMs: 500, timeoutMs: 330_000 };
+  return { dir, now: t.now, sleep: t.sleep, pollMs: 30_000, timeoutMs: 330_000 };
 }
 
 describe('handOver', () => {

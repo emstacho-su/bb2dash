@@ -177,3 +177,125 @@ in a message (`worker-loop.test.ts`).
   `network_mode: none`, healthcheck `node /app/workspace-ingest/dist/healthcheck.js parser`.
   Note `uv run --locked` must work offline there.
 * The exchange volume must let the worker (`node`) remove what the parser (`extract`) writes in it.
+
+---
+
+# Second run: tasks 37 and 38, and the exchange-test fix
+
+Commits: `test(24)` exchange fix, `4e74b89` (images, compose, firewalls, tests). The branch was merged with
+`origin/feat/workspace-24` first (a merge).
+
+## The fix: `exchange.test.ts` timed out under load
+
+Cause: the fake clock ticked every 500 ms, so a 330 s wait was 660 rounds of real file work (a `stat`, a
+`readFile`, a `readdir` and, in the parser stand-in, a `writeFile` each), which a busy machine could push past
+the 5 s test limit. Fix: `ProcessDeps` gained an optional `exchangePollMs`; the harness and `exchange.test.ts`
+use a coarse 30 s tick, so the same 330 s is 11 ticks. The timeout is not raised and no test uses wall-clock
+time for the wait. The one real-time test left is `alive-beat.test.ts`, which waits for a real thread and
+returns the moment the file exists. Three runs in a row: 97 passed each; typecheck clean.
+
+## Task 37 (the ingest image, firewall fork, compose services)
+
+Red: the image test was written after the files, so no honest red run exists for it. What I can show is that it
+fails on a mutation: with the compose volume option changed to `mode=1777` and `network_mode: none` commented
+out, `fail 2` (the parser test and the exchange-mode test); restored: `pass 14, fail 0`.
+Green: `node --test docker/workspace-ingest/image.test.mjs`: pass 14, fail 0.
+
+Files: `docker/workspace-ingest/{Dockerfile, Dockerfile.dockerignore, entrypoint.sh, fork-firewall.mjs,
+init-firewall.sh (generated), image.test.mjs}`, and `compose.yaml` (two services, the volume `ingest-exchange`,
+the network `ingest-net`, the secret `workspace_ingest_db_url`).
+
+The exchange mode, proved. A sticky 1777 does not let the worker remove the parser's file. The volume is tmpfs
+with `o: size=96m,uid=0,gid=1100,mode=0770` (owner root, group `exchange` 1100, no sticky bit). The image creates
+group `exchange` (1100) and user `extract` (uid 1100, primary group `exchange`), adds `node` to the group, and
+makes `/exchange` the same way. The worker's `setpriv --init-groups` keeps `node`'s groups. Proved in a
+no-network container of the Workspace test image, with the same kernel option through `--tmpfs`: `extract`
+wrote `answer.json`, `node` (groups `node,exchange`) removed it, then `node` wrote a file and `extract` removed
+it. The image test pins the same options.
+
+**The ingest image was not built.** Both attempts failed in `apt-get update` on the base layer with
+`Certificate verification failed: The certificate is NOT trusted. The certificate issuer is unknown` for
+`deb.debian.org` (a TLS-intercepting network today). That is outside my files, so I stopped there as
+instructed. Unproved because of it: `apt-get install` of the firewall tools and `poppler-utils`; `uv python
+install 3.12` and `uv sync --locked` at build; the in-image checks (`id extract`, `pdftotext -v`, `uv --version`,
+and a no-network `extract_text.py` run on a generated docx under `--read-only --user extract`). The PM should
+rebuild `workspace-ingest` on a network that trusts Debian's mirror before P-7 and P-11.
+
+## Task 38 (the Workspace image and compose block; the apply side)
+
+Green: `docker/workspace/init-firewall.test.mjs` (21 pass), `docker/grep-clean.test.mjs` (15 pass),
+`docker/apply/image.test.mjs` (9 pass; no literal had to move), new `docker/apply/gate-built.test.mjs`.
+Gate test red: before `cd apply && npm run build`, `fail 4` ("apply/dist/hooks/tool-gate.js is not built");
+green after `npm ci && npm run typecheck && npm run build`: `tests 4, pass 4` (an unknown tool exits 2, the two
+listed materials tools exit 0 and print nothing, input that is not JSON exits 2). Whole set: `node --test
+docker/workspace/init-firewall.test.mjs docker/grep-clean.test.mjs docker/apply/image.test.mjs
+docker/apply/gate-built.test.mjs docker/workspace-ingest/image.test.mjs`: tests 63, pass 63.
+`node docker/apply/fork-firewall.mjs --check` exit 0; `node docker/workspace-ingest/fork-firewall.mjs --check`
+exit 0; `grep -c harness_database_url compose.yaml` gives 0; `docker compose -f compose.yaml --profile workspace
+--profile apply config -q` resolves.
+
+What changed: the Workspace Dockerfile lost the `rag` stage, `/opt/fastembed` and `mcp-rag.sh` (deleted); the
+firewall lost `harness_database_url` (three names: model API, project, pooler); the `workspace` block lost that
+secret and the `harness-mcp` build context (the pinned CA from `harness-certs` stays), mounts a tmpfs at
+`/home/node/.claude` (`uid=1000,gid=1000,mode=0700,size=64m`), names no `hostname`, and sets
+`WORKSPACE_MEMORY_JOBS: "off"`. `/run/workspace` is still the entrypoint's 0700 `node` folder, writable by the
+runner for `mcp-none.json` and `mcp-<id>.json`. The runner's `prompts/*.md` were already copied as a whole
+folder. The apply fork's secret literal followed the Workspace script and its header sentence was reworded; the
+apply firewall is regenerated and `--check` passes. In `docker/grep-clean.test.mjs` the rag launcher checks went,
+the `workspace-ingest` Dockerfile joined the scanned images, and `workspaceService()` now stops at the next
+service (two follow the Workspace now). The top-level volume `workspace-claude-home` is KEPT in `compose.yaml`
+(unused, commented) so that this file removes nothing from anyone's machine.
+
+## Images (test tags only, through the second compose file)
+
+Live tags before the first build and after the last: identical.
+
+| tag | id before and after |
+|---|---|
+| bb2dash-sync:local | sha256:084b9ede6aadb40a0c1389f10e8f841802355beafd21558da215a0bce975f10f |
+| bb2dash-mcp:local | sha256:bf212746abf172b8d8f1a9f880afda84540b27c919fa057937f4fd50ee845d05 |
+| bb2dash-apply:local | sha256:3315bf7c18e2b14615a0e226f9ed8144c0a3f0ad7de0a9b50435c98d48340873 |
+| bb2dash-workspace:local | sha256:42c552c05ad6caf7565095b6c882643e022352d0357364024cdfc4cab7e5f2f4 |
+
+Test images: `bb2dash-workspace:wt24` id `93c654c69d62`, 1.17 GB (the live one is 1.66 GB, with the rag server),
+built in 12 s from cached layers; `bb2dash-apply:wt24` id `0fd2a1a825df`, 1.17 GB, 9 s;
+`bb2dash-workspace-ingest:wt24` not built (above; two failed attempts, 15 s and 20 s). Inside the Workspace test
+image (no network): no `/app/mcp-rag`, no `/opt/fastembed`, `mcp-materials/dist/batch.js` present,
+`/home/node/.claude` owned by `node`.
+
+One slip to report: the first `workspace` build started while a `bb2dash-walk22-...` container had just appeared
+(my check ran a few seconds before the command, not as a gate on it). The build was cached and finished in 12 s;
+every later build waited on a gate that polls `docker ps` every minute.
+
+## Defaults I took
+
+1. The ingest image's Python is a uv-managed 3.12 in `/opt/uv-python` (bookworm's own is 3.11 and the lock wants
+   3.12), installed at build; at run `UV_PYTHON_DOWNLOADS=never UV_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1`.
+2. `extract`'s scratch is a `/tmp` tmpfs (256 MB, `HOME=/tmp`, `UV_CACHE_DIR=/tmp/uv-cache`).
+3. uid and gid 1100 for `extract` and the group `exchange`; the volume owner is root, group 1100, mode 0770.
+4. The ingest firewall allows the project host on 443 and the pooler on 5432 only; its end check reaches the
+   project host (the Workspace's reaches api.anthropic.com).
+5. `command: []` plus an `entrypoint:` override on `workspace-extract`, so the image's root entrypoint and CMD
+   never run there.
+6. The `workspace-claude-home` top-level volume entry is kept, unused.
+7. The ingest image copies only `extract_text.py`, `pull_files.mjs`, `fetch_signed.mjs` and `embed_corpus.mjs`
+   from `ingest/`, plus the lock files, and builds `workspace-ingest` with `workspace/src` for the bundle.
+
+## How the PM starts each service in a walk window
+
+Never a bare `up`; one service named each time. Common flags: `SECRETS_DIR=C:/Users/stack/.bb2dash-secrets
+HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt24 -f compose.yaml -f
+C:/Users/stack/.bb2dash-wt24/test-tags.compose.yaml --profile workspace`, with the live runner stopped first.
+
+* `... up -d --no-deps workspace`
+* `... up -d --no-deps workspace-extract` (start it before the worker, so the volume and the alive file exist)
+* `... up -d --no-deps workspace-ingest` (needs a `workspace_ingest_db_url` file in `SECRETS_DIR`)
+
+## What P-7 and P-11 need
+
+* P-7 (a signed URL through the ingest firewall): `workspace-ingest` running with its two secrets, after the
+  image is rebuilt. Check that a signed link downloads, a 302 is not followed, another host and another port
+  are refused (the firewall rejects), and `api.anthropic.com` is unreachable.
+* P-11 (a 20 MB file of each parsed type in `workspace-extract`): the parser container with `mem_limit 1g` and
+  `pids_limit 128`; put `doc-<id>.<ext>` and `request.json` in `/exchange` (or let the worker do it) and watch
+  `answer.json`, memory and the 300 s limit. The volume holds 96 MB: the 20 MB file plus its units.

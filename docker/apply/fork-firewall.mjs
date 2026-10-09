@@ -31,15 +31,15 @@ export const SUBSTITUTIONS = Object.freeze([
       '# this file, edit that one and run the generator. Five literals differ and nothing else: this\n' +
       '# line, the two ipset names, the run marker, and the database secrets, which here are the one\n' +
       '# secret inbox_apply_db_url. Everything below is the Workspace script\'s own text, so where it says\n' +
-      '# the Workspace, the runner, the rag MCP server or harness_database_url, read the apply worker and\n' +
-      '# its one pooler connection: three names are allowed here, not four.\n',
+      '# the Workspace or the runner, read the apply worker and its one pooler connection: the same\n' +
+      '# three names are allowed here (since Phase 24a the Workspace script reads one database secret too).\n',
   ],
   ['the HTTPS set', 'readonly HTTPS_SET=workspace-https\n', 'readonly HTTPS_SET=apply-https\n'],
   ['the Postgres set', 'readonly POSTGRES_SET=workspace-postgres\n', 'readonly POSTGRES_SET=apply-postgres\n'],
   ['the run marker', 'readonly FIREWALL_RUN_MARKER=/dev/shm/bb2dash-workspace-firewall.up\n', 'readonly FIREWALL_RUN_MARKER=/dev/shm/bb2dash-apply-firewall.up\n'],
   [
     'the database secrets',
-    'readonly -a DSN_SECRETS=(\n  "workspace_runner_db_url"\n  "harness_database_url"\n)\n',
+    'readonly -a DSN_SECRETS=(\n  "workspace_runner_db_url"\n)\n',
     'readonly -a DSN_SECRETS=(\n  "inbox_apply_db_url"\n)\n',
   ],
 ]);
