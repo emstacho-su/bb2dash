@@ -28,6 +28,8 @@ export const workspaceHitSchema = z.object({
   score: z.number().nullable(),
   passage: z.string(),
   has_notes: z.boolean(),
+  /** The remembered item's date for kind memory; null for material and upload. Required, so a stale function is seen. */
+  written_at: z.string().nullable(),
 });
 export type WorkspaceHit = z.infer<typeof workspaceHitSchema>;
 

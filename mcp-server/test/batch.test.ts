@@ -242,3 +242,21 @@ describe('batch entry — configuration and input errors exit non-zero', () => {
     expect(err.join('')).not.toContain(secret);
   });
 });
+
+describe('batch entry — written_at', () => {
+  it('hands on written_at, a string for a memory hit and null for the others', async () => {
+    const { out } = await run(request);
+    const hits = JSON.parse(out[0]!).queries[0].hits as Array<{ kind: string; written_at: string | null }>;
+    expect(hits.every((h) => 'written_at' in h)).toBe(true);
+    expect(hits.filter((h) => h.written_at !== null).map((h) => h.kind)).toEqual(['memory']);
+  });
+
+  it('a row without written_at fails the query, so a stale function is seen', async () => {
+    const stale = structuredClone(searchFunction.answer);
+    delete stale.results[0].written_at;
+    const route: Route = () => ({ status: 200, body: stale });
+    const { code, out } = await run({ ...request, attachments: [] }, { route });
+    expect(code).toBe(0);
+    expect(JSON.parse(out[0]!).queries[0]).toEqual({ ok: false, state: 'failed', hits: [] });
+  });
+});
