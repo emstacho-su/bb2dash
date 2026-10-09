@@ -501,3 +501,63 @@ disabled and `aria-busy="false"`. It passed the first time it ran, because the s
 | `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0; exit 0; exit 0 |
 | `npx vitest run test/token-audit.test.ts`; Baseline sum for `screens-a.json` | exit 0; `0` |
 | `phone-width.spec.ts -g "route / "`, run `20261009T022831Z`, `dirty` false | exit 0, 2 passed, `page scrollWidth=390` dark and light |
+
+## Visual round
+
+Start: `git fetch origin`, `git merge origin/feat/styling-22`. `ui-ux-pro-max` loaded again; `MASTER.md` ("Buttons", "States") and `pages/inbox.md`,
+`pages/home.md`, `pages/planner.md` were read for this round; the shots `03-inbox-dark`, `27-nav-menu-dark` of run `20261009T034707Z` were opened
+(no course data is described here).
+
+### V-6: "Apply answers" is a pill (`fix(22-V-6)`)
+
+`InboxApplyButton.module.css` `.button`: `border-radius: var(--radius-control)`. Three cases disable it; two are busy and one is off, and `aria-busy={busy ||
+lookingForOpen}` now tells them apart (the expression is not one of the Busy sites, which count `aria-busy={pending}` and `aria-busy={busy}` only). Busy
+(`.button:disabled`): half strength, `cursor: progress`. Switched off (`.button:disabled:not([aria-busy='true'])`, nothing to apply): the flat grey primary
+fill (`--color-neutral-800` fill and edge, `--color-neutral-600` words), opacity 1, `cursor: not-allowed`, in place of the faint outline. New file
+`web/test/inbox-apply-button.css.test.ts` pins the radius token and the two states: RED 4 failed (exit 1), GREEN 4 passed. Strength check: `14 0`
+(second number 0). This takes the Master's line "it takes the one strength and keeps its plain pointer" for this button as overtaken by the PM's V-6.
+
+### V-7: the status select collapses to a bare caret: not this phase
+
+The cause is on `main`. At 820px and below the detail row has four tracks for five children:
+
+```
+@media (max-width: 820px) {
+  .detailRow { grid-template-columns: 22px 60px minmax(0, 1fr) 120px; }
+  .detailRow .timeCell { display: none; }
+}
+```
+
+(`origin/main:web/src/components/tracker/UpcomingTracker.module.css`.) The row's children are the glyph, the course code, the title, the time (hidden here),
+the effort text and the status select: five visible items for four tracks, so the select wraps to a second row and lands in the first track, 22px wide.
+`.statusSelect` is `width: 100%` on `main` and today, so it is as wide as that track and shows only its caret. The due time is hidden by that same
+rule on `main`. This phase changed none of it: the select's restyle kept `width: 100%` and `padding: 3px 6px` (A3), and my 820px rule touches only
+`.effortCell` (it wraps; on `main` it was `white-space: nowrap`, which overflowed the 120px track). So `main` showed the same collapsed select at 800px and
+at 390px, and nothing is changed. It goes under "Known, not this phase". The box proves the page is fine either way: run `20261009T041147Z`, below.
+
+### V-8: the wizard's step markers
+
+No entry of `component-changes.json` names `PlannerEventWizard.module.css` `.step` (searched for the file, `.step`, `stepCurrent` and "wizard": no match). On `main`
+the corner was `--radius-md`, 8px, a pill at the markers' height; direction D made `--radius-md` 4px, which turned them into rectangles. So `.step` now names
+`--radius-chip` (999px, D's pill token), and `.stepCurrent` composes it. New file `web/test/planner-wizard-steps.css.test.ts`.
+
+### Recorded, no change asked (same on `main`; "Known, not this phase")
+
+The blank gap under the wizard's title field and its fields stopping short of the panel's right edge; the first hour label on the rule under the Events row; the
+Inbox showing its empty line under a failed read. Also V-7 above.
+
+### Checks
+
+| Check | Printed |
+|---|---|
+| `npx vitest run test/planner-wizard-steps.css.test.ts test/inbox-apply-button.css.test.ts` | exit 0, 5 passed |
+| `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0 (184 files, 3407 tests); exit 0; exit 0 |
+| `npx vitest run test/token-audit.test.ts` | exit 0; `screens-a.json` still `{}` |
+| Strength check | `14 0` |
+| `phone-width.spec.ts -g "route / "`, run `20261009T041147Z`, commit 956a554, `dirty` false | exit 0, 2 passed: `route / [dark]` and `[light]` at `page scrollWidth=390`, `pane scrollWidth=380 clientWidth=380` |
+
+### `## ui-ux-pro-max`, visual round
+
+Loaded for V-6 and V-8 (V-7 changed nothing). Files read: `MASTER.md`, `pages/inbox.md`, `pages/planner.md`, `pages/home.md`. Searches: none run; the Master's
+Buttons and States sections answer the pill and the switched-off look. Advice set aside: the skill's "touch target 44px" for the apply button (the brief's
+sizes stand); the Master's line that the apply button keeps its plain pointer (overtaken by the PM's V-6 ruling).

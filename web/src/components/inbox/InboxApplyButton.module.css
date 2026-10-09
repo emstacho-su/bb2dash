@@ -20,7 +20,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--size-5) var(--size-10);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   border: 1px solid var(--color-divider);
   color: var(--color-neutral-300);
   font-size: var(--text-sm);
@@ -37,9 +37,19 @@
   outline: var(--size-focus) solid var(--color-accent);
   outline-offset: var(--size-focus-gap);
 }
+/* Busy (the request is in flight, or it is looking for an open run): half strength and the
+   wait pointer. */
 .button:disabled {
   opacity: 0.5;
-  cursor: default;
+  cursor: progress;
+}
+/* Switched off (nothing to apply): a flat grey pill at full strength, as a primary button is. */
+.button:disabled:not([aria-busy='true']) {
+  background: var(--color-neutral-800);
+  border-color: var(--color-neutral-800);
+  color: var(--color-neutral-600);
+  opacity: 1;
+  cursor: not-allowed;
 }
 
 .button svg {
