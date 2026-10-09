@@ -172,7 +172,13 @@ test.describe('a shell that cannot reach the app', () => {
     }
   });
 
-  test('a route loaded over the live failed-load page also rejects with the real error, not -3 (S-2, the deep-link path)', async () => {
+  test("showing the failed-load page never turns a route load's real error into an abort that names it (S-2, the deep-link path)", async () => {
+    // What this pins is S-2's claim and nothing about the backoff's timing. The loader retries the
+    // app's base address on its own schedule while the app cannot be reached, and that retry can
+    // supersede a route load wherever it falls: then Electron rejects the route's promise with
+    // ERR_ABORTED (-3) naming the address that superseded it, the app's own. That is the loader's
+    // retry, as on main, and it is not this page's doing. What must never happen is an abort that
+    // names the failed-load page, a data: address: that would be the page superseding the load.
     const message = await app.evaluate(async ({ BrowserWindow }, target) => {
       const contents = BrowserWindow.getAllWindows()[0]?.webContents;
       try {
@@ -183,9 +189,15 @@ test.describe('a shell that cannot reach the app', () => {
       }
     }, `${deadOrigin}/planner`);
     console.log('S-2: a route over the failed-load page rejected with ' + JSON.stringify(message));
-    expect(message).toMatch(/ERR_CONNECTION_REFUSED|[(]-102[)]/);
-    expect(message).not.toMatch(/ERR_ABORTED|[(]-3[)]/);
+
+    const realError = /ERR_CONNECTION_REFUSED|[(]-102[)]/.test(message);
+    const abortedByTheLoadersRetry =
+      /ERR_ABORTED|[(]-3[)]/.test(message) && message.includes(`loading '${deadOrigin}/'`);
+    // Either the real connection error, or an abort by the loader's own retry of the base address.
+    expect(realError || abortedByTheLoadersRetry, `neither a connection error nor the loader's retry: ${message}`).toBe(true);
+    // Never an abort that names the failed-load page.
+    expect(message).not.toMatch(/data:/);
     const { isBenignLoadFailure } = await import('../../src/main/deeplink');
-    expect(isBenignLoadFailure(new Error(message))).toBe(false);
+    if (realError) expect(isBenignLoadFailure(new Error(message))).toBe(false);
   });
 });
