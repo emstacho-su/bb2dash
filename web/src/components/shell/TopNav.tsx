@@ -14,6 +14,7 @@ import { NavSearch } from './NavSearch';
 import { ThemeMenu } from './ThemeMenu';
 import { useSidebar } from './SidebarProvider';
 import { SyncButton } from './SyncButton';
+import { useExit } from './useExit';
 import { usePopover } from './usePopover';
 import { isUpdateLocked, updateLabel, useDesktopUpdate } from './useDesktopUpdate';
 import styles from './TopNav.module.css';
@@ -65,9 +66,12 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
   // The phone-width menu (≤720px): the same six pages in a panel under the bar.
   const [menu, menuAnchor] = usePopover<HTMLSpanElement>();
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  // Both panels stay for one exit, marked data-leaving (task 29).
+  const [userExit, userExitRef] = useExit(user.open);
+  const [menuExit, menuExitRef] = useExit(menu.open);
   const desktopUpdate = useDesktopUpdate();
   // Read only while the menu is open, which is always after hydration.
-  const showDesktopUpdate = user.open && getDesktopUpdater() !== null;
+  const showDesktopUpdate = userExit.present && getDesktopUpdater() !== null;
   // Destructured, not read off the context object: `toggleRef` reaches a `ref`
   // prop, and the React Compiler would otherwise treat the whole object as a ref.
   const { open: sidebarOpen, toggle: toggleSidebar, toggleRef: sidebarToggleRef } = useSidebar();
@@ -139,8 +143,13 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
           Menu
         </button>
 
-        {menu.open && (
-          <div id={NAV_MENU_ID} className={styles.navMenu}>
+        {menuExit.present && (
+          <div
+            id={NAV_MENU_ID}
+            ref={menuExitRef}
+            className={styles.navMenu}
+            data-leaving={menuExit.leaving ? '' : undefined}
+          >
             {NAV_LINKS.map((item) => (
               <Link
                 key={item.href}
@@ -204,8 +213,13 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
             <span className="sr-only">Account</span>
           </button>
 
-          {user.open && (
-            <div className={styles.ddUser} role="menu">
+          {userExit.present && (
+            <div
+              ref={userExitRef}
+              className={styles.ddUser}
+              role="menu"
+              data-leaving={userExit.leaving ? '' : undefined}
+            >
               <div className={styles.ddIdentity}>
                 <span className={styles.ddHeadFlush}>
                   Signed in

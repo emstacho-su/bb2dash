@@ -160,6 +160,15 @@
     transform: scale(0.97);
   }
 }
+/* Leaving: a closing panel stays for one exit (useExit.ts), shorter than it arrived, and takes no presses. */
+.dd[data-leaving] {
+  opacity: 0;
+  transform: scale(0.97);
+  pointer-events: none;
+  transition:
+    opacity var(--motion-exit) var(--ease-in),
+    transform var(--motion-exit) var(--ease-in);
+}
 
 .ddUser {
   composes: dd;
@@ -346,6 +355,15 @@
     opacity: 0;
     transform: scale(0.97);
   }
+}
+/* Leaving: a closing panel stays for one exit (useExit.ts), shorter than it arrived, and takes no presses. */
+.navMenu[data-leaving] {
+  opacity: 0;
+  transform: scale(0.97);
+  pointer-events: none;
+  transition:
+    opacity var(--motion-exit) var(--ease-in),
+    transform var(--motion-exit) var(--ease-in);
 }
 
 .navMenuLink {

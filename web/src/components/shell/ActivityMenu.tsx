@@ -23,11 +23,13 @@ import {
   writeActivitySeen,
   type ActivityEntry,
 } from '@/lib/queries.sync';
+import { useExit } from './useExit';
 import { usePopover } from './usePopover';
 import styles from './TopNav.module.css';
 
 export function ActivityMenu() {
   const [popover, anchor] = usePopover<HTMLSpanElement>();
+  const [exit, exitRef] = useExit(popover.open);
   const activity = useActivity();
   const entries = activity.data ?? [];
 
@@ -65,8 +67,13 @@ export function ActivityMenu() {
         {unseen > 0 && <span className={styles.badge}>{unseen}</span>}
       </button>
 
-      {popover.open && (
-        <div className={styles.ddActivity} role="menu">
+      {exit.present && (
+        <div
+          ref={exitRef}
+          className={styles.ddActivity}
+          role="menu"
+          data-leaving={exit.leaving ? '' : undefined}
+        >
           <div className={styles.ddHead}>Activity</div>
           {activity.isPending && <div className={styles.ddNote}>Loading…</div>}
           {activity.isError && (

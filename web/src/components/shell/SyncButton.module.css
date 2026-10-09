@@ -90,6 +90,15 @@
     transform: translateY(calc(var(--motion-shift) * -1));
   }
 }
+/* Leaving: a closing panel stays for one exit (useExit.ts), shorter than it arrived, and takes no presses. */
+.toast[data-leaving] {
+  opacity: 0;
+  transform: translateY(calc(var(--motion-shift) * -1));
+  pointer-events: none;
+  transition:
+    opacity var(--motion-exit) var(--ease-in),
+    transform var(--motion-exit) var(--ease-in);
+}
 
 .toastLine {
   font-size: var(--text-sm);

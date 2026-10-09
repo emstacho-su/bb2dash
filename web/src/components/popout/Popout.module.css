@@ -22,6 +22,12 @@
     opacity: 0;
   }
 }
+/* Leaving: the popout and its scrim go back the way they came, over --motion-exit-lg. It takes no presses. */
+.backdrop[data-leaving] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-exit-lg) var(--ease-in);
+}
 .panel {
   position: relative;
   width: min(var(--size-760), 100%);
@@ -43,6 +49,13 @@
     opacity: 0;
     transform: translateY(var(--motion-shift));
   }
+}
+.panel[data-leaving] {
+  opacity: 0;
+  transform: translateY(var(--motion-shift));
+  transition:
+    opacity var(--motion-exit-lg) var(--ease-in),
+    transform var(--motion-exit-lg) var(--ease-in);
 }
 .panel:focus-visible {
   outline: var(--size-focus) solid var(--color-accent);

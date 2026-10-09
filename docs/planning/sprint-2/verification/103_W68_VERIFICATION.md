@@ -374,3 +374,21 @@ three 240 px literals of the shell (account menu, search field, course select) b
 `CourseSidebar` `.head` and `SearchPanel` `.modeBtn, .modeBtnActive` take `--font-body` (weights `--font-weight-medium` and `--font-weight-semibold`), `SubmissionBlock` `.attemptNo` takes
 `--font-body` and keeps its weight. The popout's "seen" stamp loses `tokens.mono` (the sha keeps it). `git grep -c "font-family: var(--font-heading)" -- <the three>` prints nothing (exit 1);
 `grep -c "tokens.mono" web/src/components/popout/SubmissionBlock.tsx` prints 1; Weight check over shell and popout prints nothing. Tests: SubmissionBlock, CourseSidebar, audit, type-tokens: all passed.
+
+### Task 29, panels leave
+
+RED: `cd web && npx vitest run test/useExit.test.tsx` before `useExit.ts` existed failed to resolve the import (1 file failed, no tests). GREEN: 8 passed. The hook is
+`const [exit, exitRef] = useExit(open, token?)` (the ref apart from the state, as `usePopover` does since R-51: the React Compiler lint reported 6 `react-hooks/refs` errors when they travelled in one object).
+It reads the panel's computed `--motion-exit` (the popout: `--motion-exit-lg`) when `open` goes false; 0 or unreadable means removed in that render.
+Panels using it: the account menu, the phone Menu (`TopNav.tsx`), Bell, Activity, the search popover (`NavSearch.tsx`; search's field goes at once, a new expansion is a new field), the Sync toast
+(`SyncButton.tsx`, keeping the words the toast had), and the popout where `ItemPopout` hosts it (`PopoutShell` gained `leaving` and `onPanelNode`; it calls `onClose` in the same tick).
+The row's command (10 test files) passed: 11 files with the audit, 225 passed, exit 0, the pre-existing files unedited. Printed lines:
+
+```
+git grep -c "var(--motion-exit)" -- web/src/components/shell        Bell 2, NavSearch 2, SyncButton 2, TopNav 4   (four files)
+git grep -c "var(--motion-exit-lg)" -- web/src/components/popout    Popout.module.css 3                            (one file)
+git grep -c "var(--ease-in)" -- shell popout                        the same five files
+Exit tokens                                                          3 0
+Time check over the shell paths                                      (nothing, exit 1)
+```
+`cd web && npm test`: 168 files, 3309 passed; `npm run typecheck` 0; `npx eslint . --max-warnings 0` 0; Audit green (shell.json stays `{}`).

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import styles from './Popout.module.css';
 
 /**
@@ -14,18 +14,35 @@ import styles from './Popout.module.css';
  * refocused on unmount, so dismissing the panel puts the reader back on the row
  * they clicked instead of at the top of the document. Focus moves into the
  * panel on open and Tab is contained inside it while it is up.
+ *
+ * Leaving (task 29): a host that keeps the frame for one exit passes `leaving` (it is marked
+ * `data-leaving`, and takes no presses) and `onPanelNode`, so it can read the exit time from the
+ * panel. The frame never waits before it calls `onClose`: the host decides how long it stays.
  */
 export function PopoutShell({
   label,
   onClose,
+  leaving = false,
+  onPanelNode,
   children,
 }: {
   /** Accessible name for the dialog, e.g. "Assignment detail". */
   label: string;
   onClose: () => void;
+  /** The host has closed the popout and keeps it for its exit. */
+  leaving?: boolean;
+  /** Receives the panel element (and null when it goes), for `useExit`. */
+  onPanelNode?: (node: HTMLElement | null) => void;
   children: ReactNode;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const panelCallback = useCallback(
+    (node: HTMLDivElement | null) => {
+      panelRef.current = node;
+      onPanelNode?.(node);
+    },
+    [onPanelNode],
+  );
   const openerRef = useRef<Element | null>(null);
 
   // Remember the opener, move focus in, and hand focus back on the way out.
@@ -73,13 +90,15 @@ export function PopoutShell({
   return (
     <div
       className={styles.backdrop}
+      data-leaving={leaving ? '' : undefined}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
       <div
-        ref={panelRef}
+        ref={panelCallback}
         className={styles.panel}
+        data-leaving={leaving ? '' : undefined}
         role="dialog"
         aria-modal="true"
         aria-label={label}

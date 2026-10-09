@@ -30,6 +30,7 @@ import {
   type AnnouncementCard,
 } from '@/lib/queries.announcements';
 import { BellIcon } from './icons';
+import { useExit } from './useExit';
 import { usePopover } from './usePopover';
 import styles from './Bell.module.css';
 
@@ -38,6 +39,7 @@ const DROPDOWN_LIMIT = 8;
 
 export function Bell() {
   const [popover, anchor] = usePopover<HTMLSpanElement>();
+  const [exit, exitRef] = useExit(popover.open);
   const unread = useUnreadAnnouncements();
   const list = useQuery({ ...allAnnouncementsOptions(), enabled: popover.open });
 
@@ -74,8 +76,10 @@ export function Bell() {
         )}
       </button>
 
-      {popover.open && (
+      {exit.present && (
         <BellPanel
+          panelRef={exitRef}
+          leaving={exit.leaving}
           rows={rows}
           state={list.isPending ? 'loading' : list.isError ? list.error.message : 'ready'}
           onNavigate={popover.close}
@@ -87,17 +91,28 @@ export function Bell() {
 
 /** The pop-down itself: a state line, the rows, and "See all". */
 function BellPanel({
+  panelRef,
+  leaving,
   rows,
   state,
   onNavigate,
 }: {
+  panelRef: (node: HTMLElement | null) => void;
+  /** The panel has closed and stays for one exit. */
+  leaving: boolean;
   rows: AnnouncementCard[];
   /** 'loading' | 'ready' | an error message. */
   state: string;
   onNavigate: () => void;
 }) {
   return (
-    <div className={styles.panel} role="menu" aria-label="Announcements">
+    <div
+      ref={panelRef}
+      className={styles.panel}
+      role="menu"
+      aria-label="Announcements"
+      data-leaving={leaving ? '' : undefined}
+    >
       <div className={styles.head}>Announcements</div>
 
       {state === 'loading' && <div className={styles.note}>Loading…</div>}

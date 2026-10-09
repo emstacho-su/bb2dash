@@ -57,6 +57,7 @@ import {
   type SyncPhase,
 } from '@/lib/sync-request-phase';
 import { SyncIcon } from './icons';
+import { useExit } from './useExit';
 import styles from './SyncButton.module.css';
 
 /** How long a toast with nothing to act on stays up. */
@@ -99,6 +100,11 @@ export function SyncButton() {
   // The request this tab follows by id: the one it filed, or one it saw open.
   const [followedId, setFollowedId] = useState<number | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  // A toast that goes stays for one exit with the words it had (task 29).
+  const [toastExit, toastExitRef] = useExit(toast !== null);
+  const [lastToast, setLastToast] = useState<Toast | null>(null);
+  if (toast !== null && toast !== lastToast) setLastToast(toast);
+  const shownToast = toast ?? lastToast;
 
   const open = useOpenSyncRequest();
   // The tab follows any request it sees open, so the row's close is still read
@@ -197,7 +203,7 @@ export function SyncButton() {
         </span>
       </button>
 
-      {(alert !== null || toast !== null) && (
+      {(alert !== null || toastExit.present) && (
         <span className={styles.stack}>
           {alert !== null && (
             <span className={styles.toastError} role="alert">
@@ -205,21 +211,26 @@ export function SyncButton() {
             </span>
           )}
 
-          {toast && (
-            <span className={styles.toast} role="status">
-              {toast.kind === 'fallback' ? (
+          {shownToast && toastExit.present && (
+            <span
+              ref={toastExitRef}
+              className={styles.toast}
+              role="status"
+              data-leaving={toastExit.leaving ? '' : undefined}
+            >
+              {shownToast.kind === 'fallback' ? (
                 <>
                   <span className={styles.toastLine}>
-                    {toast.copied ? SYNC_COPY.fallbackCopied : SYNC_COPY.fallbackCopy}
+                    {shownToast.copied ? SYNC_COPY.fallbackCopied : SYNC_COPY.fallbackCopy}
                   </span>
-                  <code className={styles.command}>{toast.command}</code>
+                  <code className={styles.command}>{shownToast.command}</code>
                 </>
               ) : (
-                <span className={styles.toastLine}>{toast.text}</span>
+                <span className={styles.toastLine}>{shownToast.text}</span>
               )}
-              {toast.kind === 'close' && toast.prompt !== null && (
+              {shownToast.kind === 'close' && shownToast.prompt !== null && (
                 <>
-                  <span className={styles.prompt}>{toast.prompt}</span>
+                  <span className={styles.prompt}>{shownToast.prompt}</span>
                   <span className={styles.toastActions}>
                     <Link className={styles.toastLink} href="/inbox">
                       {SYNC_COPY.openInbox}

@@ -121,6 +121,19 @@
     transform: scale(0.97);
   }
 }
+/* Leaving: a closing panel stays for one exit (useExit.ts), shorter than it arrived, and takes no presses. */
+.popover[data-leaving] {
+  opacity: 0;
+  transform: scale(0.97);
+  pointer-events: none;
+  transition:
+    opacity var(--motion-exit) var(--ease-in),
+    transform var(--motion-exit) var(--ease-in);
+}
+/* Search has folded: the field is gone at once, only the results leave. */
+.field[data-leaving] {
+  display: none;
+}
 
 /* Narrower windows: a 560px panel needs that much room left of the icon, which
    the four icons right of it leave only above ~760px. Below that the panel
