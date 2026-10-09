@@ -54,6 +54,28 @@ and direction D's `fontsHref` asks Source Serif 4 for the optical-size range `8.
 the font check. W-67 found it and fixed it (2a29b5e): the same Google Fonts stylesheet is linked from the root
 layout. The PM confirmed the cause on a local build, where no built stylesheet named `fonts.googleapis.com`.
 
+## /code-review main high (integrated)
+
+Run 2026-10-09 by the PM, from inside `bb2dash-wt-22` on `feat/styling-22` at 0366290, over `main...HEAD`
+(200 files). The branch then held every worker task, tasks 26 and 27 among them, `origin/main` after the
+Phase 23 follow-ups, round 2 of the first review and the visual round but for three module rules (V-15). This
+run is also the review of tasks 26 and 27, which landed after the sweeps. The reviewer read the source changes
+under `desktop/src`, `scripts/`, `docker/walk/` and `web/src`, part of the CSS and little of the tests; it ran
+nothing. Ten findings; its findings go back to W-68 and W-67 as round 3.
+
+| # | Sev | Where | Finding | Owner | State |
+|---|---|---|---|---|---|
+| S-1 | HIGH | `web/src/components/shell/usePaneScroll.ts` | `cameBack` is set by every `popstate` and cleared only when the pathname changes, so a Back that changes only the query leaves it set and the next ordinary link restores an old offset | W-68 | sent |
+| S-2 | HIGH if true | `desktop/src/main/window.ts` | Showing the failed-load page from inside `did-fail-load` may make the failing load's own promise reject as an aborted load, which the deep-link path reads as benign. The reviewer could not confirm how Electron orders the two | W-67 | sent: observed in `chrome.spec.ts` first, fixed only if it is real |
+| S-3 | MEDIUM | `web/src/styles/tokens.module.css` | The rule that hides a drawn label while its trigger is open (V-14) also silences the Courses sidebar toggle whenever the rail is open | W-67 | sent |
+| S-4 | LOW | `scripts/walk-box.mjs` | An exit code of 137 from inside the box (an out-of-memory kill) is read as a signal to the script: the run is recorded as interrupted and a `--keep` box is removed | PM | declined by the PM, LOW: test harness only, W-75 has ended, and such a run counts as no verdict either way. Named under STATUS, Known issues |
+| S-5 | MEDIUM | `web/src/components/popout/ItemPopout.tsx` | A popout reopened during its exit reuses the same shell, so focus is not moved into the dialog and the remembered opener is stale | W-68 | sent |
+| S-6 | MEDIUM | `web/src/components/shell/usePaneScroll.ts` | A scroll event between a `popstate` and React's commit is saved under the destination's address | W-68 | sent |
+| S-7 | none | `desktop/src/main/index.ts` | The failed-load page's own `did-finish-load` runs the poller's after-load hook once more | PM | not a defect: brief 103 accepts exactly this (the handler stays as it is, because `sync-launcher.test.ts:187` fires it on a bare window) |
+| S-8 | LOW | `web/src/app/layout.tsx` | The fonts are linked by hand as a workaround, with the dead `@import` kept; `next/font` would self-host them | PM | declined: `next/font` is out by Stack's D-2; the link and the kept `@import` are recorded in DECISIONS (2026-10-09) and in R2-9 above |
+| S-9 | LOW | `SyncButton.tsx`, `ItemPopout.tsx`, `NavSearch.tsx` | Three callers of `useExit` each hand-roll "keep the last content while leaving" | W-68 | sent, as an option: only if it stays small |
+| S-10 | none | `project-state/` | The branch did not yet touch `STATUS.md` | PM | task 24, in the same PR |
+
 ## Visual round (the PM's pre-walk, before the second review)
 
 Not one of the three gates; recorded here because its findings went to the same workers as a numbered round.
