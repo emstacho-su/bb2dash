@@ -48,9 +48,10 @@ create function pg_temp.t187_item(p_ref text, p_note text default null) returns 
   returning id
 $$;
 
--- Answered again: a new answer carries a new resolved_at.
+-- Answered again: a new answer carries a new resolved_at, later than the transaction's now() (the
+-- failed requests of this unit finish at now(), so an older time would still read as held by 186's arm).
 create function pg_temp.t187_reanswer(p_id bigint) returns void language sql as $$
-  update attention_items set resolved_at = resolved_at + interval '1 minute' where id = p_id
+  update attention_items set resolved_at = greatest(resolved_at, now()) + interval '1 minute' where id = p_id
 $$;
 
 create function pg_temp.t187_archive(p_id bigint) returns void language sql as $$
