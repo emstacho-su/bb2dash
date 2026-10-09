@@ -30,11 +30,6 @@
   box-shadow: var(--shadow-lg);
 }
 
-.panel:focus-visible {
-  outline: var(--size-focus) solid var(--color-accent);
-  outline-offset: var(--size-focus-gap);
-}
-
 .heading {
   margin: 0;
   font-size: var(--text-lg);

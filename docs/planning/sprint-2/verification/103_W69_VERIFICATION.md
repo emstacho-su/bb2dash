@@ -561,3 +561,13 @@ Inbox showing its empty line under a failed read. Also V-7 above.
 Loaded for V-6 and V-8 (V-7 changed nothing). Files read: `MASTER.md`, `pages/inbox.md`, `pages/planner.md`, `pages/home.md`. Searches: none run; the Master's
 Buttons and States sections answer the pill and the switched-off look. Advice set aside: the skill's "touch target 44px" for the apply button (the brief's
 sizes stand); the Master's line that the apply button keeps its plain pointer (overtaken by the PM's V-6 ruling).
+
+### V-15: the planner's two dialog panels draw no ring of their own
+
+PM ruling: a dialog container that takes focus by script draws no ring; the first Tab inside it shows the ring on a real control. After merging W-67's visual
+round (the global ring rule is `:focus-visible:not(:where([role='dialog'], [role='alertdialog']))`), the two `.panel:focus-visible` blocks of
+`PlannerItemPopover.module.css` and `PlannerSeriesScopeDialog.module.css` are deleted, and no `outline: none` replaces them. The search over W-69's folders
+(`git grep -n "focus-visible"`) found no other container focused by script: the only `role="dialog"` containers there are those two panels
+(`tabIndex={-1}` in `PlannerItemPopover.tsx:235` and `PlannerSeriesScopeDialog.tsx:129`); every other hit is a control a reader tabs to and keeps its rule, `InboxCard.module.css`
+`.card` included. No test pinned a deleted rule. Ring check: `36 0 0` (it was `14 0 0` over W-69's stylesheets alone; this is the whole tree). `npm test`, `npm run typecheck`,
+`npx eslint . --max-warnings 0` exit 0; the audit exit 0.
