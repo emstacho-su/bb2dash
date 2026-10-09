@@ -136,9 +136,11 @@ test.describe('the chrome of a window that loads', () => {
 
 test.describe('a shell that cannot reach the app', () => {
   let app: ElectronApplication;
+  let deadOrigin = '';
 
   test.beforeAll(async () => {
-    app = await launchShell({ fixtureUrl: await deadAddress(), userDataDir: makeUserDataDir() });
+    deadOrigin = await deadAddress();
+    app = await launchShell({ fixtureUrl: deadOrigin, userDataDir: makeUserDataDir() });
   });
 
   test.afterAll(async () => {
@@ -151,5 +153,39 @@ test.describe('a shell that cannot reach the app', () => {
     await expect(retry).toBeVisible({ timeout: 20_000 });
     await expect(retry).toHaveAttribute('href', /^http:\/\/127\.0\.0\.1:\d+$/);
     expect((await recorded(app)).some((event) => event.kind === 'load-failed')).toBe(true);
+  });
+
+  test('the first load keeps its real error: the promise rejects with a connection error, never -3 (S-2)', async () => {
+    // The failed-load page is shown from did-fail-load. If starting that navigation superseded the
+    // failing one, the first load's promise would reject with ERR_ABORTED (-3), which deeplink.ts
+    // treats as benign, and an offline deep link would be reported as a success.
+    await expect
+      .poll(async () => (await recorded(app)).some((event) => event.kind === 'load-rejected'), { timeout: 20_000 })
+      .toBe(true);
+    const events = await recorded(app);
+    const rejected = events.filter((event) => event.kind === 'load-rejected').map((event) => event.payload as { message: string });
+    console.log('S-2: the first load rejected with ' + JSON.stringify(rejected[0]?.message));
+    expect(rejected.length).toBeGreaterThan(0);
+    for (const { message } of rejected) {
+      expect(message).toMatch(/ERR_CONNECTION_REFUSED|[(]-102[)]|ERR_NAME_NOT_RESOLVED|[(]-105[)]/);
+      expect(message).not.toMatch(/ERR_ABORTED|[(]-3[)]/);
+    }
+  });
+
+  test('a route loaded over the live failed-load page also rejects with the real error, not -3 (S-2, the deep-link path)', async () => {
+    const message = await app.evaluate(async ({ BrowserWindow }, target) => {
+      const contents = BrowserWindow.getAllWindows()[0]?.webContents;
+      try {
+        await contents?.loadURL(target);
+        return 'resolved';
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+    }, `${deadOrigin}/planner`);
+    console.log('S-2: a route over the failed-load page rejected with ' + JSON.stringify(message));
+    expect(message).toMatch(/ERR_CONNECTION_REFUSED|[(]-102[)]/);
+    expect(message).not.toMatch(/ERR_ABORTED|[(]-3[)]/);
+    const { isBenignLoadFailure } = await import('../../src/main/deeplink');
+    expect(isBenignLoadFailure(new Error(message))).toBe(false);
   });
 });

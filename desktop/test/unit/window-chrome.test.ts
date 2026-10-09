@@ -91,6 +91,9 @@ async function settle(): Promise<void> {
   for (let i = 0; i < 4; i += 1) await Promise.resolve();
 }
 
+/** The next turn of the event loop: the failed-load page is started there, after loading stopped (S-2). */
+const nextTurn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
 beforeEach(() => {
   fake.constructed.length = 0;
   fake.contentHandlers = {};
@@ -158,6 +161,14 @@ describe('the failed-load page', () => {
     await settle();
     fake.loads.length = 0;
     fire('did-fail-load', {}, -102, 'ERR_CONNECTION_REFUSED', APP_URL, true);
+    // Not inside the event: that would supersede the load that just failed (S-2).
+    expect(fake.loads).toEqual([]);
+    expect(needsReload(window as never)).toBe(true);
+    // Not before loading has stopped: the failing load's promise settles there (S-2).
+    await nextTurn();
+    expect(fake.loads).toEqual([]);
+    fire('did-stop-loading', {});
+    await nextTurn();
     expect(fake.loads).toHaveLength(1);
     expect(fake.loads[0]?.startsWith('data:text/html')).toBe(true);
     expect(needsReload(window as never)).toBe(true);
@@ -169,6 +180,8 @@ describe('the failed-load page', () => {
     fake.loads.length = 0;
     fire('did-fail-load', {}, -3, 'ERR_ABORTED', APP_URL, true);
     fire('did-fail-load', {}, -105, 'ERR_NAME_NOT_RESOLVED', 'http://frame.test/', false);
+    fire('did-stop-loading', {});
+    await nextTurn();
     expect(fake.loads).toEqual([]);
   });
 
@@ -178,6 +191,12 @@ describe('the failed-load page', () => {
     fake.loads.length = 0;
     fire('did-fail-load', {}, -102, 'x', APP_URL, true);
     fire('did-fail-load', {}, -102, 'x', APP_URL, true);
+    fire('did-stop-loading', {});
+    await nextTurn();
+    expect(fake.loads).toHaveLength(1);
+    fire('did-fail-load', {}, -102, 'x', APP_URL, true);
+    fire('did-stop-loading', {});
+    await nextTurn();
     expect(fake.loads).toHaveLength(1);
   });
 
@@ -185,6 +204,12 @@ describe('the failed-load page', () => {
     const window = createWindow(APP_URL);
     await settle();
     fire('did-fail-load', {}, -102, 'x', APP_URL, true);
+    // A failed load also finishes, naming the address that failed: that is not the app.
+    fake.url = APP_URL;
+    fire('did-finish-load');
+    expect(needsReload(window as never)).toBe(true);
+    fire('did-stop-loading', {});
+    await nextTurn();
     expect(needsReload(window as never)).toBe(true);
     fake.url = APP_URL;
     fire('did-finish-load');

@@ -63,21 +63,38 @@ describe('R2-notice: the compose line is not quoted in the tokens module', () =>
   });
 });
 
-describe('V-14: no drawn label behind its own open panel', () => {
-  const hover = tokens.indexOf(".tip[data-tip]:hover::after");
-  const focus = tokens.indexOf(".tip[data-tip]:focus-visible::after");
-  const open = tokens.indexOf(".tip[data-tip][aria-expanded='true']::after");
+describe('V-14 and S-3: no drawn label behind its own open panel, but the sidebar toggle keeps its label', () => {
+  const SELECTOR = ".tip[data-tip][aria-expanded='true']:not([aria-controls='course-sidebar'])::after";
+  const hover = tokens.indexOf('.tip[data-tip]:hover::after');
+  const focus = tokens.indexOf('.tip[data-tip]:focus-visible::after');
+  const open = tokens.indexOf(SELECTOR);
 
   it('has a rule for a trigger that says it is open, and it shows no label', () => {
     expect(open).toBeGreaterThan(0);
-    const rule = /\.tip\[data-tip\]\[aria-expanded='true'\]::after\s*\{([^}]*)\}/.exec(tokens)?.[1] ?? '';
-    expect(rule.trim()).toBe('display: none;');
+    const start = tokens.indexOf('{', open);
+    expect(tokens.slice(start + 1, tokens.indexOf('}', start)).trim()).toBe('display: none;');
   });
 
-  it('comes after the hover and the focus rules, which weigh the same, so it wins on both', () => {
+  it('comes after the hover and the focus rules, which it outweighs, so it wins on both', () => {
     expect(hover).toBeGreaterThan(0);
     expect(focus).toBeGreaterThan(0);
     expect(open).toBeGreaterThan(hover);
     expect(open).toBeGreaterThan(focus);
+  });
+
+  it('leaves out the Courses sidebar toggle: the one trigger with aria-controls="course-sidebar"', async () => {
+    const { SIDEBAR_ID } = await import('@/lib/sidebar-preference');
+    expect(SIDEBAR_ID).toBe('course-sidebar');
+    expect(SELECTOR).toContain(`:not([aria-controls='${SIDEBAR_ID}'])`);
+    const topNav = read('src', 'components', 'shell', 'TopNav.tsx');
+    expect(topNav).toContain('aria-controls={SIDEBAR_ID}');
+    expect(topNav).toMatch(/aria-controls=\{SIDEBAR_ID\}[\s\S]{0,120}data-tip="Courses sidebar"/);
+  });
+
+  it('no other rule hides the label of that toggle', () => {
+    const hiding = [...tokens.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*display:\s*none[^{}]*)\}/g)]
+      .map((match) => match[1]?.trim() ?? '')
+      .filter((selector) => selector.includes('.tip'));
+    expect(hiding).toEqual([SELECTOR]);
   });
 });
