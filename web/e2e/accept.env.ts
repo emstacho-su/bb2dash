@@ -229,6 +229,23 @@ export function requireCarried(carry: Carry, step: string, field: string, kind: 
   return value;
 }
 
+const isStepId = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+
+/**
+ * One id a step left, looked for in three places in order: what the running
+ * test holds, this stage's facts file, the carry-over of an earlier stage.
+ * What the test holds comes first because a step's facts file is written only
+ * when its test ends, so the step that makes an id cannot read it back from
+ * the folder. Throws, naming the step and the field, when none holds it.
+ */
+export function stepId(held: Readonly<Facts>, outDir: string | null, inDir: string | undefined, step: string, field: string): number {
+  const mine = held[field];
+  if (isStepId(mine)) return mine;
+  const here = outDir === null ? null : readFacts(outDir, step)?.[field];
+  if (isStepId(here)) return here;
+  return requireCarried(readCarry(inDir), step, field, 'integer');
+}
+
 /* ---------------------------------------------------------------------------
  * A stage's time limit
  * ------------------------------------------------------------------------ */

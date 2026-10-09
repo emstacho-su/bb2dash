@@ -37,7 +37,7 @@
 
 import { randomInt } from 'node:crypto';
 import { expect, test, type BrowserContext, type Locator, type Page, type Request } from '@playwright/test';
-import { acceptSettings, readCarry, readFacts, requireCarried } from './accept.env';
+import { acceptSettings, stepId, type Facts } from './accept.env';
 import { acceptStep, registerAcceptHooks, type Recorder } from './accept.lib';
 import { CHECKOUT_ROOT, MINUTE_MS, openSettled, utcNow } from './walk21.lib';
 
@@ -133,12 +133,22 @@ const TAG_RANDOM_DIGITS = 1000;
 
 const FIRST_STEP = '1';
 
-/** One number from step 1's facts: of this stage when step 1 ran here, else of the carry-over. */
+/**
+ * What step 1 has made so far, while it is the test that runs. Its facts file is written only when
+ * the test ends, and step 1 finds its own cards by the run tag before that.
+ */
+let stepOneSoFar: Facts = {};
+
+/** Notes one of step 1's ids in its facts and keeps it for the rest of the step. */
+function noteStepOne(rec: Recorder, ids: Readonly<Record<string, number>>): void {
+  rec.note(ids);
+  stepOneSoFar = { ...stepOneSoFar, ...ids };
+}
+
+/** One number from step 1's facts: of the running step 1, of this stage when step 1 ran here, else of the carry-over. */
 function fromStepOne(field: string): number {
   const settings = acceptSettings(process.env, CHECKOUT_ROOT);
-  const here = settings === null ? null : readFacts(settings.outDir, FIRST_STEP)?.[field];
-  if (typeof here === 'number' && Number.isSafeInteger(here) && here > 0) return here;
-  return requireCarried(readCarry(process.env['ACCEPT_IN']), FIRST_STEP, field, 'integer');
+  return stepId(stepOneSoFar, settings?.outDir ?? null, process.env['ACCEPT_IN'], FIRST_STEP, field);
 }
 
 const runTag = (): number => fromStepOne('run_tag_id');
@@ -318,7 +328,7 @@ async function raiseQuestion(page: Page, session: Session, tag: number, label: L
 // Step 1: raise the four questions, then confirm the first and dismiss the second in the Inbox.
 acceptStep('1 raise questions', { shots: ['raised', 'answered'] }, async ({ page, context }, rec) => {
   const tag = Number(`${Math.floor(Date.now() / 1000)}${String(randomInt(TAG_RANDOM_DIGITS)).padStart(3, '0')}`);
-  rec.note({ run_tag_id: tag });
+  noteStepOne(rec, { run_tag_id: tag });
 
   // A read the page makes as the signed-in owner: its bearer token is not the public key itself.
   const firstRead = page.waitForRequest(async (request) => {
@@ -332,7 +342,7 @@ acceptStep('1 raise questions', { shots: ['raised', 'answered'] }, async ({ page
   const items: Record<Label, number> = { confirm: 0, dismiss: 0, note: 0, offline: 0 };
   for (const label of ['confirm', 'dismiss', 'note', 'offline'] as const) {
     items[label] = await raiseQuestion(page, session, tag, label);
-    rec.note({ [`${label}_item_id`]: items[label] });
+    noteStepOne(rec, { [`${label}_item_id`]: items[label] });
   }
   await allowWrites(context, [{ method: 'PATCH', table: 'attention_items', items: [items.confirm, items.dismiss] }]);
 
