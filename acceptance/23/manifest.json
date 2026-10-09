@@ -1,0 +1,228 @@
+{
+  "schema": 1,
+  "phase": "23",
+  "base_url": "https://web-xi-ten-uy9xk6c6p0.vercel.app",
+  "stages": [
+    { "id": "prepare", "kind": "prepare" },
+    {
+      "id": "ready",
+      "kind": "host",
+      "actions": [
+        { "action": "db.proof", "with": { "name": "apply-quiet" } },
+        { "action": "apply.doctorRow" },
+        { "action": "exports.doctorRow" }
+      ]
+    },
+    {
+      "id": "walk",
+      "kind": "sandbox",
+      "tests": ["1 raise questions", "2 press sync", "3 watch apply", "4 archived", "6 note and apply"]
+    },
+    {
+      "id": "walk-proofs",
+      "kind": "host",
+      "actions": [{ "action": "db.proof", "with": { "name": "transform-answers", "since": "carry:run.started_at" } }]
+    },
+    {
+      "id": "stop",
+      "kind": "host",
+      "actions": [{ "action": "db.proof", "with": { "name": "apply-idle" } }, { "action": "apply.stop" }]
+    },
+    { "id": "offline", "kind": "sandbox", "tests": ["7a offline press"] },
+    { "id": "start", "kind": "host", "actions": [{ "action": "apply.startNoBuild" }] },
+    { "id": "back", "kind": "sandbox", "tests": ["7b taken after"] },
+    {
+      "id": "file",
+      "kind": "host",
+      "actions": [
+        { "action": "exports.runNow" },
+        {
+          "action": "db.proof",
+          "with": {
+            "name": "test-decisions-skipped",
+            "confirm_item": "carry:1.confirm_item_id",
+            "dismiss_item": "carry:1.dismiss_item_id",
+            "note_item": "carry:1.note_item_id",
+            "offline_item": "carry:1.offline_item_id",
+            "since": "carry:run.started_at"
+          }
+        },
+        { "action": "db.proof", "with": { "name": "decisions-filed" } }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "0",
+      "kind": "host",
+      "text": "Nothing is open: no sync and no Inbox apply request waits or runs, no answer of Stack's waits (held or not), and no sync-login-required item is open. Otherwise the run is blocked before anything is raised.",
+      "stage": "ready",
+      "proofs": [{ "name": "apply-quiet" }]
+    },
+    {
+      "id": "8",
+      "kind": "host",
+      "text": "The doctor's apply row reads running, healthy with the profile on, and the exports row is green.",
+      "stage": "ready",
+      "actions": ["apply.doctorRow", "exports.doctorRow"]
+    },
+    {
+      "id": "1",
+      "kind": "auto",
+      "text": "Raises four test questions of the run's own (the function first closes any an earlier run left); in the Inbox confirms the first and dismisses the second.",
+      "stage": "walk",
+      "test": "1 raise questions",
+      "evidence": ["1-raised.png", "1-answered.png", "1.json"],
+      "proofs": [
+        {
+          "name": "questions-raised",
+          "with": {
+            "confirm_item": "carry:1.confirm_item_id",
+            "dismiss_item": "carry:1.dismiss_item_id",
+            "note_item": "carry:1.note_item_id",
+            "offline_item": "carry:1.offline_item_id",
+            "since": "carry:run.started_at"
+          }
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "kind": "auto",
+      "text": "Presses Sync in the top bar; the sync container takes the request.",
+      "stage": "walk",
+      "test": "2 press sync",
+      "evidence": ["2-pressed.png", "2.json"],
+      "proofs": [{ "name": "sync-taken", "with": { "request": "carry:2.request_id", "since": "carry:run.started_at" } }]
+    },
+    {
+      "id": "3",
+      "kind": "auto",
+      "text": "Watches the Inbox until the apply request the sync filed has closed: a result line beside Apply answers, and nothing was pasted. One second run is allowed when the sync was still running after nine minutes.",
+      "stage": "walk",
+      "test": "3 watch apply",
+      "evidence": ["3-watching.png", "3-done.png", "3.json"],
+      "proofs": [
+        {
+          "name": "recorded-after-sync",
+          "with": {
+            "sync_request": "carry:2.request_id",
+            "first_item": "carry:1.confirm_item_id",
+            "second_item": "carry:1.dismiss_item_id",
+            "since": "carry:run.started_at"
+          }
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "kind": "auto",
+      "text": "Both answered questions are under Archived and gone from Answered, not applied.",
+      "stage": "walk",
+      "test": "4 archived",
+      "evidence": ["4-answered.png", "4-archived.png", "4.json"],
+      "proofs": [
+        {
+          "name": "nothing-written",
+          "with": { "first_item": "carry:1.confirm_item_id", "second_item": "carry:1.dismiss_item_id", "since": "carry:run.started_at" }
+        }
+      ]
+    },
+    {
+      "id": "6",
+      "kind": "auto",
+      "text": "Confirms the third question with a reason and presses Apply answers: the request runs by itself, through one Claude run, and closes done.",
+      "stage": "walk",
+      "test": "6 note and apply",
+      "evidence": ["6-saved.png", "6-done.png", "6.json"],
+      "proofs": [
+        {
+          "name": "applied-from-button",
+          "with": { "request": "carry:6.request_id", "item": "carry:1.note_item_id", "after": "carry:2.request_id", "since": "carry:run.started_at" }
+        }
+      ]
+    },
+    {
+      "id": "9",
+      "kind": "host",
+      "text": "After this run's fold: no session answer whose pick is on its file lacks the stamp, and no supersede question is open beside an archived answer. A count of zero is written not exercised, never passed.",
+      "stage": "walk-proofs",
+      "proofs": [{ "name": "transform-answers", "with": { "since": "carry:run.started_at" } }]
+    },
+    {
+      "id": "9-supersede",
+      "kind": "waived",
+      "text": "The supersede half of step 9: no supersede question exists on prod, so the live check passes on zero rows and says nothing about migration 188's first function.",
+      "stands_on": "db/tests/phase23_188_archived_answers.sql"
+    },
+    {
+      "id": "7a",
+      "kind": "auto",
+      "text": "With apply stopped by the host: dismisses the fourth question and presses Apply answers; after the 75 second grace the button reads waiting on the worker and a second press shows the paste command.",
+      "stage": "offline",
+      "test": "7a offline press",
+      "evidence": ["7a-queued.png", "7a-waiting.png", "7a-command.png", "7a.json"],
+      "proofs": [
+        {
+          "name": "request-waiting",
+          "with": { "request": "carry:7a.request_id", "item": "carry:1.offline_item_id", "since": "carry:run.started_at" }
+        }
+      ]
+    },
+    {
+      "id": "7b",
+      "kind": "auto",
+      "text": "With apply started again: the waiting request is taken and closes, and the fourth question is under Archived.",
+      "stage": "back",
+      "test": "7b taken after",
+      "evidence": ["7b-archived.png", "7b.json"],
+      "proofs": [
+        {
+          "name": "request-taken-after",
+          "with": { "request": "carry:7a.request_id", "item": "carry:1.offline_item_id", "since": "carry:run.started_at", "min_wait_s": 75 }
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "kind": "host",
+      "text": "The scheduled export is started now and ends with exit 0; the run's four test decisions are marked skipped with no note; no decision is left unfiled; item 3782 is skipped.",
+      "stage": "file",
+      "actions": ["exports.runNow"],
+      "proofs": [
+        {
+          "name": "test-decisions-skipped",
+          "with": {
+            "confirm_item": "carry:1.confirm_item_id",
+            "dismiss_item": "carry:1.dismiss_item_id",
+            "note_item": "carry:1.note_item_id",
+            "offline_item": "carry:1.offline_item_id",
+            "since": "carry:run.started_at"
+          }
+        },
+        { "name": "decisions-filed" }
+      ]
+    },
+    {
+      "id": "1-real",
+      "kind": "human",
+      "text": "One answer of Stack's own that needs a change is applied after a sync, and the row reads right in the app. Stack's to judge: the run does not check it."
+    },
+    {
+      "id": "5-note",
+      "kind": "human",
+      "text": "One decision note in the vault reads right to Stack. His to read: the run does not check it."
+    },
+    {
+      "id": "5-log",
+      "kind": "human",
+      "text": "The day files and their pull request: just file-decisions, when Stack chooses. The scheduled export files notes only."
+    },
+    {
+      "id": "10-held",
+      "kind": "waived",
+      "text": "Item 1, the held answer: one cannot be staged on the live site without making a real run fail. It stands on the unit and the worker's tests.",
+      "stands_on": "db/tests/phase23_187_held_answers.sql"
+    }
+  ]
+}
