@@ -99,7 +99,7 @@ if ($node.Source.Contains('"') -or $node.Source.Contains('`')) {
     Fail 'The path of node.exe holds a double quote or a backtick.' 'Install Node under a path that holds neither.'
 }
 
-$powershell = Join-Path $env:SystemRoot 'System32WindowsPowerShell1.0powershell.exe'
+$powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 if (-not (Test-Path -LiteralPath $powershell -PathType Leaf)) {
     Fail "powershell.exe was not found at $powershell." 'This script targets Windows PowerShell 5.1.'
 }
