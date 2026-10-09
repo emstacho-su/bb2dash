@@ -28,7 +28,6 @@
   /* Pin the content to the content edge so collapsing clips the outer edge —
      it reads as a slide rather than a squash, on either side. */
   justify-content: flex-end;
-  transition: width var(--motion-enter) var(--ease-out);
 }
 
 .rail:focus-visible {
@@ -155,12 +154,24 @@
     position: fixed;
     inset: var(--nav-height) 0 0;
     z-index: 25;
+    /* The closed rail waits outside the wrapper's edge; the wrapper clips it. */
+    overflow: hidden;
   }
 
+  /* The drawer slides by transform, never by width (task 30). */
   .rail {
     position: static;
     height: auto;
     box-shadow: var(--shadow-md);
+    transition: transform var(--motion-enter-lg) var(--ease-out);
+  }
+
+  /* Closed: the rail keeps its width and sits one width off the side --sidebar-side names.
+     The sign is written for today's side (row-reverse, the right); shell-motion.css.test.ts
+     fails when the token moves and this sign does not. */
+  :global(html[data-sidebar='closed']) .rail {
+    width: var(--sidebar-width);
+    transform: translateX(100%);
   }
 
   .scrim {

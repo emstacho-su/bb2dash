@@ -65,11 +65,11 @@
   outline-color: transparent;
 }
 
+/* The field fades in and moves in by one panel distance from the side it grows towards. */
 @keyframes nav-search-grow {
   from {
-    width: 0;
-    min-width: 0;
     opacity: 0;
+    transform: translateX(var(--motion-shift));
   }
 }
 
