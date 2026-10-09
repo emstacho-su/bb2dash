@@ -26,6 +26,7 @@
  * `storage_path` and must not claim there is no source link.
  */
 
+import { MARK_CHAR, Mark, MarkedLabel } from '@/components/shell/icons';
 import { OpenStoredButton } from './OpenStoredButton';
 import {
   fileHonesty,
@@ -117,13 +118,13 @@ export function FileOpenAction({
             target="_blank"
             rel="noreferrer"
           >
-            {action ?? 'Open ↗'}
+            <MarkedLabel label={action ?? `Open ${MARK_CHAR.arrowUpRight}`} />
           </a>
         </span>
       ) : blackboardUrl ? (
         <span className={styles.action}>
           <a className={tokens.btnSecondary} href={blackboardUrl} target="_blank" rel="noreferrer">
-            In Blackboard ↗
+            In Blackboard <Mark name="arrowUpRight" />
           </a>
         </span>
       ) : (

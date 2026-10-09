@@ -22,7 +22,7 @@ import { itemQuery } from '@/lib/queries.popout';
 import type { ProgressStatus } from '@/lib/queries';
 import { FileOpenAction } from '@/components/materials/FileOpenAction';
 import { AttendanceMarker, AttendanceRule } from '@/components/popout/SessionPopout';
-import { BellIcon } from '@/components/shell/icons';
+import { BellIcon, Mark } from '@/components/shell/icons';
 import { StatusSelect } from '@/components/tracker/StatusSelect';
 import type { TimelineFile } from './timeline-model';
 import styles from './CourseTimeline.module.css';
@@ -132,7 +132,7 @@ export function SessionPanel({
         {tentative && <span className={styles.tentativeTag}>tentative — date/detail inferred</span>}
         <AttendanceMarker session={session} className={styles.attendanceTag} />
         <button type="button" className={styles.panelClose} onClick={onClose} aria-label="Close">
-          ✕
+          <Mark name="close" />
         </button>
       </div>
       <h2 className={styles.panelTitle}>{session.topic ?? 'Untitled session'}</h2>

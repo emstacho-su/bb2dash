@@ -16,6 +16,7 @@
  * card note.
  */
 
+import { Mark } from '@/components/shell/icons';
 import { useMemo, useState } from 'react';
 import {
   CARD_NOTE_MAX_LENGTH,
@@ -345,7 +346,7 @@ export function CourseInfo({ courseId }: { courseId: string }) {
       <Section title="Blackboard">
         {course.bb_url ? (
           <a className={tokens.btnSecondary} href={course.bb_url} target="_blank" rel="noreferrer">
-            Open this course in Blackboard ↗
+            Open this course in Blackboard <Mark name="arrowUpRight" />
           </a>
         ) : (
           <p className={styles.state}>No Blackboard URL is recorded for this course.</p>

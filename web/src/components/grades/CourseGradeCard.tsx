@@ -19,6 +19,7 @@
  * figure itself renders `—`.
  */
 
+import { MARK_CHAR, Mark } from '@/components/shell/icons';
 import { useId } from 'react';
 import Link from 'next/link';
 import {
@@ -133,7 +134,7 @@ export function CourseGradeCard({
               onClick={fold.onToggle}
             >
               <span className={styles.caret} aria-hidden="true">
-                {fold.collapsed ? '▸' : '▾'}
+                {fold.collapsed ? <Mark name="caretRight" /> : <Mark name="caretDown" />}
               </span>
               <span>{title}</span>
               {subtitle && <span className={styles.subtitle}>{subtitle}</span>}
@@ -147,7 +148,7 @@ export function CourseGradeCard({
         )}
         {href && (
           <Link className={styles.openLink} href={href}>
-            Open {title} →
+            Open {title} <Mark name="caretRight" char={MARK_CHAR.arrowRight} />
           </Link>
         )}
         {headerRight}

@@ -23,6 +23,7 @@
  * keeps only Blackboard's folder tree, and `?view=timeline` redirects there.
  */
 
+import { Mark } from '@/components/shell/icons';
 import { useMemo, useState } from 'react';
 import {
   buildContentTree,
@@ -132,7 +133,7 @@ export function ClassworkNode({ node, depth = 0 }: { node: ContentNode; depth?: 
           {state && <span className={styles.stateChip}>{state}</span>}
           {node.url && (
             <a className={styles.bbLink} href={node.url} target="_blank" rel="noreferrer">
-              Blackboard ↗
+              Blackboard <Mark name="arrowUpRight" />
             </a>
           )}
           {/* R-18: a node Blackboard links to an assignment can take a staged

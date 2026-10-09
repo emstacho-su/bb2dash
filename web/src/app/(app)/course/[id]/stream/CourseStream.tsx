@@ -23,6 +23,7 @@
  * the due date it belongs to.
  */
 
+import { MARK_CHAR, MarkedLabel } from '@/components/shell/icons';
 import { useMemo } from 'react';
 import {
   courseToday,
@@ -137,8 +138,8 @@ export interface ContentPostLink {
 /** The schemes a link item's own url may carry. */
 const EXTERNAL_PROTOCOLS: ReadonlySet<string> = new Set(['https:', 'http:']);
 
-const OPEN_LINK_LABEL = 'Open ↗';
-const OPEN_IN_BLACKBOARD_LABEL = 'Open in Blackboard ↗';
+const OPEN_LINK_LABEL = `Open ${MARK_CHAR.arrowUpRight}`;
+const OPEN_IN_BLACKBOARD_LABEL = `Open in Blackboard ${MARK_CHAR.arrowUpRight}`;
 
 /** The item kinds that open in Blackboard rather than at a url of their own. */
 const OPENS_IN_BLACKBOARD: ReadonlySet<string> = new Set(['lti', 'document']);
@@ -207,7 +208,7 @@ function MaterialPost({ row, course }: { row: CourseStreamRow; course: CourseBla
       )}
       {link && (
         <a className={tokens.btnGhost} href={link.href} target="_blank" rel="noopener noreferrer">
-          {link.label}
+          <MarkedLabel label={link.label} />
         </a>
       )}
     </li>

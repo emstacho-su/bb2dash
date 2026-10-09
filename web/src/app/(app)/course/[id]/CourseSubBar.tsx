@@ -1,5 +1,6 @@
 'use client';
 
+import { Mark } from '@/components/shell/icons';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -105,7 +106,7 @@ export function CourseSubBar({ courseId }: { courseId: string }) {
 
             {course.bb_url && (
               <a href={course.bb_url} target="_blank" rel="noreferrer">
-                Blackboard ↗
+                Blackboard <Mark name="arrowUpRight" />
               </a>
             )}
           </>

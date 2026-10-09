@@ -21,6 +21,7 @@
  * lecture shell), so both shells' columns feed one number.
  */
 
+import { MARK_CHAR, Mark } from '@/components/shell/icons';
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { useCourseDisplay } from '@/lib/queries.course';
@@ -73,7 +74,7 @@ export function CourseGrades({ courseId }: { courseId: string }) {
         row={row}
         headerRight={
           <Link className={tokens.btnGhost} href="/grades">
-            All courses →
+            All courses <Mark name="caretRight" char={MARK_CHAR.arrowRight} />
           </Link>
         }
       >
