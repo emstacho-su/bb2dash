@@ -75,7 +75,8 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   `assignments`, `assignment_progress`, `course_staff` and `courses.group_notes`, each write logged against
   an answered Inbox item (181). The decision is stored on the archived row first; the vault note is
   rendered from it by the scheduled export (`scripts/exports-run.mjs --notes-only` under the Windows task
-  `Bb2dash-Exports`, registered at the follow-ups' cut-over by `scripts/register-exports.ps1`; a failed
+  `Bb2dash-Exports`, registered at the follow-ups' cut-over by `scripts/register-exports.ps1`; a run that
+  finds no network waits and tries again, six tries in under eight minutes, then ends `no_network`; a failed
   export shows on `just doctor` only), and `docs/inbox-decisions/<date>.md` with its pull request by
   `scripts/inbox-decisions-pr.mjs` on the host, by hand (`just file-decisions`). A decision whose item has
   a logged write is never skipped.

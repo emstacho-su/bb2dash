@@ -1642,6 +1642,17 @@ Remaining advisor items: ~~7 pre-existing mutable `search_path` functions (`set_
 
 ## Known issues / operational notes
 
+* **The scheduled export tries again when there is no network yet (2026-10-09, on Stack's word; branch
+  `fix/exports-network-retry`).** Twice on 2026-10-09 the task `Bb2dash-Exports` ran right after a logon
+  or a wake, before the network was up, and failed with "the request did not reach Supabase: fetch
+  failed" (11:56Z and 17:24Z); `just doctor` showed a problem until someone started the task by hand.
+  Now the exporter exits **3** when no request of its run was answered (nothing read, nothing written),
+  and `scripts/exports-run.mjs` waits and starts it again: after 15 s, 30 s, 1, 2 and 4 minutes, six
+  tries in under eight minutes, inside the task's 15-minute limit. A run that never gets through is
+  exit 1 with the reason `no_network` in `state.json` (a new value of `reason`; the keys are unchanged).
+  Every other failure is still one start. **Live only once the shared checkout on `main` holds it**: the
+  task runs `scripts/exports-run.mjs` from there, so nothing is re-registered. bb2dash-stack's doctor
+  prints the new reason word from its own PR; without it the row reads "exit 1" with no word.
 * **The SQL units that failed on `main` were audited on 2026-10-09**
   (`docs/planning/sprint-2/verification/115_SQL_UNITS_AUDIT_2026-10-09.md`; eleven of 81 failed). Six were the
   units' own and are corrected: `phase18_123_file_sessions` (an archived answer settles a session question, as
