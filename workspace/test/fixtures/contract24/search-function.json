@@ -1,0 +1,69 @@
+{
+  "body": {
+    "q": "membrane transport",
+    "kinds": [
+      "material",
+      "upload",
+      "memory"
+    ],
+    "courses": [
+      "BIO.110",
+      "BIO.110.lab"
+    ],
+    "limit": 10,
+    "min_similarity": 0.78
+  },
+  "answer": {
+    "q": "membrane transport",
+    "model": "gte-small",
+    "min_similarity": 0.78,
+    "count": 3,
+    "results": [
+      {
+        "kind": "material",
+        "unit_id": 9001,
+        "file_id": 412,
+        "document_id": null,
+        "course_id": "BIO.110",
+        "title": "Week 5 slides.pptx",
+        "unit_kind": "slide",
+        "unit_no": 7,
+        "part_no": 1,
+        "similarity": 0.871,
+        "score": 0.0392,
+        "passage": "Synthetic passage: passive transport moves a solute down its gradient and needs no energy.",
+        "has_notes": false
+      },
+      {
+        "kind": "upload",
+        "unit_id": 88,
+        "file_id": null,
+        "document_id": 17,
+        "course_id": "BIO.110",
+        "title": "lab-notes.pdf",
+        "unit_kind": "page",
+        "unit_no": 2,
+        "part_no": 1,
+        "similarity": 0.842,
+        "score": 0.0321,
+        "passage": "Synthetic passage: in the lab the dialysis bag gained mass in the hypotonic bath.",
+        "has_notes": false
+      },
+      {
+        "kind": "memory",
+        "unit_id": 93,
+        "file_id": null,
+        "document_id": 21,
+        "course_id": null,
+        "title": "Membrane transport review",
+        "unit_kind": "doc",
+        "unit_no": 1,
+        "part_no": 1,
+        "similarity": 0.803,
+        "score": 0.0158,
+        "passage": "Synthetic summary: worked through diffusion against osmosis and built a comparison table.",
+        "has_notes": false
+      }
+    ]
+  }
+}

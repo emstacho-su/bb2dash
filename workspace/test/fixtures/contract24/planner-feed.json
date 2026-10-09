@@ -1,0 +1,77 @@
+{
+  "as_of": "2026-10-08T18:05:00+00:00",
+  "from": "2026-10-01",
+  "to": "2026-11-05",
+  "work": [
+    {
+      "item_kind": "assignment",
+      "item_id": "BIO.110/lab-report-2",
+      "course_id": "BIO.110",
+      "title": "Lab Report 2",
+      "type": "lab_report",
+      "due_at": "2026-10-10T03:59:00+00:00",
+      "due_on": "2026-10-09",
+      "undated": false,
+      "status": "in_progress",
+      "points_possible": 20,
+      "in_workload": true
+    },
+    {
+      "item_kind": "reading",
+      "item_id": "314",
+      "course_id": "HST.205",
+      "title": "Synthetic Author, Industry and Empire, chapter 3",
+      "type": "reading",
+      "due_at": null,
+      "due_on": "2026-10-12",
+      "undated": false,
+      "status": "not_started",
+      "points_possible": null,
+      "in_workload": true
+    },
+    {
+      "item_kind": "assignment",
+      "item_id": "MAT.221/practice-set-c",
+      "course_id": "MAT.221",
+      "title": "Practice set C | optional",
+      "type": "homework",
+      "due_at": null,
+      "due_on": null,
+      "undated": true,
+      "status": "not_started",
+      "points_possible": 10.5,
+      "in_workload": false
+    }
+  ],
+  "scores": [
+    {
+      "course_id": "BIO.110",
+      "column_id": "_3610001_1",
+      "name": "Quiz 3",
+      "possible": 10,
+      "display_score": 8,
+      "display_grade": null,
+      "grades_released": true,
+      "is_exempt": false,
+      "submission_status": "graded",
+      "seen_at": "2026-10-06T14:20:11+00:00",
+      "assignment_id": "BIO.110/quiz-3"
+    },
+    {
+      "course_id": "HST.205",
+      "column_id": "_3610002_1",
+      "name": "Essay 1",
+      "possible": 50,
+      "display_score": null,
+      "display_grade": "B+",
+      "grades_released": true,
+      "is_exempt": false,
+      "submission_status": null,
+      "seen_at": "2026-10-02T09:01:45+00:00",
+      "assignment_id": null
+    }
+  ],
+  "work_more": 0,
+  "scores_more": 0,
+  "graded_so_far": "on the Grades screen"
+}

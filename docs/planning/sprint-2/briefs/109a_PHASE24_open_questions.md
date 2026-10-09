@@ -261,6 +261,13 @@ a question put to him before the freeze, and the freeze waits for his answer.
     runs code he did not write; here a parser reads files nobody vetted. Default: built as described,
     with those three ways still open. Closing them is a name-checking proxy, a later phase. His to
     object to, or to limit uploads to plain text and Markdown, which no parser reads.
+    * **After the probe of 2026-10-08 (P-10).** The parser no longer shares a container with the
+      worker. This Docker ignores the setting that would have kept the worker's two secrets from a
+      second user, so the parser runs in a service of its own, `workspace-extract`: no network, no
+      secret, a read-only file system. A file that took over the parser could still return wrong
+      text for files and nothing else; to read his waiting uploads it would now also have to get
+      out of its own container. The three ways out named above are unchanged for the worker's
+      container. Brief 109, Freeze amendments, F-3.
 21. **His name in the greeting.** The reference picture greets its user by name. The app holds no name
     of his anywhere, and a name typed into the code would sit in a public repository. Default: a
     greeting with no name. If he wants one, the cheap moment is before 24a's migration 195 is

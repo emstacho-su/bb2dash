@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "queries": [
+    {
+      "q": "membrane transport",
+      "kinds": [
+        "material",
+        "upload",
+        "memory"
+      ],
+      "courses": [
+        "BIO.110",
+        "BIO.110.lab"
+      ]
+    },
+    {
+      "q": "lab report 2 rubric",
+      "kinds": [
+        "material"
+      ],
+      "courses": null
+    }
+  ],
+  "limit": 10,
+  "min_similarity": 0.78,
+  "attachments": [
+    {
+      "kind": "file",
+      "id": 412,
+      "max_chars": 96000
+    },
+    {
+      "kind": "upload",
+      "id": 17,
+      "max_chars": 96000
+    }
+  ]
+}

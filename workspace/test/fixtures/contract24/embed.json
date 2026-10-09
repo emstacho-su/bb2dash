@@ -1,0 +1,21 @@
+{
+  "body": {
+    "document_id": 17,
+    "limit": 40,
+    "max_parts": 3,
+    "dry_run": false
+  },
+  "answer": {
+    "document_id": 17,
+    "model": "gte-small",
+    "dry_run": false,
+    "limit": 40,
+    "max_parts": 3,
+    "processed_units": 2,
+    "units_completed": 2,
+    "inserted_rows": 3,
+    "failed": [],
+    "remaining_parts": 0,
+    "missing_parts_before": 3
+  }
+}

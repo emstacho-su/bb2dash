@@ -1,0 +1,16 @@
+{
+  "args": {
+    "p_runner": "workspace-ingest@a1b2c3d4e5f6"
+  },
+  "returns": {
+    "document_id": 17,
+    "kind": "upload",
+    "step": "read",
+    "mime": "application/pdf",
+    "byte_size": 482113,
+    "sha256": "9f2c4e6a8b0d1f3a5c7e9b1d3f5a7c9e0b2d4f6a8c0e1a3b5d7f9c1e3a5b7d9f",
+    "signed_url": "https://goultdzqcavefcgnifdy.supabase.co/storage/v1/object/sign/workspace-uploads/u/9f2c4e6a8b0d1f3a5c7e9b1d3f5a7c9e0b2d4f6a8c0e1a3b5d7f9c1e3a5b7d9f?token=synthetic-token",
+    "signed_url_expires_at": "2026-10-15T14:00:00+00:00",
+    "attempts": 0
+  }
+}

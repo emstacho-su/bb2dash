@@ -1,0 +1,19 @@
+{
+  "args": {
+    "p_runner": "workspace-ingest@a1b2c3d4e5f6",
+    "p_document_id": 17,
+    "p_units": [
+      {
+        "unit_kind": "page",
+        "unit_no": 1,
+        "text": "Synthetic page one."
+      },
+      {
+        "unit_kind": "page",
+        "unit_no": 2,
+        "text": "Synthetic page two."
+      }
+    ]
+  },
+  "returns": 2
+}

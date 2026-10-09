@@ -1,0 +1,53 @@
+{
+  "note": "Phase 24a, the probes before the freeze (brief 109, tasks 1 to 6). Each file is the scrubbed stdout of one `claude -p --output-format stream-json` turn of the pinned CLI, run on 2026-10-08 (UTC) inside the image the live Workspace ran that day (bb2dash-workspace:local), in a throwaway compose project, as the runner's own user, with the subscription token. test/scrub-recording.mjs is the scrub; the line `rate_limit_event` was then taken out of every file, because it holds the plan's usage figures. Prompts and questions were synthetic. The probes' scripts lived in the session's scratch folder and are not committed; the lines and results are in docs/planning/sprint-2/verification/109c_PHASE24_VERIFICATION.md.",
+  "claude_code_version": "2.1.289",
+  "image": "bb2dash-workspace:local sha256:42c552c05ad6caf7565095b6c882643e022352d0357364024cdfc4cab7e5f2f4",
+  "fixtures": {
+    "p1-no-mcp-server.jsonl": {
+      "probe": "P-1",
+      "model": "haiku",
+      "mcpConfig": "{\"mcpServers\": {}} at /run/workspace/mcp-none.json",
+      "allowedTools": "the flag is absent",
+      "maxBudgetUsd": "0.05",
+      "exitCode": 0,
+      "what": "a planning turn with no MCP server: the init line lists no server and no tool"
+    },
+    "p2-no-session-persistence.jsonl": {
+      "probe": "P-2",
+      "model": "haiku",
+      "extraArgs": "--no-session-persistence",
+      "configFolder": "tmpfs at /home/node/.claude",
+      "maxBudgetUsd": "0.50",
+      "exitCode": 0,
+      "filesUnderProjectsAfter": 0,
+      "what": "a turn that stores no session: no file under /home/node/.claude/projects after it"
+    },
+    "p3-turn-10-of-10.jsonl": {
+      "probe": "P-3",
+      "model": "opus",
+      "maxBudgetUsd": "0.95",
+      "exitCode": 0,
+      "promptBytes": 128000,
+      "costsUsdOfTheTenTurns": [0.3686, 0.3521, 0.3522, 0.3523, 0.3525, 0.3526, 0.3527, 0.3528, 0.353, 0.3531],
+      "what": "the tenth of ten fresh turns, each its own session with a prompt of 128,000 bytes rebuilt from the earlier turns; its answer is the code word given only in turn 1"
+    },
+    "p5-prompt-128000-bytes.jsonl": {
+      "probe": "P-5",
+      "model": "haiku",
+      "maxBudgetUsd": "0.50",
+      "exitCode": 0,
+      "promptBytes": 128000,
+      "argvBytes": 128508,
+      "what": "one prompt argument of 128,000 bytes: the CLI starts and a result line is read"
+    },
+    "p6-mcp-env-and-error-result.jsonl": {
+      "probe": "P-6",
+      "model": "haiku",
+      "mcpConfig": "a per-request file /run/workspace/mcp-<uuid>.json, mode 0600, one server named bb2dash with three values in its env; the server was a throwaway of some forty lines under the materials server's name, so the image's gate allowed its one tool",
+      "allowedTools": "mcp__bb2dash__search_materials",
+      "maxBudgetUsd": "0.50",
+      "exitCode": 0,
+      "what": "the server read the config's env (the answer repeats BB2DASH_MAX_SEARCHES=3); its fourth call answered with an error result and the turn still ended success"
+    }
+  }
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "quiz",
+    "grp": "study",
+    "title": "Quiz me",
+    "description": "One question at a time from a course or a file, with your answer checked.",
+    "needs": "course_or_file",
+    "sort": 10,
+    "enabled": true,
+    "instructions": "Run a quiz for him on the scoped course or the attached file. Ask one question at a time, drawn only from the passages and the attached text in this prompt, and wait for his answer before you ask the next. When he answers, say whether it is right, give the correct answer in one or two sentences, and name the file and the page, slide or sheet it came from. Vary the form: recall, a short explanation, a small application. Ask nothing the material in this prompt does not cover; when the material is too thin for another question, say so. Keep no score unless he asks for one, and never turn a score into a grade."
+  },
+  {
+    "id": "study-guide",
+    "grp": "study",
+    "title": "Study guide",
+    "description": "An outline of a course or a file, with where each point comes from.",
+    "needs": "course_or_file",
+    "sort": 20,
+    "enabled": true,
+    "instructions": "Write a study guide for the scoped course or the attached file. Build an outline from the passages and the attached text in this prompt: the main topics in the order the material gives them and, under each, the key terms with a one-line meaning and the points worth remembering, each with the file and the page, slide or sheet it came from. Use only what the material says. End with a short section headed \"What the material did not cover\", listing the topics his question named that no passage in this prompt supports."
+  },
+  {
+    "id": "explain-file",
+    "grp": "study",
+    "title": "Explain this file",
+    "description": "A plain-words walk through an attached file, page by page or slide by slide.",
+    "needs": "file",
+    "sort": 30,
+    "enabled": true,
+    "instructions": "Explain the attached file in plain words. Walk it in its own order, page by page or slide by slide, naming each page or slide as you reach it. For each one, say what it is about, explain any term a first-time reader would not know, and say how it connects to the one before. Where a point comes from a slide's speaker notes, say that it is from the speaker notes. If the file was read in part, say which part you covered. Add nothing from outside the file except to explain a term, and say so when you do."
+  },
+  {
+    "id": "summarise-reading",
+    "grp": "study",
+    "title": "Summarise a reading",
+    "description": "Summary, main claims, terms and check questions for an attached reading.",
+    "needs": "file",
+    "sort": 40,
+    "enabled": true,
+    "instructions": "Summarise the attached reading. Give, in this order: a summary of five to eight sentences; the main claims, each in one sentence with the page it is on; the key terms, each with a one-line meaning; and three to five check questions he can test himself with, without their answers unless he asks. Use only the attached text. If it was read in part, say which part the summary covers."
+  },
+  {
+    "id": "plan-week",
+    "grp": "plan",
+    "title": "Plan my week",
+    "description": "The next seven days from your planner, in a suggested order.",
+    "needs": "nothing",
+    "sort": 50,
+    "enabled": true,
+    "instructions": "Plan his next seven days from the planner block in this prompt. First list what is due, day by day from today, each item by its title and its due date exactly as the planner block shows them. Then suggest an order of work: what to start first and why, one line each. Count only items the planner block shows, and leave out an item whose status shows it is finished unless he asks for it. Do no arithmetic on points or grades, and do not estimate how long anything takes unless he asks. If the planner block shows nothing due in the seven days, say so."
+  },
+  {
+    "id": "draft-help",
+    "grp": "write",
+    "title": "Drafting help",
+    "description": "Drafts or rewrites text for an assignment from your words and its instructions.",
+    "needs": "nothing",
+    "sort": 60,
+    "enabled": true,
+    "instructions": "Help him draft or rewrite text for an assignment, from his own words, his draft and the assignment's instructions. If he gave a draft, improve it: keep his meaning and his voice, mend the structure and the clarity, and say in two or three lines what you changed. If he gave only notes or a prompt, write a first draft he can edit, in plain prose, at the length the instructions ask for when they give one. Use the assignment's instructions when they are among the passages or the attached text in this prompt, and name the requirement you are following. Do not invent a fact, a quotation or a source: where the draft needs one he has not given, mark the place in square brackets with what is missing."
+  }
+]

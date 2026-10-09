@@ -1,0 +1,6 @@
+empty: No passage of your course files or uploads matched this question, so this answer comes from general knowledge.
+search_failed: I could not search your course files and uploads this time, so this answer does not draw on them.
+attachment_not_ready: The attached file "{title}" has not been read yet, so this answer does not use it.
+attachment_failed: The attached file "{title}" could not be read, so this answer does not use it.
+attachment_missing: The attached file "{title}" is no longer there, so this answer does not use it.
+attachment_cut: The attached file "{title}" was read in part: {read} of {total} {units}.

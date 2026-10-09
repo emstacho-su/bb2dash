@@ -1,0 +1,121 @@
+{
+  "p_facts": {
+    "depth": "standard",
+    "tier": "mid",
+    "plan_state": "planned",
+    "retrieval_state": "found",
+    "found_n": 3,
+    "passages_n": 2,
+    "memory_n": 1,
+    "feed_rows": 5,
+    "attachments": [
+      {
+        "kind": "file",
+        "id": 412,
+        "state": "cut"
+      },
+      {
+        "kind": "upload",
+        "id": 17,
+        "state": "read"
+      }
+    ],
+    "prompt_bytes": 48211,
+    "plan_ms": 1480,
+    "retrieval_ms": 912,
+    "plan_cost_usd": 0.0016
+  },
+  "p_sources": [
+    {
+      "kind": "material",
+      "origin": "auto",
+      "file_id": 412,
+      "text_id": 9001,
+      "document_id": null,
+      "doc_text_id": null,
+      "course_id": "BIO.110",
+      "unit_kind": "slide",
+      "unit_no": 7,
+      "similarity": 0.871,
+      "title": "Week 5 slides.pptx"
+    },
+    {
+      "kind": "upload",
+      "origin": "auto",
+      "file_id": null,
+      "text_id": null,
+      "document_id": 17,
+      "doc_text_id": 88,
+      "course_id": "BIO.110",
+      "unit_kind": "page",
+      "unit_no": 2,
+      "similarity": 0.842,
+      "title": "lab-notes.pdf"
+    },
+    {
+      "kind": "memory",
+      "origin": "auto",
+      "file_id": null,
+      "text_id": null,
+      "document_id": 21,
+      "doc_text_id": 93,
+      "course_id": null,
+      "unit_kind": "doc",
+      "unit_no": 1,
+      "similarity": 0.803,
+      "title": "Membrane transport review"
+    },
+    {
+      "kind": "feed",
+      "origin": "auto",
+      "file_id": null,
+      "text_id": null,
+      "document_id": null,
+      "doc_text_id": null,
+      "course_id": null,
+      "unit_kind": null,
+      "unit_no": null,
+      "similarity": null,
+      "title": "Planner and grades"
+    },
+    {
+      "kind": "material",
+      "origin": "attached",
+      "file_id": 412,
+      "text_id": null,
+      "document_id": null,
+      "doc_text_id": null,
+      "course_id": "BIO.110",
+      "unit_kind": null,
+      "unit_no": null,
+      "similarity": null,
+      "title": "Week 5 slides.pptx"
+    },
+    {
+      "kind": "upload",
+      "origin": "attached",
+      "file_id": null,
+      "text_id": null,
+      "document_id": 17,
+      "doc_text_id": null,
+      "course_id": "BIO.110",
+      "unit_kind": null,
+      "unit_no": null,
+      "similarity": null,
+      "title": "lab-notes.pdf"
+    },
+    {
+      "kind": "material",
+      "origin": "tool",
+      "file_id": null,
+      "text_id": 9003,
+      "document_id": null,
+      "doc_text_id": null,
+      "course_id": null,
+      "unit_kind": null,
+      "unit_no": null,
+      "similarity": null,
+      "title": null
+    }
+  ]
+}

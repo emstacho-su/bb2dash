@@ -151,6 +151,82 @@ Every other file and line cited below was read for this brief unless a sentence 
 The PM re-reads each at the cut before the freeze. No docker command was run and nothing was written
 to any database.
 
+## Freeze amendments: the PM's rulings after the probes, 2026-10-08
+
+Probes P-1 to P-6 and P-10 ran on the image the live Workspace runs (109c holds each line). P-1,
+P-2, P-3, P-5 and P-6 passed. P-4 failed as written and passes under rulings F-1 and F-2. P-10
+failed in one of its three parts, so the parser moves to its own service (F-3), as its task rules.
+**Where this section and a clause below differ, this section is current.** The clauses it changes
+most are edited in place and say "freeze amendment".
+
+* **Workers are Sonnet 5.5**, not Opus (Stack, with the start prompt, 2026-10-08). The numbering
+  stands: W-76 to W-79 and W-85.
+* **F-1. Thinking is off on a planning, a summary and a rolling turn.** `MAX_THINKING_TOKENS=0` is
+  added to that child's environment, on top of what `childEnv` returns. The argv table is
+  unchanged and `childEnv` keeps its signature. With thinking on, a planning turn took about 9 s at
+  the median; with it off, 1.47 s over 20 questions, largest cost 0.0140. The answering turn is not
+  touched.
+* **F-2. A plan is the object alone, or the object inside one Markdown code fence.** Every planning
+  answer recorded came fenced. Anything else is the fallback plan. `--json-schema` is not used: the
+  CLI then calls a tool of its own, `StructuredOutput`, and the gate denies it.
+* **F-3. The parser runs in its own service, `workspace-extract`.** P-10 (a) failed: this Docker
+  ignores a file secret's mode and owner, so a second user in the same container reads the
+  worker's secrets. Parts (b) and (c) passed and are no longer needed. What stands now:
+  * **One image, `bb2dash-workspace-ingest:local`, two services**, both behind
+    `profiles: [workspace]`, both with `mem_limit` 1 GiB and `pids_limit` 128.
+  * **`workspace-extract`** runs the parser's loop and nothing else: `network_mode: none`, no
+    secret, a read-only root, `cap_drop: [ALL]`, `no-new-privileges`, the user `extract` set in
+    compose (no root entrypoint, since there is no firewall to raise), and one mount, the exchange
+    volume. It holds no model, no token, no key, no DSN and no network interface but loopback.
+  * **`workspace-ingest`** runs the worker and nothing else: the network `ingest-net`, the root
+    entrypoint that raises its firewall and drops to `node`, the two secrets, and the same one
+    mount. **Its root is not read-only**: the firewall pins names in `/etc/hosts`, and with a
+    read-only root the script stops ("/etc/hosts cannot be written", 109c). The Workspace service
+    is the same in this.
+  * **The exchange volume, `ingest-exchange`**: a named volume backed by tmpfs
+    (`driver_opts`: `type: tmpfs`, `device: tmpfs`, 96 MB), mounted by those two services and no
+    other, at `/exchange`. It holds the one file being read and that file's units. The worker
+    writes the file and a request, the parser writes the units back as one JSON file, the worker
+    reads at most 64 MB of it as data and clears the folder after each document. Its mode lets
+    the worker remove what the parser wrote (a plain sticky 1777 does not, 109c).
+  * **The parser's loop** takes one request at a time, runs `extractUnits` with the 300 s limit,
+    and touches a file in the exchange folder every 10 s; the service's healthcheck reads that
+    file's age. The worker waits 330 s for an answer; none is `extract_timeout`.
+  * **Gone:** the second user inside the worker's container, the firewall's owner rule, the
+    secrets' mode 0400. The tmpfs of 96 MB inside `workspace-ingest` is the exchange volume.
+  * **What a hostile file can do now.** A file that takes over the parser is in a container with
+    no secret, no network and a read-only root: it can return wrong units for this file and for
+    later ones until the container restarts, and use memory and processes up to the limits. To
+    reach the worker's secrets it must also get out of its container, or take over the worker
+    through the JSON the worker reads. The three ways out that 109a's item 20 names are the
+    worker's container's, as before.
+  * **Tasks 36 and 37, W-79's files, task 40's host action, P-7, P-11 and the cut-over order** are
+    edited below to this. P-7 runs in `workspace-ingest`, P-11 in `workspace-extract`.
+* **F-4. `--no-session-persistence` is in every argv, and the Workspace service takes a tmpfs at
+  `/home/node/.claude`** in place of the named volume (P-2 passed). `cleanupPeriodDays` stays.
+* **The argv is frozen again** on these probes (Decisions this brief amends, the 2026-10-06 row):
+  the table under The two turns, with `--no-session-persistence`, and F-1's one environment value.
+* **Shapes ruled at task 12**, where the clauses left a choice. Each is in
+  `workspace/test/fixtures/contract24/README.md`, which is the worker's reference:
+  * A label resolves to a source row by one column: `[M<n>]` by `text_id`, `[U<n>]` by
+    `doc_text_id`, `[R<n>]` by a memory row's `document_id`, `[P]` by the row of kind `feed`.
+  * An attached file is one block with no label, and one source row of origin `attached` for the
+    file, with no unit id. The model names an attached file's page in words under both format
+    rules.
+  * `workspace_turn_put` is called twice: with the facts before the answering turn, and with null
+    facts to append the `tool` rows before finish.
+  * `workspace_ingest_finish` takes an outcome, `indexed`, `failed` or `retry`; the function
+    counts the three tries. `workspace_job_finish` takes `done`, `failed` or `released`; a job cut
+    short by a claim is `released` and counts no failure.
+  * `workspace_search`'s limit is a kind's limit. The feed's jsonb also holds `from`, `to`,
+    `work_more` and `scores_more`; the turn context also holds `messages_left_out`.
+  * An upload's title is 200 characters at most. `workspace_upload_register` takes no storage key:
+    it makes the key from the hash.
+* **W-85's files** gain `scripts/lib/accept-docker.mjs` and `scripts/lib/accept-constants.mjs`
+  with their tests: the services a compose command may name are listed there
+  (`accept-docker.mjs:59`, read on bb2dash-stack `main` at c4a54f8).
+* **Item 23** of 109a: put to Stack in the session's first report. The freeze waits for his line.
+
 ## Why
 
 Stack wrote on 2026-10-08: "Regarding the workspace section, the Replit Web keyword png's in my
@@ -1081,39 +1157,42 @@ count.
   `workspace_upload_register` hand back the row that is already there. An object that was stored
   when the tab closed before the register call is picked up by the next try at the same file. This
   is point 4 of The pgvector store, and 109a's item 25.
-* **Where extraction runs.** NEW compose service `workspace-ingest`, behind `profiles: [workspace]`,
-  on its own NEW network `ingest-net`, with no volume, a read-only root and a tmpfs of 96 MB for the
-  one file it is reading and that file's units. `mem_limit` is 1 GiB and `pids_limit` is 128, so a
-  zip bomb in a 20 MB file ends in `extract_failed` and does not take memory from the sync in the
-  Docker VM; P-11 measures the largest file against both. It holds no model, no Claude token and no
-  service key. Its two secrets are files: NEW `workspace_ingest_db_url` (role
-  `workspace_ingest_runner`: four functions, no table grant, through the session pooler) and the
-  existing `supabase_anon_jwt` (`compose.yaml:262-263`), which is the public key the embed call
-  needs. Its firewall is generated from the Workspace's by a fork script of its own and allows
-  tcp/443 to the project host and tcp/5432 to its pooler, nothing else: not `api.anthropic.com`.
-* **Two users inside it.** The parser is the part most likely to meet a hostile file, and for a PDF
-  it is `pdftotext`, a C++ program (`ingest/extract_text.py:8`). So it does not run as the worker's
-  user. The image has two users, `node` for the worker and `extract` for the parser. The entrypoint,
-  still root, raises the firewall, adds one rule that drops every packet a process of `extract`
-  sends, and starts two processes with an empty capability set each: the parser's loop as `extract`
-  and the worker as `node`. It has to start both: after that drop no process can start a child as
-  another user (`docker/workspace/entrypoint.sh:46` is the same drop). The two secrets are mounted
-  with mode 0400 for `node`, so `extract` cannot read them. The two meet in the tmpfs folder: the
-  worker writes the file there, the parser calls `extractUnits` and writes the units back as one JSON
-  file, and the worker reads at most 64 MB of it, as data. **Not checked:** whether this Docker
-  honours a mode and an owner on a file secret, and whether the firewall's owner match loads. P-10
-  decides both before the freeze. If P-10 fails, the parser moves to a second service,
-  `workspace-extract`, with no network, no secret, the same limits and one exchange volume it shares
-  with `workspace-ingest` alone, and the PM rules that before the freeze.
+* **Where extraction runs (freeze amendment, F-3).** Two NEW compose services of one image,
+  `bb2dash-workspace-ingest:local`, both behind `profiles: [workspace]`, each with `mem_limit`
+  1 GiB and `pids_limit` 128, so a zip bomb in a 20 MB file ends in `extract_failed` and does not
+  take memory from the sync in the Docker VM; P-11 measures the largest file against both.
+  * **`workspace-ingest`, the worker.** On its own NEW network `ingest-net`. It holds no model, no
+    Claude token and no service key. Its two secrets are files: NEW `workspace_ingest_db_url` (role
+    `workspace_ingest_runner`: four functions, no table grant, through the session pooler) and the
+    existing `supabase_anon_jwt` (`compose.yaml:262-263`), which is the public key the embed call
+    needs. Its firewall is generated from the Workspace's by a fork script of its own and allows
+    tcp/443 to the project host and tcp/5432 to its pooler, nothing else: not `api.anthropic.com`.
+    Its root is not read-only, because the firewall pins names in `/etc/hosts` (109c).
+  * **`workspace-extract`, the parser.** No network (`network_mode: none`), no secret, a read-only
+    root, every capability dropped, the user `extract`. The parser is the part most likely to meet
+    a hostile file, and for a PDF it is `pdftotext`, a C++ program (`ingest/extract_text.py:8`).
+  * **They meet in one place:** the NEW volume `ingest-exchange`, backed by tmpfs, 96 MB, mounted
+    at `/exchange` by these two services and no other. The worker writes the file there, the
+    parser calls `extractUnits` and writes the units back as one JSON file, and the worker reads at
+    most 64 MB of it, as data, then clears the folder. Neither service has any other volume.
+* **Why two services and not two users in one (P-10).** The first design ran the parser as a
+  second user inside the worker's container, with the secrets mounted mode 0400 for the worker.
+  This Docker ignores a file secret's mode and owner (P-10 (a): "not supported, they will be
+  ignored"; the file was mode 777 and the second user read it). The firewall's owner rule and the
+  two-user start both worked (P-10 (b) and (c)) and are no longer needed: a container with no
+  network needs no rule.
 * **Why that place is safe, and how far that goes.** No Claude process and no Blackboard login shares
   a network or a volume with this service. It holds no model, no Claude token and no service key. An
-  image test in the form of `docker/apply/image.test.mjs:130-138` pins the network, the absent
-  volumes, the two secrets, the two limits and the two users. That is the claim. The blast radius is
+  image test in the form of `docker/apply/image.test.mjs:130-138` pins, for each of the two services,
+  its network or the lack of one, its one mount, its secrets or the lack of any, and the two limits
+  (freeze amendment, F-3). That is the claim. The blast radius is
   written out here, because this container's job is to read bytes nobody vetted:
-  * **A file that takes over the parser** runs as `extract`, with no secret and no network. It can
+  * **A file that takes over the parser** runs in `workspace-extract`, as `extract`, with no secret,
+    no network and a read-only root. It can
     return wrong text for the file being read and for later files until the container restarts, and
     use memory and processes up to the limits. Nothing else.
-  * **A file that also reaches the worker's user** can read the role's DSN file and the public anon
+  * **A file that also reaches the worker's container** (out of its own container, or through the
+    JSON the worker reads) can read the role's DSN file and the public anon
     key. With them it can claim waiting uploads, one at a time, and read each one's signed link, so
     the bytes of his private uploads. It can write wrong index text for the document it holds. It
     can call `search` and read course passages, as anyone holding that public key can (109a, item
@@ -1474,13 +1553,14 @@ The sets are disjoint. A file not listed has no owner in this phase and is not e
   `src/client.ts`, `README.md`, tests; `src/server.ts` unchanged); `supabase/functions/_shared/`,
   `supabase/functions/workspace-search/`, `supabase/functions/workspace-embed/`.
 * **W-79, ingest, sync and containers:** new `workspace-ingest/` (the worker, the parser's loop and
-  their tests); new `docker/workspace-ingest/` (Dockerfile with the two users, ignore file,
-  entrypoint, fork script, generated firewall with the owner rule, image test); `docker/workspace/`
+  their tests); new `docker/workspace-ingest/` (one Dockerfile for both services, with the user
+  `extract`; ignore file, the worker's entrypoint, fork script, generated firewall, image test:
+  freeze amendment, F-3); `docker/workspace/`
   (the Dockerfile loses the `rag` stage and `mcp-rag.sh`, the firewall loses one secret name, its
   tests); four files under `docker/apply/`: `fork-firewall.mjs` (its text for the database secrets
   must follow the Workspace script, `fork-firewall.mjs:40-44`), `init-firewall.sh` (generated),
   `image.test.mjs` where a literal moves, and NEW `gate-built.test.mjs`; `docker/grep-clean.test.mjs`;
-  `compose.yaml` (the `workspace` block, the new service, and the top-level volume, network and
+  `compose.yaml` (the `workspace` block, the two new services, and the top-level volume, network and
   secret entries; never the `sync` or `apply` blocks); `sync/src/files.ts`, `sync/src/report.ts`,
   `sync/src/loop.ts` and their tests.
 * **W-85, umbrella (bb2dash-stack, branch `feat/workspace-24` there):** `compose.yaml` (declares
@@ -1489,7 +1569,9 @@ The sets are disjoint. A file not listed has no owner in this phase and is not e
   `doctor/workspace.test.mjs:200-208`); `doctor/lib/constants.mjs` (the names become fourteen;
   `harness_database_url` stays, the umbrella's own services still mount it),
   `doctor/doctor.mjs`, the doctor tests; `README.md`; `.env.example`;
-  `scripts/lib/accept-actions.mjs` and its test.
+  `scripts/lib/accept-actions.mjs` and its test; `scripts/lib/accept-docker.mjs` and
+  `scripts/lib/accept-constants.mjs` and their tests, which list the services a compose command
+  may name (freeze amendment).
 * **PM:** `workspace/test/fixtures/contract24/` (the frozen shapes and the scrubbed probe recordings)
   and `workspace/test/probe24-fixtures.test.ts`; `acceptance/24/`,
   `acceptance/manifest.schema.json`, `web/e2e/accept24.spec.ts`,
@@ -1741,18 +1823,18 @@ that hash.
 | 33 | `turn.ts` in stages, the new calls in `db.ts`, sources, the fixed lines | W-77 | `npx vitest run test/turn.test.ts test/sources.test.ts`: a Stop during the planning turn stores `cancelled` and spawns no answering process; an opened unit becomes an origin `tool` row from the call's input; **three cases of nothing matched:** a planner question with no passage stores `empty` and its first line is the sentence, which names course files and uploads and not the planner; a question with an attached file that was read and no passage stores `attached_only` and has no such line; a short follow-up is searched with the previous question after it and, when the fake retriever answers that text, stores `found` with no such line. `empty` puts the sentence first on `plain` and not on `rich`; finish carries a null session id |
 | 34 | Jobs in `runner.ts`, `jobs.ts`, `prompts/summary.md`, `prompts/rolling.md` | W-77 | `npx vitest run test/jobs.test.ts`: on a fake clock a claim mid-job kills it and frees the lease; with `WORKSPACE_MEMORY_JOBS` unset only `rolling` is asked for; the summary's input holds messages only; both prompts hold the sentence that forbids due dates, statuses and scores; the loop never asks for a claim while a turn is in flight |
 | 35 | `system.md`, the two format rules, their test | W-77 | `npx vitest run test/system-prompt.test.ts`: the rules on grades, on `[notes]`, on never inventing a number and on nothing matched are present; the line on a remembered item (dated, the feed is the current figure) is present and the decision-note line is gone; the notes rules are gone; both format rules hold the line on citing by label only a passage in the prompt or a unit opened; `format-rich.md` forbids images and links |
-| 36 | The ingest worker and the parser's loop | W-79 | `cd workspace-ingest && npx vitest run`: bad first bytes give `bad_bytes`; a 12-byte plain text file gives one unit of kind `doc`; a text file with a NUL byte gives `bad_bytes`; a docx is written to tmpfs under `.docx` whatever its title; a link on another host, or one that does not end in the row's key, is refused before any request; a redirect is not followed; 1,001 units give `too_many_units`; an expired link gives `link_expired`; three failed tries give `failed`; the embed call carries the document's id; a log line holds ids, states and timings only, and the extractor's stderr is never in one; a file whose bytes do not hash to the row's `sha256` gives `bad_bytes` and no unit is put (answer 17); a docx whose one unit is empty text gives `no_text` and no unit is put, a parsed file that gives no unit gives `no_text`, and an empty unit among others is left out of the put; a claimed memory document starts at the embed call and no download is tried |
-| 37 | Its image, its firewall fork, its compose service | W-79 | `node --test docker/workspace-ingest/image.test.mjs`: networks are `ingest-net` only; no volume; the secrets are the two names, mounted for the worker's user with mode 0400; `mem_limit` and `pids_limit` hold the brief's values; the image has the two users and the generated firewall holds the owner rule; none of `bb-profile`, `course-files`, `claude_oauth_token`, `bb2dash_mcp_service_key`, `api.anthropic.com` is named; the generated firewall equals what its fork script produces |
+| 36 | The ingest worker and the parser's loop | W-79 | `cd workspace-ingest && npx vitest run`: (freeze amendment, F-3) the worker hands a file to the parser through the exchange folder and reads the units back from it; no answer inside 330 s gives `extract_timeout`; an answer over 64 MB gives `extract_failed`; the folder is empty after each document, whatever its end; bad first bytes give `bad_bytes`; a 12-byte plain text file gives one unit of kind `doc`; a text file with a NUL byte gives `bad_bytes`; a docx is written to tmpfs under `.docx` whatever its title; a link on another host, or one that does not end in the row's key, is refused before any request; a redirect is not followed; 1,001 units give `too_many_units`; an expired link gives `link_expired`; three failed tries give `failed`; the embed call carries the document's id; a log line holds ids, states and timings only, and the extractor's stderr is never in one; a file whose bytes do not hash to the row's `sha256` gives `bad_bytes` and no unit is put (answer 17); a docx whose one unit is empty text gives `no_text` and no unit is put, a parsed file that gives no unit gives `no_text`, and an empty unit among others is left out of the put; a claimed memory document starts at the embed call and no download is tried |
+| 37 | Its image, its firewall fork, its compose service | W-79 | `node --test docker/workspace-ingest/image.test.mjs`: (freeze amendment, F-3) `workspace-ingest`: networks are `ingest-net` only, its one mount is the volume `ingest-exchange`, its secrets are the two names; `workspace-extract`: `network_mode` is `none`, it names no secret, `read_only` is true, `cap_drop` is `ALL`, its user is `extract`, its one mount is `ingest-exchange`; no other service mounts that volume and its driver options say tmpfs; both services hold the brief's `mem_limit` and `pids_limit` and one image name; in neither block is any of `bb-profile`, `course-files`, `claude_oauth_token`, `bb2dash_mcp_service_key`, `api.anthropic.com` named; the generated firewall equals what its fork script produces |
 | 38 | The Workspace image and compose block: `rag` out, the tmpfs, one database secret; the apply firewall regenerated; the apply gate tested as built | W-79 | `grep -c harness_database_url compose.yaml` gives 0; `node --test docker/workspace/init-firewall.test.mjs docker/grep-clean.test.mjs docker/apply/image.test.mjs` passes; `node docker/apply/fork-firewall.mjs --check` exits 0; the `workspace` block names no `hostname`; `cd apply && npm run typecheck && npm run build` exits 0; then `node --test docker/apply/gate-built.test.mjs`: `apply/dist/hooks/tool-gate.js` exits 2 for an unknown tool, 0 for a listed materials tool and 2 for input that is not JSON |
 | 39 | Sync: the embed loop on every files pass; the report rule | W-79 | `cd sync && npx vitest run test/files.test.ts test/report.test.ts test/loop.test.ts`: with `unitsPosted` 0 the loop runs once; with `unitsPosted` 0 and an embed exit of 1 the pass closes `done`, the report holds the line and the apply request is filed; with `unitsPosted` above 0 an embed error still fails the sync |
-| 40 | bb2dash-stack: the secret name, its empty example file, the doctor, the README, two host actions for the acceptance run (start the ingest service; read a proof again until it passes or a limit) | W-85 | in bb2dash-stack: `node --test doctor/doctor.test.mjs doctor/workspace.test.mjs scripts/accept-actions.test.mjs` passes with fourteen names; `ls secrets.example \| grep -c workspace_ingest_db_url` gives 1 and the file is empty; the doctor's Workspace row no longer names `harness_database_url` |
+| 40 | bb2dash-stack: the secret name, its empty example file, the doctor, the README, two host actions for the acceptance run (start the two ingest services, `workspace-ingest` and `workspace-extract`, each named; read a proof again until it passes or a limit) | W-85 | in bb2dash-stack: `node --test doctor/doctor.test.mjs doctor/workspace.test.mjs scripts/accept-actions.test.mjs` passes with fourteen names; `ls secrets.example \| grep -c workspace_ingest_db_url` gives 1 and the file is empty; the doctor's Workspace row no longer names `harness_database_url` |
 | 41 | Retrieval eval with no model: the 9 cases of `ingest/eval/golden_set.json` through the batch entry, on the host with the key file | PM | prints `in passages: n of 9` and qids only, exits 0 only at 9; the line is in 109c and no output with text is kept |
 | 42 | Integrate: worker branches merged, types regenerated, full suites, advisors | PM | the SOP gates of the DoD |
 | 43 | Walk windows, on Stack's word, after probes 7, 8, 9 and 11 have their lines and Stack's step of task 48 is done: the live Workspace stopped, the test project the only runner and the only ingest worker, the PM's walk, each walk conversation archived, the live service back | PM | before and after: `docker inspect -f '{{.Id}} {{.State.StartedAt}}' bb2dash-sync-1` is unchanged; `select count(*) from workspace_requests where state in ('queued','claimed')` gives 0 at the end; `select count(*) from workspace_conversations where id = any(<the walk's conversation ids>) and not archived` gives 0 |
 | 44 | Reviews | PM | both commands run; findings and fixes in 109c |
 | 45 | The acceptance pack: `acceptance/24/` (manifest, playbook, proofs) and `web/e2e/accept24.spec.ts`, on today's page. Each step archives the conversation it opened. **The store (answer 17):** the synthetic file's bytes hold a value the test draws fresh in each run, so its hash is one no earlier run used; the upload step notes that hash in its facts file and sends the same file twice; and the pack's host proofs carry the statements of task 49's proofs 1, 2, 3, 6 and 7, each as one `select` with an `ok` column | PM | `node --test acceptance/acceptance.test.mjs` passes; one proof of the pack counts the run's conversations left unarchived and expects 0; three reads are keyed on the upload's hash, carried from the step's facts: after the second send one upload row holds it; before the delete one row holds it, is in state `indexed` and was made in this run (`since`, from `carry:run.started_at`); after the delete no row holds it. No proof of the pack compares `uploads_indexed` between two moments of the run: an upload of his own would move that counter, and a row left by a stopped run would keep it still. Proof 6 reads it only against a direct count taken in the same statement |
 | 46 | Docs, the PRs (bb2dash, bb2dash-stack). Stop at "ready when you say so" | PM | `gh pr view --json state -q .state` prints `OPEN` in both |
-| 47 | After his merge word: the cut-over, one service at a time, each alone, with no question, apply request or sync open (`workspace`, `workspace-ingest`, `apply`, then `sync`), then `just accept 24` | PM | the run's `REPORT.md` reads green |
+| 47 | After his merge word: the cut-over, one service at a time, each alone, with no question, apply request or sync open (`workspace`, `workspace-extract`, `workspace-ingest`, `apply`, then `sync`), then `just accept 24` | PM | the run's `REPORT.md` reads green |
 | 48 | **Stack's own step (MANUAL).** The ingest role's password and its secret file, on the precedent of 2026-10-05 for `workspace_runner`: a snippet on his laptop makes the password, he runs the one `alter role` line in an unsaved SQL editor tab, and the snippet stores the DSN as `workspace_ingest_db_url` in `SECRETS_DIR`. Nothing of it passes through a chat, a repo file or a migration. The PM hands him the snippet, adds the name (not a secret) to the allow-list of `set-secret.ps1` in that folder, and says so at the hand-over. After 193 is on prod, before task 43 | Stack; the PM prepares it | his step is done when `just doctor` in bb2dash-stack shows no missing secret. The login is proved to work later, inside task 43's window: the test ingest worker's first heartbeat row appears (`select count(*) from workspace_ingest_heartbeat` gives 1) |
 | 49 | **The store's proof and its page in the data dictionary (answer 17).** NEW `db/tests/phase24_store_proof.sql`: proofs 1 to 7 and 7b below as one read-only unit. And `DATA_SYNTAX.md`: a subsection headed `### The pgvector store, scoped to bb2dash` inside the Workspace section, which names every object of the Contract clause's list, the three kinds, the model rule and its 384-dimension limit, the keys that make each write an upsert, the columns of `v_workspace_index_status`, the direct touches (the three older ones that stand, the one 198 closes, the page's two), the two exceptions that come through the public keys, and what a lift-out would change, the five objects that span both sides among it; with one pointer line to it at the end of the Search layer section. Written with task 20. The unit is green once 190 to 198 are on prod | W-76; the PM runs the unit on prod in task 21 | Runner on `phase24_store_proof.sql` PASS, with its red run quoted (before 190 is on prod the unit cannot pass: one vector column exists where two are expected); `grep -c "^### The pgvector store, scoped to bb2dash" DATA_SYNTAX.md` gives 1; `grep -c "workspace_text_embeddings_hnsw" DATA_SYNTAX.md` and `grep -c "hybrid_search_workspace_text" DATA_SYNTAX.md` each give at least 1; proof 8's four greps give their expected lines; proof 9's five places are each named with their green run in the verification section |
 | 50 | **Migration 198 and its unit (the review round of the store's clause).** `198_text_embeddings_anon_insert_drop.sql` drops the policy `bb_text_embeddings_anon_insert` and nothing else. It needs none of 190 to 197 | W-76 | Runner on `phase24_198_anon_insert_drop.sql`, with its red run quoted (before 198 the insert below succeeds and is rolled back with the unit): under `set local role anon` an insert of one synthetic vector row into `bb_text_embeddings` raises 42501; `pg_policies` holds exactly three rows for the two course tables, `bb_file_text_anon_insert`, `bb_file_text_owner_all` and `bb_text_embeddings_owner_all`; `select rolbypassrls from pg_roles where rolname = 'service_role'` gives true, so the embedder's write rests on no policy; `count(*)` of `bb_text_embeddings` is the same before and after the unit. And `git grep -c "bb_text_embeddings_anon_insert" -- db/tests ":!db/tests/phase24_*"` prints nothing: no standing unit pins the policy |
@@ -2153,7 +2235,7 @@ uses it as its fixture (Seams).
 
 ## Workers
 
-Workers are Opus, commit and push per task, never touch `project-state/`, and hand the PM a
+Workers are Sonnet 5.5 (freeze amendment; the brief said Opus), commit and push per task, never touch `project-state/`, and hand the PM a
 verification section that quotes each task's red run and green run, in its own file beside 109c
 (`109_W76_VERIFICATION.md` to `109_W79_VERIFICATION.md`, and `109_W85_VERIFICATION.md`). A worker that
 meets an unclear point states its default and takes it. Nobody answers a running worker by message
@@ -2229,7 +2311,7 @@ branch. W-79's image work waits for W-77's task 32 and W-78's task 25 on the pha
   Stack is told that no model plans retrieval.
 * **Two CLI starts per question.** Standard and Deep pay two starts. Lookups route to one turn. P-4's
   bound is the guard.
-* **Size.** Nine migrations, five workers, one new service with two users in it. The cut order if it
+* **Size.** Nine migrations, five workers, two new services of one image (freeze amendment, F-3). The cut order if it
   runs long: first the answering turn's own tools (then the server's limits and P-6 fall away); then
   xlsx and pptx uploads; then the list of ids at the end of a cut course file. Never cut: sessions
   from the database, the two turns, the feed, sources, the notes store's removal, the ingest

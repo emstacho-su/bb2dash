@@ -1,0 +1,9 @@
+{
+  "args": {
+    "p_runner": "workspace-ingest@a1b2c3d4e5f6",
+    "p_document_id": 17,
+    "p_outcome": "indexed",
+    "p_error_code": null
+  },
+  "returns": "indexed"
+}

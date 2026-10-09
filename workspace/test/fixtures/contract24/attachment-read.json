@@ -1,0 +1,29 @@
+{
+  "kind": "file",
+  "id": 412,
+  "state": "cut",
+  "title": "Week 5 slides.pptx",
+  "course_id": "BIO.110",
+  "units_total": 4,
+  "units_read": 2,
+  "chars_total": 3120,
+  "chars_read": 148,
+  "units": [
+    {
+      "unit_id": 9001,
+      "unit_kind": "slide",
+      "unit_no": 1,
+      "text": "Synthetic slide one: the fluid mosaic model."
+    },
+    {
+      "unit_id": 9002,
+      "unit_kind": "slide",
+      "unit_no": 2,
+      "text": "Synthetic slide two: channel and carrier proteins.\n[notes] Synthetic speaker note about carriers."
+    }
+  ],
+  "left_out_unit_ids": [
+    9003,
+    9004
+  ]
+}

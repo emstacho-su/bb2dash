@@ -1,0 +1,18 @@
+{
+  "kind": "rolling",
+  "conversation_id": "6f0c1b9e-2a54-4d0b-9c1e-7a3f5d2b8e10",
+  "through": "2026-10-08T14:02:15.900000+00:00",
+  "previous_summary": "Synthetic summary: earlier in this conversation we compared diffusion with osmosis.",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Explain facilitated diffusion.",
+      "created_at": "2026-10-08T14:00:02.100000+00:00"
+    },
+    {
+      "role": "assistant",
+      "content": "Synthetic answer about carrier proteins.",
+      "created_at": "2026-10-08T14:00:09.400000+00:00"
+    }
+  ]
+}

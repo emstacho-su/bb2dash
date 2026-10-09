@@ -1,0 +1,91 @@
+{
+  "options": {
+    "depth": "standard",
+    "format": "plain",
+    "routine_id": "study-guide",
+    "course_display_id": "BIO.110",
+    "course_ids": [
+      "BIO.110",
+      "BIO.110.lab"
+    ]
+  },
+  "routine": {
+    "id": "study-guide",
+    "title": "Study guide",
+    "instructions": "Synthetic instructions for the routine, as the table stores them."
+  },
+  "attachments": [
+    {
+      "ord": 1,
+      "kind": "file",
+      "id": 412,
+      "title": "Week 5 slides.pptx",
+      "state": "ready"
+    },
+    {
+      "ord": 2,
+      "kind": "upload",
+      "id": 17,
+      "title": "lab-notes.pdf",
+      "state": "indexed"
+    }
+  ],
+  "about_me": "Synthetic note: second-year student; prefers short answers that name the page.",
+  "rolling_summary": "Synthetic summary: earlier in this conversation we compared diffusion with osmosis.",
+  "summarised_through": "2026-10-07T18:22:10.512345+00:00",
+  "messages": [
+    {
+      "id": "c2e5d8b3-04f1-4a7c-9b6e-1d3fa08c4b52",
+      "role": "user",
+      "content": "Explain facilitated diffusion.",
+      "created_at": "2026-10-08T14:00:02.100000+00:00",
+      "error_code": null
+    },
+    {
+      "id": "d3f6e9c4-15a2-4b8d-8c7f-2e4ab19d5c63",
+      "role": "assistant",
+      "content": "Synthetic answer about carrier proteins.",
+      "created_at": "2026-10-08T14:00:09.400000+00:00",
+      "error_code": null
+    },
+    {
+      "id": "e4a7f0d5-26b3-4c9e-9d80-3f5bc20e6d74",
+      "role": "user",
+      "content": "And active transport?",
+      "created_at": "2026-10-08T14:02:11.000000+00:00",
+      "error_code": null
+    },
+    {
+      "id": "f5b801e6-37c4-4d0f-8e91-406cd31f7e85",
+      "role": "assistant",
+      "content": "Synthetic answer that was sto",
+      "created_at": "2026-10-08T14:02:15.900000+00:00",
+      "error_code": "cancelled"
+    }
+  ],
+  "messages_left_out": 0,
+  "last_auto_tier": "mid",
+  "courses": [
+    {
+      "id": "BIO.110",
+      "title": "Intro Biology",
+      "display_id": "BIO.110"
+    },
+    {
+      "id": "BIO.110.lab",
+      "title": "Intro Biology Lab",
+      "display_id": "BIO.110"
+    },
+    {
+      "id": "HST.205",
+      "title": "Modern World History",
+      "display_id": "HST.205"
+    },
+    {
+      "id": "MAT.221",
+      "title": "Calculus II",
+      "display_id": "MAT.221"
+    }
+  ],
+  "today": "2026-10-08"
+}

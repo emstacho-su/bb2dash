@@ -1,0 +1,2 @@
+<<<block {marker} {kind} {label}>>>
+<<<block {marker} end>>>

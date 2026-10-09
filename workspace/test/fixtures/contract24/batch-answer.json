@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "queries": [
+    {
+      "ok": true,
+      "state": "ok",
+      "hits": [
+        {
+          "kind": "material",
+          "unit_id": 9001,
+          "file_id": 412,
+          "document_id": null,
+          "course_id": "BIO.110",
+          "title": "Week 5 slides.pptx",
+          "unit_kind": "slide",
+          "unit_no": 7,
+          "part_no": 1,
+          "similarity": 0.871,
+          "score": 0.0392,
+          "passage": "Synthetic passage: passive transport moves a solute down its gradient and needs no energy.",
+          "has_notes": false
+        },
+        {
+          "kind": "upload",
+          "unit_id": 88,
+          "file_id": null,
+          "document_id": 17,
+          "course_id": "BIO.110",
+          "title": "lab-notes.pdf",
+          "unit_kind": "page",
+          "unit_no": 2,
+          "part_no": 1,
+          "similarity": 0.842,
+          "score": 0.0321,
+          "passage": "Synthetic passage: in the lab the dialysis bag gained mass in the hypotonic bath.",
+          "has_notes": false
+        },
+        {
+          "kind": "memory",
+          "unit_id": 93,
+          "file_id": null,
+          "document_id": 21,
+          "course_id": null,
+          "title": "Membrane transport review",
+          "unit_kind": "doc",
+          "unit_no": 1,
+          "part_no": 1,
+          "similarity": 0.803,
+          "score": 0.0158,
+          "passage": "Synthetic summary: worked through diffusion against osmosis and built a comparison table.",
+          "has_notes": false
+        }
+      ]
+    },
+    {
+      "ok": false,
+      "state": "refused",
+      "hits": []
+    }
+  ],
+  "attachments": [
+    {
+      "kind": "file",
+      "id": 412,
+      "state": "cut",
+      "title": "Week 5 slides.pptx",
+      "course_id": "BIO.110",
+      "units_total": 4,
+      "units_read": 2,
+      "chars_total": 3120,
+      "chars_read": 148,
+      "units": [
+        {
+          "unit_id": 9001,
+          "unit_kind": "slide",
+          "unit_no": 1,
+          "text": "Synthetic slide one: the fluid mosaic model."
+        },
+        {
+          "unit_id": 9002,
+          "unit_kind": "slide",
+          "unit_no": 2,
+          "text": "Synthetic slide two: channel and carrier proteins.\n[notes] Synthetic speaker note about carriers."
+        }
+      ],
+      "left_out_unit_ids": [
+        9003,
+        9004
+      ]
+    },
+    {
+      "kind": "upload",
+      "id": 17,
+      "state": "read",
+      "title": "lab-notes.pdf",
+      "course_id": "BIO.110",
+      "units_total": 1,
+      "units_read": 1,
+      "chars_total": 61,
+      "chars_read": 61,
+      "units": [
+        {
+          "unit_id": 88,
+          "unit_kind": "page",
+          "unit_no": 1,
+          "text": "Synthetic page: the dialysis bag gained mass in the hypotonic bath."
+        }
+      ],
+      "left_out_unit_ids": []
+    }
+  ]
+}

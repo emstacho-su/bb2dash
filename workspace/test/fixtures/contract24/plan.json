@@ -1,0 +1,24 @@
+{
+  "queries": [
+    {
+      "q": "membrane transport",
+      "kinds": [
+        "material",
+        "upload",
+        "memory"
+      ],
+      "course": "BIO.110"
+    },
+    {
+      "q": "lab report 2 rubric",
+      "kinds": [
+        "material"
+      ],
+      "course": null
+    }
+  ],
+  "feed": {
+    "from": null,
+    "to": null
+  }
+}
