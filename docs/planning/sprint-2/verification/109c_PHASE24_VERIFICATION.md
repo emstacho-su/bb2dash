@@ -436,3 +436,44 @@ turns off the rolling summary, which it does not (W-79 corrects the comment).
 **What the review round costs.** One more migration, 199, the last number of the block: `create or
 replace` only, applied on Stack's word after its dry run. One redeploy of `workspace-embed`. The
 Workspace test image is rebuilt before the walk.
+
+## The review round, 2026-10-09: every finding fixed on the branch
+
+| worker | merged | what it holds | read by the PM on the merged branch |
+|---|---|---|---|
+| W-77, round 2 | 44a82b2 | findings 2, 3, 5, 6 and 8 of the code review; the fence's line separators and the two titles (security note); the test that failed once under load is the budget's property test, which now has a longer limit (it computes, it does not wait on a timer) | `workspace`: typecheck clean, 1,007 tests; `apply` typecheck and 136 tests from the same tree |
+| W-79, rounds 3 and 4 | 9e936e9, c7e84d0 | findings 1 and 9; no link followed in the exchange folder (security note); the compose comment; progress judged by parts stored; the `release` outcome | `workspace-ingest`: typecheck clean, 120 tests; the five container suites, 63 tests |
+| W-78, round 3 | 9cef7c5 | finding 10: a call of `workspace-embed` reads only the units still unmarked | function tests 39 of 39; `mcp-server` 143 |
+| W-76, rounds 3 and 4 | fe-series merges to 6d1edda | migration 199 and its unit: findings 4 and 7, the two security notes on `workspace_job_finish` and `workspace_turn_put`, the `release` outcome, and the view `v_workspace_store_proof` | the nine applied files' md5 unchanged; 199 not applied |
+| W-95, the pack (tasks 45), rounds 1 and 2 | b7b3c88, cc6c5b1 | `acceptance/24/`, `web/e2e/accept24.spec.ts` and its lib: sixteen steps and the host go-live step; the four store proofs read the view | acceptance suite 55 of 55; scripts suite 261 of 261; web typecheck and lint clean by its run |
+
+**Two things the round changed in a frozen shape, both before anything used them.** `workspace-embed`'s
+`missing_parts_before` and `remaining_parts` are lower bounds while unmarked units lie outside the
+call's window, and exact at zero: the worker therefore judges a pass by `inserted_rows`, never by
+one pass's count against another's. And `workspace_ingest_finish` gains a fourth outcome,
+`release` (199), in the fixture README.
+
+**The pack, three rulings.** A 64-character hash cannot pass between two stages of a run, so the
+upload step carries a uuid and the proofs derive the file's hash from it in SQL: accepted, it tests
+the same row more strictly. The proofs script refuses catalog names, so four of the five store
+proofs first came back reduced; 199's view carries those catalog facts as plain columns and the
+proofs read it. The pack's first browser test is titled `2 open workspace`, because pack 21 has
+`2 open` and a run picks a test by its title.
+
+## Migration 199: the dry runs before Stack's word
+
+`199_workspace_review_round.sql` (48,018 bytes; `create or replace`, `comment on` and one view; no
+table, column, grant or policy moves). Three rolled-back dry runs through `execute_sql`, each
+`begin; <199>; <the grant line or lines its unit's header names>; <unit>; rollback;`, by a helper
+agent on the PM's procedure:
+
+| with the unit | result |
+|---|---|
+| `phase24_199_review_round.sql` | clean |
+| `phase24_193_ingest_role.sql` (its part on a retry moves: a retried document now waits) | clean |
+| `phase24_196b_feed_jobs.sql` (its holds carry the job's kind; the rolling job's boundary moves) | clean |
+
+Read before the first and after the last: no migration named 199, no view
+`v_workspace_store_proof`, and no membership of `postgres` in either login role. One send failed in
+the tool itself ("Invalid or expired requestState"); the database read the same afterwards and the
+text was sent again.
