@@ -67,16 +67,24 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   the runner's database login cannot reach planner state (`assignment_progress`, `reading_progress`) or a
   fact table. Migrations 140–143 are frozen; a fix is a new migration in 144–149.
 * Inbox auto-apply (Phase 23): after a sync that closed done, the `sync` container files an
-  `inbox_feedback` request when the Inbox's answered queue is not empty; the `apply` container's worker
+  `inbox_feedback` request when the Inbox's answered queue holds an answer that is not held (187: an
+  answer a run could not apply is a row of `inbox_apply_holds`, which only `inbox_apply_close` writes; a
+  sync does not try it again, a new answer or a press of Apply answers does); the `apply` container's worker
   (`apply/`) claims it, records the rows that need no reading itself, and runs `/inbox-apply` with one
   `claude -p` run for the rest. It writes as the role `inbox_apply_runner`, which can write only
   `assignments`, `assignment_progress`, `course_staff` and `courses.group_notes`, each write logged against
-  an answered Inbox item (181). The decision is stored on the archived row first; the vault note and
-  `docs/inbox-decisions/<date>.md` are rendered from it by `scripts/inbox-decisions-pr.mjs` on the host.
+  an answered Inbox item (181). The decision is stored on the archived row first; the vault note is
+  rendered from it by the scheduled export (`scripts/exports-run.mjs --notes-only` under the Windows task
+  `Bb2dash-Exports`, registered at the follow-ups' cut-over by `scripts/register-exports.ps1`; a failed
+  export shows on `just doctor` only), and `docs/inbox-decisions/<date>.md` with its pull request by
+  `scripts/inbox-decisions-pr.mjs` on the host, by hand (`just file-decisions`). A decision whose item has
+  a logged write is never skipped.
   The sync still holds no LLM (B-43). Claude's SQL there is two tools: `query` (one select, in a read-only
   transaction) and `apply_item` (one item; the server runs the transaction and checks each statement against
-  an allow-list). Migrations 180–186 are frozen (183 went on at the cut-over, 2026-10-07); a fix is a new
-  migration in 187–189. Since 185 the role also reads `bb_files` (21 columns, never `source_url`,
+  an allow-list). Migrations 180–187 are frozen (183 went on at the cut-over, 2026-10-07; 187, the follow-ups'
+  apply side, on 2026-10-09); 188 (the transform reads an archived superseded-file answer, and the fold
+  stamps `applied_at` on a session answer whose pick its file carries) is applied at the follow-ups'
+  cut-over and frozen from then; a fix is migration 189, the one number left. Since 185 the role also reads `bb_files` (21 columns, never `source_url`,
   `local_path` or `sha256`) and `sessions`, and writes neither: a session answer (`session_link/<file id>`)
   is `link_file_sessions`'s to apply, and the worker records it only when the file already shows it.
 
@@ -104,6 +112,10 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   (read by the materials server only). Its firewall is generated from the Workspace's
   (`node docker/apply/fork-firewall.mjs --write` after that script changes). Start, restart and rebuild it
   alone (`docker compose up -d --build apply`), never through a bare `up` while a sync is open.
+  bb2dash-stack's `.env` names the profile from the follow-ups' cut-over on (`COMPOSE_PROFILES=workspace,apply`,
+  Stack's line), and its doctor has an `apply` row and an `exports` row. A test build never takes the live
+  tag `bb2dash-apply:local`: it is built under a tag of its own through a second compose file. Phase 23 is
+  accepted by `just accept 23` (pack `acceptance/23/`), which stops and starts `apply` alone.
 * Workspace service (Phase 21): `workspace` in `compose.yaml` sits behind `profiles: [workspace]`, so a plain
   `up` never starts it; bb2dash-stack's `.env` turns it on (`COMPOSE_PROFILES=workspace`, acceptance step 13).
   From bb2dash-stack it is started, restarted and rebuilt alone (`docker compose up -d --build workspace`,

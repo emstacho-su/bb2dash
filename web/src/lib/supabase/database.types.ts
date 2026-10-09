@@ -459,6 +459,8 @@ export type Database = {
           archived_by: string | null
           course_id: string | null
           decision: Json | null
+          decision_filed: Json | null
+          decision_filed_at: string | null
           entity: string | null
           field: string | null
           from_value: Json | null
@@ -481,6 +483,8 @@ export type Database = {
           archived_by?: string | null
           course_id?: string | null
           decision?: Json | null
+          decision_filed?: Json | null
+          decision_filed_at?: string | null
           entity?: string | null
           field?: string | null
           from_value?: Json | null
@@ -503,6 +507,8 @@ export type Database = {
           archived_by?: string | null
           course_id?: string | null
           decision?: Json | null
+          decision_filed?: Json | null
+          decision_filed_at?: string | null
           entity?: string | null
           field?: string | null
           from_value?: Json | null
@@ -2024,6 +2030,107 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "v_course_points_median"
             referencedColumns: ["course_id"]
+          },
+        ]
+      }
+      inbox_apply_holds: {
+        Row: {
+          held_at: string
+          item_id: number
+          request_id: number
+          resolved_at: string | null
+        }
+        Insert: {
+          held_at?: string
+          item_id: number
+          request_id: number
+          resolved_at?: string | null
+        }
+        Update: {
+          held_at?: string
+          item_id?: number
+          request_id?: number
+          resolved_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_apply_holds_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: true
+            referencedRelation: "attention_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_apply_holds_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: true
+            referencedRelation: "v_inbox_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_apply_writes: {
+        Row: {
+          id: number
+          item_id: number
+          new_row: Json
+          old_row: Json | null
+          op: string
+          request_id: number | null
+          row_key: string | null
+          table_name: string
+          written_at: string
+        }
+        Insert: {
+          id?: never
+          item_id: number
+          new_row: Json
+          old_row?: Json | null
+          op: string
+          request_id?: number | null
+          row_key?: string | null
+          table_name: string
+          written_at?: string
+        }
+        Update: {
+          id?: never
+          item_id?: number
+          new_row?: Json
+          old_row?: Json | null
+          op?: string
+          request_id?: number | null
+          row_key?: string | null
+          table_name?: string
+          written_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_apply_writes_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "attention_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_apply_writes_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "v_inbox_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_apply_writes_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "agent_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_apply_writes_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "v_inbox_apply_runs"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -3799,6 +3906,51 @@ export type Database = {
           },
         ]
       }
+      v_inbox_apply_runs: {
+        Row: {
+          after_request: number | null
+          archived_count: number | null
+          claimed_at: string | null
+          claimed_by: string | null
+          claude_started: boolean | null
+          created_at: string | null
+          error_code: string | null
+          filed_by: string | null
+          finished_at: string | null
+          id: number | null
+          skip_ids: number[] | null
+          state: string | null
+        }
+        Insert: {
+          after_request?: never
+          archived_count?: never
+          claimed_at?: string | null
+          claimed_by?: string | null
+          claude_started?: never
+          created_at?: string | null
+          error_code?: never
+          filed_by?: never
+          finished_at?: string | null
+          id?: number | null
+          skip_ids?: never
+          state?: string | null
+        }
+        Update: {
+          after_request?: never
+          archived_count?: never
+          claimed_at?: string | null
+          claimed_by?: string | null
+          claude_started?: never
+          created_at?: string | null
+          error_code?: never
+          filed_by?: never
+          finished_at?: string | null
+          id?: number | null
+          skip_ids?: never
+          state?: string | null
+        }
+        Relationships: []
+      }
       v_inbox_queue: {
         Row: {
           accept: string | null
@@ -4080,6 +4232,8 @@ export type Database = {
           archived_by: string | null
           course_id: string | null
           decision: Json | null
+          decision_filed: Json | null
+          decision_filed_at: string | null
           entity: string | null
           field: string | null
           from_value: Json | null
@@ -4220,6 +4374,87 @@ export type Database = {
       }
       ical_collect: { Args: never; Returns: Json }
       ical_poll: { Args: never; Returns: Json }
+      inbox_accept_question: {
+        Args: { p_label: string; p_run: string }
+        Returns: number
+      }
+      inbox_apply_archive: {
+        Args: { p_decision: Json; p_item: number; p_request: number }
+        Returns: boolean
+      }
+      inbox_apply_begin_item: {
+        Args: { p_item: number; p_request: number }
+        Returns: boolean
+      }
+      inbox_apply_claim: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: number
+          params: Json
+        }[]
+      }
+      inbox_apply_close: {
+        Args: { p_request: number; p_result: Json; p_state: string }
+        Returns: number
+      }
+      inbox_apply_held_items: { Args: never; Returns: number[] }
+      inbox_apply_is_own_claim: {
+        Args: { p_request: number }
+        Returns: boolean
+      }
+      inbox_apply_prepare: { Args: { p_request: number }; Returns: Json }
+      inbox_apply_run_facts: { Args: { p_request: number }; Returns: Json }
+      inbox_decision_filed: {
+        Args: { p_filed: Json; p_id: number }
+        Returns: boolean
+      }
+      inbox_decision_logged: {
+        Args: { p_id: number; p_log_path: string }
+        Returns: boolean
+      }
+      inbox_decision_skipped: {
+        Args: { p_id: number; p_why: string }
+        Returns: boolean
+      }
+      inbox_decisions_unfiled: {
+        Args: { p_limit?: number }
+        Returns: {
+          applied_at: string
+          archived_at: string
+          archived_by: string
+          course_id: string
+          decision: Json
+          entity: string
+          field: string
+          id: number
+          kind: string
+          question: string
+          ref: string
+          resolution: Json
+          resolution_note: string
+          resolved_at: string
+        }[]
+      }
+      inbox_decisions_unlogged: {
+        Args: { p_limit?: number }
+        Returns: {
+          applied_at: string
+          archived_at: string
+          archived_by: string
+          course_id: string
+          decision: Json
+          entity: string
+          field: string
+          id: number
+          kind: string
+          question: string
+          ref: string
+          resolution: Json
+          resolution_note: string
+          resolved_at: string
+        }[]
+      }
       link_file_sessions: { Args: { p_sync_run_id: number }; Returns: Json }
       link_reading_files: { Args: { p_sync_run_id: number }; Returns: Json }
       mark_announcements_seen: { Args: never; Returns: number }
@@ -4398,6 +4633,7 @@ export type Database = {
         Args: { p_id: number; p_run_id: string }
         Returns: boolean
       }
+      sync_request_inbox_apply: { Args: { p_after: number }; Returns: number }
       sync_requeue_orphans: { Args: never; Returns: number }
       sync_run_outcome: {
         Args: { p_run_id: string }

@@ -41,6 +41,8 @@ test('arguments: --worktree is this script\'s, the rest is the exporter\'s, and 
   });
   assert.throws(() => parseArgs(['--worktree'], repo), StepError);
   assert.throws(() => parseArgs(['--log-dir', 'x'], repo), /set by this script/);
+  // The manual step writes the day files; --notes-only is the schedule's mode and writes none.
+  assert.throws(() => parseArgs(['--notes-only'], repo), /writes the day files/);
 });
 
 test('the commit message names the days that changed, once each, in order', () => {

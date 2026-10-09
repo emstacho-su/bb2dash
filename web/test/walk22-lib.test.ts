@@ -434,6 +434,7 @@ const BEFORE_PHASE_22: ReadonlySet<string> = new Set([
   'accept.env.ts',
   'accept.lib.ts',
   'accept21.spec.ts',
+  'accept23.spec.ts',
   'harness.spec.ts',
   'item-popout.spec.ts',
   'playwright.config.ts',

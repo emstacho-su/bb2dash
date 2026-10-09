@@ -34,8 +34,13 @@ export interface ReportInput {
   readonly trigger: string | null;
   /** The items handed to Claude in this run. */
   readonly batchIds: readonly number[];
-  /** `params.skip`: items an earlier run of this chain could not apply. */
+  /** The ids left out of Claude's reach this pass: `held` (or `params.skip` for an old function). */
   readonly priorSkip: readonly number[];
+  /**
+   * `resolved_at` of each queue row exactly as `prepare` handed it over. `inbox_apply_close` writes a
+   * hold for a skipped id only while the row still carries that same time. Absent: every time reads null.
+   */
+  readonly seen?: ReadonlyMap<number, string | null>;
   readonly facts: RunFacts;
   readonly claude: ClaudeOutcome | null;
   /** True when the day's run cap stopped this request before Claude was started. */
@@ -85,14 +90,18 @@ const ERROR_SENTENCE: Readonly<Record<RunError, string>> = Object.freeze({
   interrupted: 'The run was interrupted.',
 });
 
+/** What happens to an answer that is not applied. The card offers no Undo for some of them, so none is named. */
+const HELD_RULE = 'A sync does not try these answers again; a new answer or a press of Apply answers does.';
+
 /** The first line: what happened, in the Inbox's words. */
-function headline(changed: number, recordedOnly: number, notApplied: number, notReached: number): string {
+function headline(changed: number, recordedOnly: number, notApplied: number, notReached: number, heldWaiting: number): string {
   const parts: string[] = [];
   if (changed > 0) parts.push(`${plural(changed, 'answer', 'answers')} applied`);
   if (recordedOnly > 0) parts.push(`${recordedOnly} recorded only`);
   if (notApplied > 0) parts.push(`${notApplied} could not be applied`);
   if (notReached > 0) parts.push(`${notReached} not reached`);
-  return parts.length === 0 ? 'Nothing to apply' : parts.join(', ');
+  if (parts.length > 0) return parts.join(', ');
+  return heldWaiting > 0 ? `Nothing new was applied; ${plural(heldWaiting, 'answer waits', 'answers wait')}.` : 'Nothing to apply';
 }
 
 /** The close's state and result for one request. */
@@ -115,10 +124,16 @@ export function buildReport(input: ReportInput): Report {
   const error: RunError | null =
     claude?.error ?? (input.capped ? 'daily_cap' : notApplied.length > 0 || facts.unarchivedWrites.length > 0 ? 'not_applied' : null);
 
-  const lines = [headline(changed, recordedOnly, notApplied.length, notReached.length)];
+  // Held: left out of this pass's batch on purpose and still waiting (not this run's failures, listed above).
+  const inBatch = new Set(input.batchIds);
+  const heldWaiting = input.priorSkip.filter((id) => left.has(id) && !inBatch.has(id));
+  const seen = input.seen ?? new Map<number, string | null>();
+
+  const lines = [headline(changed, recordedOnly, notApplied.length, notReached.length, heldWaiting.length)];
   if (error !== null) lines.push(claude?.detail ?? ERROR_SENTENCE[error]);
-  if (notApplied.length > 0) lines.push(`Not applied: ${plural(notApplied.length, 'item', 'items')} ${notApplied.join(', ')}.`);
+  if (notApplied.length > 0) lines.push(`Not applied: ${plural(notApplied.length, 'item', 'items')} ${notApplied.join(', ')}. ${HELD_RULE}`);
   if (notReached.length > 0) lines.push(`Not reached: ${plural(notReached.length, 'item', 'items')} ${notReached.join(', ')}.`);
+  if (heldWaiting.length > 0) lines.push(`Held from an earlier try: ${plural(heldWaiting.length, 'item', 'items')} ${heldWaiting.join(', ')}. ${HELD_RULE}`);
   if (facts.unarchivedWrites.length > 0) {
     lines.push(`Written but not archived, check these: ${plural(facts.unarchivedWrites.length, 'item', 'items')} ${facts.unarchivedWrites.join(', ')}.`);
   }
@@ -140,6 +155,9 @@ export function buildReport(input: ReportInput): Report {
       flagged: facts.flagged,
       left: stillWaiting,
       skip,
+      // The time `prepare` gave for each skipped id, as the string it came as: the close holds an
+      // answer only while its row still carries it (migration 187).
+      skip_seen: skip.map((id) => ({ id, resolved_at: seen.get(id) ?? null })),
       trigger: input.trigger,
       claude: {
         started: claude !== null,

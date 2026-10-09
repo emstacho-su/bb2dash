@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BATCH_MAX_ITEMS, RUN_BUDGET_DEFAULT_USD, assertApplyDsn, loadConfig, parseRunBudget, PATHS } from '../src/config.js';
-import { parsePrepared, planBatch, templatedBucket, templatedDecision as decisionOf, templatedRecord, type QueueRow } from '../src/batch.js';
+import { parsePrepared, planBatch, skipSet, templatedBucket, templatedDecision as decisionOf, templatedRecord, type QueueRow } from '../src/batch.js';
 
 /** The record of a row the worker archives itself; the bucket named is the one the test expects it to get. */
 function templatedDecision(row: QueueRow, bucket: string, requestId: number): Record<string, unknown> {
@@ -76,8 +76,8 @@ describe('the batch', () => {
     expect(prepared.runsToday).toBe(2);
     expect(prepared.skip).toEqual([3, 4]);
     expect(prepared.trigger).toBe('followup');
-    expect(prepared.queue[0]).toMatchObject({ id: 3101, courseId: 'IST.352', entity: 'assignment', hasNote: false, wasApplied: false });
-    expect(parsePrepared({ queue: [] })).toEqual({ queue: [], runsToday: 0, skip: [], trigger: null });
+    expect(prepared.queue[0]).toMatchObject({ id: 3101, courseId: 'IST.352', entity: 'assignment', hasNote: false, wasApplied: false, resolvedAt: '2026-10-07T14:02:11Z' });
+    expect(parsePrepared({ queue: [] })).toEqual({ queue: [], runsToday: 0, skip: [], held: null, trigger: null });
     expect(() => parsePrepared({ queue: [{ kind: 'conflict' }] })).toThrow(/no item id/);
     expect(() => parsePrepared(null)).toThrow(/no queue/);
     expect(() => parsePrepared({ queue: 'x' })).toThrow(/no queue/);
@@ -159,6 +159,22 @@ describe('the batch', () => {
     expect(templatedBucket(sessionRow({ file_session_id: 44 }, { state: 'dismissed' }))).toBe('dismissed');
   });
 
+  it('task 8: a session answer with was_applied true is recorded with link_file_sessions in its rule, never apply_resolutions', () => {
+    const stamp = { was_applied: true, applied_at: '2026-10-08T05:00:00Z' };
+    const record = templatedDecision(sessionRow({}, stamp), 'applied_by_transform', 9);
+    expect(record.rule).toBe('File 2489 carries session 45, his pick, set by link_file_sessions (migrations 123, 163).');
+    expect(String(record.rule)).not.toContain('apply_resolutions');
+    // "None", stamped or not, stays what it was.
+    const none = sessionRow({ pick: null, file_session_id: null }, { accept: 'none', ...stamp });
+    expect(templatedDecision(none, 'applied_by_transform', 9).rule).toMatch(/^Answered none: file 2489 is unlinked/);
+    // The file moved on after the stamp: still the fold's work, still not apply_resolutions' name.
+    const moved = templatedDecision(sessionRow({ file_session_id: 44 }, stamp), 'applied_by_transform', 9);
+    expect(moved.rule).toMatch(/^Applied by link_file_sessions\(\) at 2026-10-08T05:00:00Z/);
+    expect(String(moved.rule)).not.toContain('apply_resolutions');
+    // A row that is not a session answer keeps apply_resolutions.
+    expect(templatedDecision(row({ was_applied: true }), 'applied_by_transform', 9).rule).toMatch(/^Applied by apply_resolutions\(\)/);
+  });
+
   it('splits the queue: templated, at most six for Claude, the rest deferred, skipped rows left out', () => {
     const queue = [
       queueRow({ id: 1, was_applied: true }),
@@ -173,6 +189,49 @@ describe('the batch', () => {
     expect(plan.deferred).toEqual([9, 10]);
     expect(plan.skipped).toEqual([4]);
     expect(planBatch(parsePrepared({ queue: [] }))).toEqual({ templated: [], forClaude: [], deferred: [], skipped: [] });
+  });
+});
+
+describe('held answers (Phase 23 follow-ups, item 1)', () => {
+  const held = (ids: unknown, over: Record<string, unknown> = {}) => ({ ...over, held: ids });
+
+  it("reads `held`, and each row's resolved_at as the exact string prepare gave", () => {
+    const exact = '2026-10-08T03:12:45.123456+00:00';
+    const prepared = parsePrepared(held([4, '5', 'x'], { params: { skip: [9] }, queue: [queueRow({ id: 4, resolved_at: exact }), queueRow({ id: 5, resolved_at: null }), queueRow({ id: 6, resolved_at: 17 })] }));
+    expect(prepared.held).toEqual([4, 5]);
+    expect(prepared.queue.map((r) => r.resolvedAt)).toEqual([exact, null, null]);
+    expect(parsePrepared({ params: { skip: [9] }, queue: [] }).held).toBeNull();
+    expect(parsePrepared(held('x', { queue: [] })).held).toBeNull();
+    expect(parsePrepared(held([], { queue: [] })).held).toEqual([]);
+  });
+
+  it('case 1: a held row that would go to Claude is skipped and never in the batch', () => {
+    const queue = [queueRow({ id: 3 }), queueRow({ id: 4 }), queueRow({ id: 5, has_note: true })];
+    const plan = planBatch(parsePrepared(held([4, 5], { params: { trigger: 'sync' }, queue })));
+    expect(plan.forClaude.map((r) => r.id)).toEqual([3]);
+    expect(plan.skipped).toEqual([4, 5]);
+    expect(plan.deferred).toEqual([]);
+  });
+
+  it('the skip set is held when the key is there, and params.skip only for an old function without it', () => {
+    const queue = [queueRow({ id: 3 }), queueRow({ id: 4 })];
+    const withHeld = planBatch(parsePrepared(held([4], { params: { skip: [3] }, queue })));
+    expect(withHeld.forClaude.map((r) => r.id)).toEqual([3]);
+    expect(withHeld.skipped).toEqual([4]);
+    const old = planBatch(parsePrepared({ params: { skip: [3] }, queue }));
+    expect(old.forClaude.map((r) => r.id)).toEqual([4]);
+    expect(old.skipped).toEqual([3]);
+    expect(skipSet(parsePrepared(held([4], { params: { skip: [3] }, queue: [] })))).toEqual([4]);
+    expect(skipSet(parsePrepared({ params: { skip: [3] }, queue: [] }))).toEqual([3]);
+    expect(skipSet(parsePrepared(held([], { params: { skip: [3] }, queue: [] })))).toEqual([]);
+  });
+
+  it('case 2: a held row the worker can record itself is recorded, not skipped', () => {
+    const queue = [queueRow({ id: 1, state: 'dismissed' }), queueRow({ id: 2, was_applied: true, applied_at: '2026-10-08T05:00:00Z' }), queueRow({ id: 3 })];
+    const plan = planBatch(parsePrepared(held([1, 2, 3], { queue })));
+    expect(plan.templated.map((t) => [t.row.id, t.bucket])).toEqual([[1, 'dismissed'], [2, 'applied_by_transform']]);
+    expect(plan.forClaude).toEqual([]);
+    expect(plan.skipped).toEqual([3]);
   });
 });
 
@@ -418,9 +477,44 @@ describe('the report', () => {
     expect(report.result.lines).toEqual([
       '1 answer applied, 1 could not be applied',
       'Some answers could not be applied.',
-      'Not applied: 1 item 2.',
+      'Not applied: 1 item 2. A sync does not try these answers again; a new answer or a press of Apply answers does.',
+      'Held from an earlier try: 1 item 8. A sync does not try these answers again; a new answer or a press of Apply answers does.',
       '3 answers still waiting.',
     ]);
+  });
+
+  it('case 3: skip_seen carries, for each skipped id, the resolved_at string prepare gave', () => {
+    const exact = '2026-10-08T03:12:45.123456+00:00';
+    const seen = new Map<number, string | null>([[1, '2026-10-07T14:02:11Z'], [2, exact], [8, null]]);
+    const report = buildReport({ trigger: 'sync', batchIds: [1, 2], priorSkip: [7, 8], capped: false, claude: finished, seen,
+      facts: facts({ archivedIds: [1], changedIds: [1], leftIds: [2, 8, 9] }) });
+    expect(report.result.skip).toEqual([2, 8]);
+    expect(report.result.skip_seen).toEqual([{ id: 2, resolved_at: exact }, { id: 8, resolved_at: null }]);
+    // An id prepare did not list at all reads null.
+    const unknown = buildReport({ trigger: 'sync', batchIds: [], priorSkip: [40], capped: false, claude: null, facts: facts({ leftIds: [40] }) });
+    expect(unknown.result.skip_seen).toEqual([{ id: 40, resolved_at: null }]);
+    expect(buildReport({ trigger: 'sync', batchIds: [], priorSkip: [], capped: false, claude: null, facts: facts() }).result.skip_seen).toEqual([]);
+  });
+
+  it('held answers alone: done, nothing new applied, and the first line counts how many wait', () => {
+    const report = buildReport({ trigger: 'sync', batchIds: [], priorSkip: [4, 5], capped: false, claude: null, facts: facts({ leftIds: [4, 5] }) });
+    expect(report.state).toBe('done');
+    expect(report.result).toMatchObject({ error: null, skip: [4, 5], left: 2, claude: { started: false } });
+    expect(report.result.lines).toEqual([
+      'Nothing new was applied; 2 answers wait.',
+      'Held from an earlier try: 2 items 4, 5. A sync does not try these answers again; a new answer or a press of Apply answers does.',
+      '2 answers still waiting.',
+    ]);
+    const one = buildReport({ trigger: 'followup', batchIds: [], priorSkip: [4], capped: false, claude: null, facts: facts({ leftIds: [4] }) });
+    expect((one.result.lines as string[])[0]).toBe('Nothing new was applied; 1 answer waits.');
+  });
+
+  it('no report line tells him to use Undo', () => {
+    const lines = [
+      buildReport({ trigger: 'sync', batchIds: [1], priorSkip: [7], capped: false, claude: finished, facts: facts({ leftIds: [1, 7] }) }),
+      buildReport({ trigger: 'sync', batchIds: [], priorSkip: [], capped: true, claude: null, facts: facts({ leftIds: [1] }) }),
+    ].flatMap((r) => r.result.lines as string[]);
+    expect(lines.join(' ')).not.toMatch(/undo/i);
   });
 
   it('an item taken back mid-run is neither applied nor a failure', () => {
