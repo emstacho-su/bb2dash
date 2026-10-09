@@ -27,7 +27,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         {/* The fonts are also an @import in globals.css, which the build drops (lib/fonts-href.ts). */}
         {GOOGLE_FONTS_ORIGINS.map((origin) => (
-          <link key={origin} rel="preconnect" href={origin} crossOrigin="" />
+          // Only the font files are a CORS request; the stylesheet is not, and a preconnect with
+          // crossorigin could not be reused for it.
+          <link key={origin} rel="preconnect" href={origin} crossOrigin={origin === GOOGLE_FONTS_ORIGINS[1] ? '' : undefined} />
         ))}
         <link rel="stylesheet" href={GOOGLE_FONTS_HREF} />
       </head>
