@@ -404,6 +404,11 @@
   .navMenu {
     display: flex;
   }
+  /* The drawn icon labels (tokens.module.css .tip) are not drawn here: an unseen label still lies in
+     the bar's scrollable overflow, and the one under the last icon would widen it past the viewport. */
+  .bar .ic[data-tip]::after {
+    display: none;
+  }
   /* Activity: capped to the viewport and anchored to the bar's right edge. */
   .ddActivity {
     width: min(var(--size-panel-max), calc(100vw - var(--size-panel-gutter)));
