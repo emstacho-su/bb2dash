@@ -69,7 +69,10 @@
         "apply.startNoBuild",
         "exports.doctorRow",
         "exports.runNow",
-        "db.proof"
+        "ingest.start",
+        "ingest.startNoBuild",
+        "db.proof",
+        "db.proofUntil"
       ]
     },
     "value": {

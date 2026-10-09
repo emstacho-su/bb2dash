@@ -303,3 +303,78 @@ images built because their package layers were cached (`bb2dash-workspace:wt24` 
 W-79's builds. P-7, P-11 and the upload half of the walk wait for a build on another network. W-79
 also reports one build that began a few seconds after a `bb2dash-walk22-` container appeared (a
 cached build of 12 s).
+
+## Tasks 22 and 27, and probes P-8 and P-9, 2026-10-08 night (2026-10-09 03:1xZ to 03:5xZ)
+
+Stack's words: "merge 86. Deploy the edge function and their probes."
+
+**Task 22, the port PR.** #86 merged as d78f576, with no acceptance run and no walk box open. On
+`main` after the merge, through the runner against prod: `phase15_100_db_test_runner_role.sql`,
+`phase21_142_workspace_runner.sql` and `phase21_143_review_round.sql` each PASS. `phase15_101` is
+red there for the follow-ups' `inbox_accept_question()` alone, as before this phase.
+
+**Task 27, the deploys.** `list_edge_functions` after them:
+
+| function | version | status | `verify_jwt` |
+|---|---|---|---|
+| `workspace-search` | 1 | ACTIVE | true |
+| `workspace-embed` | 2 | ACTIVE | true |
+| `embed-corpus` 5, `search` 6, `calendar-push` 5 | unchanged | ACTIVE | as before (`calendar-push` false) |
+
+Deployed by a helper agent on the PM's written procedure, the files as they stand
+(`workspace-search`: `index.ts`, `search.ts`; `workspace-embed`: `index.ts` with
+`../_shared/chunk.ts` and `../_shared/embed-plan.ts`), then read back and compared with the source.
+**`workspace-embed` version 1 did not match its source**: one expression in `embed-plan.ts` was
+mistyped in the upload. The helper found it in its own read-back before anything had called the
+function; version 2 is the source, all three files compared line by line with no difference.
+`workspace-search` matched at the first deploy.
+
+**The probe rows.** One synthetic upload document with one unit (4,224 characters of one made-up
+sentence), written by SQL with state `text_ready`; no object was put in the bucket, because P-7,
+the probe that needs one, waits for the ingest image. Counts before the rows: 0 documents, 0 units,
+0 vectors, 0 objects in `workspace-uploads`. Document id 137, unit id 2064. Removed in the same
+sitting by one `delete` of the document (the units and vectors go with it). Counts after: 0, 0, 0, 0.
+
+| probe | line |
+|---|---|
+| P-8 | **PASS.** One call of `workspace-embed` with the probe document's id and `max_parts` 3, with the public anon JWT as the worker will hold it: 200, `inserted_rows` 3, `failed` empty, `remaining_parts` 1 of 4. A second call stored the last part; the same call again stored 0 and failed nothing. Read on prod: 4 vector rows for the unit, every one under `gte-small`, the unit's `embedded_at` set. The answer's keys are `embed.json`'s. So a second edge function opens a `gte-small` session at 3 parts a call |
+| P-9 | **PASS.** With the service key, through the batch child as the runner will start it: the query `ok`, 11 hits, each naming its kind: 1 `upload` (the probe document, similarity 0.919), 10 `material`, 0 `memory` (none exists). The row's keys are `search-row.json`'s, `written_at` among them. The probe document read as an attachment came back `cut` at 2,000 characters. With the public anon JWT: HTTP 403, `code` 42501, zero rows. Nothing but counts, kinds and statuses was printed or kept |
+
+`v_workspace_index_status` read with the probe document in place: `uploads_waiting` 1 and every
+other upload and memory count 0, `course_units_indexed` 1005, `course_units_waiting` 0,
+`ingest_polled_age_seconds` null (no ingest worker has run).
+
+## Task 41: the retrieval eval, no model
+
+The nine cases of `ingest/eval/golden_set.json` through the batch entry on the host with the key
+file (one query a case, the case's course as its scope, course materials, floor 0.78, ten hits;
+the script is in the session's scratch folder and prints qids and counts only):
+
+`in passages: 8 of 9; missed qids: 7`, exit 1. **Not the 9 the task asks for, and the miss is the
+golden set's, not the search's.** Case 7's truth names files 149 and 967. Both have been replaced
+since it was written (read on prod: 149 is superseded by 2509; 967 by 2640, and 2640 by 2773), and
+the search hides a replaced file. Among case 7's ten hits are 2509 and 2773, the current version
+of each. It is the stale truth STATUS already lists under known issues
+(`phase18_golden_truth.sql`, Q7). `ingest/` is no worker's in this phase, so the file is not
+edited here; against the files that are current the eval reads 9 of 9.
+
+## W-85, task 40 (bb2dash-stack)
+
+Branch `feat/workspace-24` in bb2dash-stack, cut from that `origin/main` at 0fd659f once the
+follow-ups' PR (#6) was on it; three commits (a94a495, c509b62, feca81c). The secret name
+`workspace_ingest_db_url` is declared, with its empty example file; the names are fourteen;
+the doctor's Workspace text no longer names `harness_database_url`. Three host actions:
+`ingest.start`, `ingest.startNoBuild` (each starts `workspace-extract`, then `workspace-ingest`,
+by name with `--no-deps`) and `db.proofUntil` (a proof read up to 10 times, 10 s apart). They are
+in `acceptance/manifest.schema.json`'s list in this repository now. W-85's run of the umbrella's
+whole suite: 359 pass, 0 fail.
+
+## Task 48, prepared
+
+The snippet is `C:/Users/stack/.bb2dash-wt24/make-ingest-login.ps1`, outside every repository: it
+makes the password on the laptop, stores `workspace_ingest_db_url` in `SECRETS_DIR`, and puts the
+one `alter role` line on Stack's clipboard for an unsaved SQL editor tab. Tested by the PM against
+a throwaway folder of fake secrets (the stored string's shape, no byte-order mark, a refusal to
+replace a file without `-Force`), which was then deleted. The name `workspace_ingest_db_url` was
+added to the allow-list of `set-secret.ps1` in `SECRETS_DIR` (a name). Handed to Stack on
+2026-10-08 night; his step is done when `just doctor` shows no missing secret.
