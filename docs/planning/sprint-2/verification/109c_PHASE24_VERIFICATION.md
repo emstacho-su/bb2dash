@@ -477,3 +477,46 @@ Read before the first and after the last: no migration named 199, no view
 `v_workspace_store_proof`, and no membership of `postgres` in either login role. One send failed in
 the tool itself ("Invalid or expired requestState"); the database read the same afterwards and the
 text was sent again.
+
+## Migration 199 applied, `workspace-embed` redeployed, task 48 done (2026-10-09, about 12:00Z)
+
+Stack's words: "apply 199 and redeploy emped. Copied and ran the SQL query to force rewrite that
+secret."
+
+**199.** Applied as `199_workspace_review_round`, one statement, by a helper agent on the PM's
+procedure. `md5(statements[1])` on prod is `416afe139cb3312f54352015424e59f1`, 48,018 bytes, equal
+to `git show HEAD:db/migrations/199_workspace_review_round.sql | md5sum` (read by the helper and
+again by the PM). The first send failed in the tool ("Invalid or expired requestState") with
+nothing recorded; the same text went through on the second. Through the runner against prod
+afterwards, each PASS: `phase24_199_review_round`, `phase24_193_ingest_role`,
+`phase24_196_runner_v2`, `phase24_196b_feed_jobs`, `phase24_190_store`, `phase24_192_search`,
+`phase24_194_ask_options`, `phase24_195_turn_state`, `phase24_197_index_status`,
+`phase24_198_anon_insert_drop`, `phase24_store_proof`, `phase21_140_workspace_tables`,
+`phase21_142_workspace_runner`, `phase21_143_review_round`, `phase15_100_db_test_runner_role`.
+The block 190 to 199 is used up and frozen.
+
+`select * from v_workspace_store_proof` on prod: `vector` 0.8.2 in `extensions`; the two columns,
+`public.bb_text_embeddings.embedding:384:t` and `public.workspace_text_embeddings.embedding:384:t`;
+the two valid HNSW cosine indexes; 0 foreign servers, 0 foreign tables, 0 link extensions, 0 store
+functions that call out; all four `_ok` columns true.
+
+Advisors (security) after it: the same lines as after the ninth apply, nothing new. The view is
+security invoker and is not listed.
+
+**`workspace-embed`, version 3.** Deployed from the branch after the review round (`index.ts`,
+`_shared/chunk.ts`, `_shared/embed-plan.ts`, `_shared/embed-call.ts`), `verify_jwt` true, ACTIVE;
+read back and compared with the source line by line, no difference; the other four functions'
+versions and hashes unchanged.
+
+**P-8 repeated on version 3.** One synthetic upload document of five units (3,760, 470, 2,820, 376
+and 282 characters; ten parts in all), written by SQL and removed in the same sitting. Calls with
+`max_parts` 3 and the public anon JWT: 200 each; `inserted_rows` 3, 3, 3, 1; `remaining_parts` 7,
+4, 1, 0; nothing in `failed`. Read on prod: 10 vectors, all `gte-small`, all 5 units marked.
+Counts before and after the sitting: 0 documents, 0 units, 0 vectors, 0 objects in the bucket.
+
+**Task 48.** Stack ran the snippet (with `-Force`, by his words) and the one `alter role` line.
+Checked by the PM without reading the secret: the file `workspace_ingest_db_url` is in
+`SECRETS_DIR`; a connection made from it, with the certificate verified against the pinned CA,
+answers `current_user` = `workspace_ingest_runner`; the role may execute
+`workspace_ingest_heartbeat` and holds no select on `workspace_documents`. The first heartbeat row
+waits for the ingest worker's first start, which waits for the image.

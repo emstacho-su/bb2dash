@@ -60,12 +60,27 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   Search UIs must scrub/label PPTX `[notes]` speaker-note markers and `Page N` headers.
 * GUI: layout spec = the Nocturne artboards; CSS Modules + custom properties, no Tailwind.
   No fabricated numbers anywhere — no grade display until real gradebook data exists.
-* Workspace (Phase 21): a chat page at `/workspace`. A container runner answers each question with one
-  `claude -p` turn of the pinned CLI (2.1.289) on Stack's Claude subscription: no API key, never `--bare`,
-  never the Agent SDK. A heuristic router picks Haiku, Sonnet or Opus. **v1 is read-only**: the assistant's
-  tools are off, four read tools over the materials and the two bb2dash notes collections pass a gate, and
-  the runner's database login cannot reach planner state (`assignment_progress`, `reading_progress`) or a
-  fact table. Migrations 140–143 are frozen; a fix is a new migration in 144–149.
+* Workspace (Phase 21, rebuilt behind the page in Phase 24a): a chat page at `/workspace`. A container runner
+  answers each question with one or two `claude -p` turns of the pinned CLI (2.1.289) on Stack's Claude
+  subscription: no API key, never `--bare`, never the Agent SDK. A heuristic router picks Haiku, Sonnet or
+  Opus. On a middle or heavy question a cheap planning turn (Haiku, no tool, no MCP server, thinking off)
+  first writes a search plan; the runner carries it out and the routed model answers. A lookup is one turn:
+  the runner searches with his words. No turn resumes a CLI session: every turn's context is rebuilt from
+  the database (the recent turns, a rolling summary, the passages found, attached files, the planner and
+  grades feed), each block fenced as data, and no transcript is kept. **Still read-only for the planner**:
+  the assistant's tools are off, two read tools over the course materials pass a gate
+  (`search_materials`, `get_material_text`, with a per-turn limit and the request's course scope), and no
+  notes store is read. The runner's login executes eleven SECURITY DEFINER functions and holds no table
+  grant; through them, for a request or a job it holds, it reads the conversation, the course list, attached
+  files' names and the feed's fixed columns (assignments, readings, the status of `assignment_progress` and
+  `reading_progress`, posted scores). It can write neither planner state, a grade nor a fact table, and the
+  assistant never works out a grade. **One retrieval store, pgvector, inside the bb2dash project**: course
+  files (`bb_file_text`, `bb_text_embeddings`), his uploads and the assistant's memory
+  (`workspace_documents`, `workspace_document_text`, `workspace_text_embeddings`), all on gte-small at 384
+  dimensions, each vector table with its HNSW index, behind one search (`workspace_search`) that names the
+  kind on every hit; `v_workspace_index_status` is the one status row. Memory summaries are built and stay
+  off until Phase 24b (`WORKSPACE_MEMORY_JOBS=off`); the page's new controls are 24b's. Migrations 140–143
+  and 190–199 are frozen; nothing is left in the block, so a fix needs a ruling and a new block.
 * Inbox auto-apply (Phase 23): after a sync that closed done, the `sync` container files an
   `inbox_feedback` request when the Inbox's answered queue holds an answer that is not held (187: an
   answer a run could not apply is a row of `inbox_apply_holds`, which only `inbox_apply_close` writes; a
@@ -116,14 +131,22 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   Stack's line), and its doctor has an `apply` row and an `exports` row. A test build never takes the live
   tag `bb2dash-apply:local`: it is built under a tag of its own through a second compose file. Phase 23 is
   accepted by `just accept 23` (pack `acceptance/23/`), which stops and starts `apply` alone.
-* Workspace service (Phase 21): `workspace` in `compose.yaml` sits behind `profiles: [workspace]`, so a plain
-  `up` never starts it; bb2dash-stack's `.env` turns it on (`COMPOSE_PROFILES=workspace`, acceptance step 13).
-  From bb2dash-stack it is started, restarted and rebuilt alone (`docker compose up -d --build workspace`,
-  `docker compose restart workspace`); `just up` rebuilds every service and is never run while a sync is open
-  (DECISIONS 2026-10-07). On the phase branch, before the merge, it runs only as compose project `bb2dash-wt21`
-  from a phase worktree, the service named in every command. Its runner reaches the database only as the login
-  role `workspace_runner`, through five
-  SECURITY DEFINER functions (`workspace_claim`, `workspace_begin`, `workspace_stream`, `workspace_finish`,
-  `workspace_heartbeat`; 142, 143), and the service mounts four secrets from `SECRETS_DIR` as files:
-  `workspace_runner_db_url`, `claude_oauth_token`, `bb2dash_mcp_service_key`, `harness_database_url` (the
-  last two could write; each is read only by its own MCP server, accepted for v1, DECISIONS 2026-10-05).
+* Workspace services (Phase 21; Phase 24a): `workspace`, `workspace-ingest` and `workspace-extract` in
+  `compose.yaml` sit behind `profiles: [workspace]`, so a plain `up` never starts them; bb2dash-stack's
+  `.env` turns the profile on. From bb2dash-stack each is started, restarted and rebuilt alone, by name
+  (`docker compose up -d --build workspace`; `workspace-extract` before `workspace-ingest`); `just up`
+  rebuilds every service and is never run while a sync is open (DECISIONS 2026-10-07). On a phase branch,
+  before the merge, they run only as a test compose project from a phase worktree (`bb2dash-wt24` in Phase
+  24a), built under test tags through a second compose file so that no live tag moves, the service named in
+  every command, and only inside a window Stack has agreed to: one runner answers the queue at a time.
+  `workspace`: the runner reaches the database only as the login role `workspace_runner`, through eleven
+  SECURITY DEFINER functions (142, 143, 196, 199), and mounts three secrets from `SECRETS_DIR` as files:
+  `workspace_runner_db_url`, `claude_oauth_token`, `bb2dash_mcp_service_key` (the one credential there that
+  could write; read only by the materials package, DECISIONS 2026-10-05). Its CLI config folder is a tmpfs.
+  `workspace-ingest` reads his uploads: no model, no Claude token, no service key; its own network
+  `ingest-net` behind its own firewall (generated: `node docker/workspace-ingest/fork-firewall.mjs --write`
+  after the Workspace's script changes); two secrets, `workspace_ingest_db_url` (role
+  `workspace_ingest_runner`: four functions, no table grant) and `supabase_anon_jwt`. `workspace-extract`
+  runs the file parser alone: no network, no secret, a read-only root, every capability dropped. The two
+  meet only in the tmpfs volume `ingest-exchange`. No Claude process and no upload parser shares a network
+  or a volume with the Blackboard login.
