@@ -51,7 +51,7 @@ export function ActivityMenu() {
   }
 
   return (
-    <span ref={anchor} style={{ display: 'contents' }}>
+    <span ref={anchor} className={styles.anchor}>
       <button
         type="button"
         className={popover.open ? styles.icOpen : styles.ic}

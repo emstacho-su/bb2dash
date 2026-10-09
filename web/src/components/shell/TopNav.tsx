@@ -187,7 +187,7 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
         <Bell />
 
         {/* User menu */}
-        <span ref={userAnchor} style={{ display: 'contents' }}>
+        <span ref={userAnchor} className={styles.anchor}>
           <button
             type="button"
             className={user.open ? styles.icOpen : styles.ic}

@@ -5,6 +5,12 @@
    bell, the Activity menu and the user menu cannot drift apart. Only what is
    specific to an announcement row lives here. */
 
+/* The popover anchor wraps the button and its panel and draws no box of its own. A class, not an
+   inline style, so the bar's phone rule (TopNav .bar:has([data-search]) .icToggle ~ *) can hide it. */
+.anchor {
+  display: contents;
+}
+
 .ic {
   composes: ic from './TopNav.module.css';
 }
@@ -103,4 +109,12 @@
 }
 .seeAll:hover {
   text-decoration: underline;
+}
+
+@media (max-width: 720px) {
+  /* Capped to the viewport and anchored to the bar's right edge: inside it at 390px. */
+  .panel {
+    width: min(360px, calc(100vw - 28px));
+    right: 0;
+  }
 }

@@ -56,7 +56,7 @@ export function Bell() {
   const rows = bellRows(list.data ?? [], unreadAtOpen, DROPDOWN_LIMIT);
 
   return (
-    <span ref={anchor} style={{ display: 'contents' }}>
+    <span ref={anchor} className={styles.anchor}>
       <button
         type="button"
         className={popover.open ? styles.icOpen : styles.ic}
