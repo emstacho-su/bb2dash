@@ -289,20 +289,44 @@ async function pressAndFile(page: Page, button: Locator): Promise<number> {
 interface ApplyWatch {
   /** The labels the button read, in order, each once. */
   labels: string[];
-  /** `done` or `failed` when the request closed, `waiting on the worker…` when nothing took it, null when the time ran out. */
+  /** `done` or `failed` when the request closed, `waiting on the worker…` when nothing took it, null when the time ran out or the queue emptied unseen. */
   endedAs: string | null;
+  /** True when the footer came to read `0 answered` while the button was at rest: a request closed that the page never saw open. */
+  emptiedUnseen: boolean;
 }
 
-async function watchApplyButton(page: Page, limitMs: number): Promise<ApplyWatch> {
+/**
+ * Watches the button. With `untilEmptied` it also ends when the footer reads `0 answered` while the
+ * button is at rest. That is how a request the page did not file can end: the page looks for one
+ * every 30 seconds while answers wait (`INBOX_APPLY_WATCH_MS`), and a request whose answers need no
+ * reading opens and closes in about five seconds (trial run 20261009T123422Z: request 5073, 12:38:03Z
+ * to 12:38:08Z), so the button may never leave its resting label.
+ */
+async function watchApplyButton(page: Page, limitMs: number, untilEmptied = false): Promise<ApplyWatch> {
   const until = Date.now() + limitMs;
   const labels: string[] = [];
   for (;;) {
     const label = await applyLabel(page);
     if (labels.at(-1) !== label) labels.push(label);
-    if (label === APPLY_DONE || label === APPLY_FAILED || label === APPLY_UNCLAIMED) return { labels, endedAs: label };
-    if (Date.now() > until) return { labels, endedAs: null };
+    if (label === APPLY_DONE || label === APPLY_FAILED || label === APPLY_UNCLAIMED) return { labels, endedAs: label, emptiedUnseen: false };
+    if (untilEmptied && label === APPLY_LABEL && (await footerCount(page).innerText()).trim() === NOTHING_ANSWERED) return { labels, endedAs: null, emptiedUnseen: true };
+    if (Date.now() > until) return { labels, endedAs: null, emptiedUnseen: false };
     await page.waitForTimeout(LOOK_EVERY_MS);
   }
+}
+
+/**
+ * What step 3 leaves when the sync's request closed without the page seeing it open: both answers
+ * under Archived, nothing pasted, and no result line, because a page cannot show the result of a
+ * request it never followed. The host's proof reads the request itself.
+ */
+async function recordClosedUnseen(page: Page, rec: Recorder, labels: readonly string[]): Promise<void> {
+  await openTab(page, TAB_ARCHIVED);
+  await expect(cardOf(page, 'confirm')).toBeVisible();
+  await expect(cardOf(page, 'dismiss')).toBeVisible();
+  await expect(page.locator('code').filter({ hasText: PASTE_COMMAND }), 'nothing was pasted: no command is shown').toHaveCount(0);
+  rec.note({ labels_seen: [...labels], ended_as: null, status_line: await statusLine(page), count_at_end: (await footerCount(page).innerText()).trim(), archived_tab_shows: ['confirm', 'dismiss'] });
+  await shootCard(page, rec, cardOf(page, 'confirm'), 'done', 'Archived');
 }
 
 /** What a closed request leaves on the page: its result line, no paste command, and no answer left waiting. */
@@ -419,24 +443,26 @@ acceptStep('3 watch apply', { shots: ['watching', 'done'] }, async ({ page }, re
   test.setTimeout(SYNC_WATCH_TEST_MS);
   await openInbox(page);
   const countAtStart = (await footerCount(page).innerText()).trim();
-  rec.note({ watch_started_at: utcNow(), label_at_start: await applyLabel(page), count_at_start: countAtStart, closed_before_the_page_opened: false });
+  rec.note({ watch_started_at: utcNow(), label_at_start: await applyLabel(page), count_at_start: countAtStart, closed_before_the_page_opened: false, closed_between_two_looks: false });
   await rec.shot(page, 'watching');
 
   if (countAtStart === NOTHING_ANSWERED) {
     // The sync and the apply request it filed both ended before this page opened (the operator looks at step 2's pictures
     // between the two tests, and a sync takes about two minutes). A page cannot follow a request it never saw open,
     // so it shows no result line; the answers are archived and none waits. The host's proof checks the request itself.
-    await openTab(page, TAB_ARCHIVED);
-    await expect(cardOf(page, 'confirm')).toBeVisible();
-    await expect(cardOf(page, 'dismiss')).toBeVisible();
-    await expect(page.locator('code').filter({ hasText: PASTE_COMMAND }), 'nothing was pasted: no command is shown').toHaveCount(0);
-    rec.note({ closed_before_the_page_opened: true, labels_seen: [await applyLabel(page)], ended_as: null, status_line: await statusLine(page), archived_tab_shows: ['confirm', 'dismiss'] });
-    await shootCard(page, rec, cardOf(page, 'confirm'), 'done', 'Archived');
+    rec.note({ closed_before_the_page_opened: true });
+    await recordClosedUnseen(page, rec, [await applyLabel(page)]);
     return;
   }
 
-  const watch = await watchApplyButton(page, SYNC_WATCH_MS);
+  const watch = await watchApplyButton(page, SYNC_WATCH_MS, true);
   rec.note({ labels_seen: watch.labels, ended_as: watch.endedAs });
+  if (watch.emptiedUnseen) {
+    // The request opened and closed between two of the page's own looks for one: the answers are archived and none waits.
+    rec.note({ closed_between_two_looks: true });
+    await recordClosedUnseen(page, rec, watch.labels);
+    return;
+  }
   if (watch.endedAs === null) throw new Error('inconclusive: the sync was still running after nine minutes');
   if (watch.endedAs === APPLY_UNCLAIMED) throw new Error('the apply worker did not take the request: the button read waiting on the worker');
   await expectClosedClean(page, rec, watch);

@@ -81,13 +81,16 @@ request, and the verdict is `fail`.
 
 The test opens the Inbox and presses nothing. It watches the label of the apply button for nine
 minutes. The sync that step 2 started ends; then the sync files an apply request by itself, the
-apply worker takes it, and the request closes. A page that is open sees the label go from
-`Apply answers` through `queued` and `running` to `done`; a phase may pass between two looks of
-the test, so `labels_seen` may skip one of them.
+apply worker takes it, and the request closes. A page that sees the request open has its label
+go from `Apply answers` through `queued` and `running` to `done`; a phase may pass between two
+looks of the test, so `labels_seen` may skip one of them.
 
-You look at step 2's pictures before this test starts, and a sync takes about two minutes, so
-the sync and the apply request may both have ended before the page opens. A page cannot show the
-result line of a request it never saw open. So the test has two ways to pass.
+The page does not always see that request open. It looks for a request it did not file itself
+once every 30 seconds, and the two answers of step 1 need no reading, so the worker closes the
+request about five seconds after the sync files it. And you look at step 2's pictures before
+this test starts, while a sync takes about two minutes, so the sync and the apply request may
+both have ended before the page opens. A page cannot show the result line of a request it never
+saw open. So the test has three ways to pass.
 
 Pass, way one (the test saw the request run), when all of this is true:
 
@@ -112,6 +115,22 @@ Pass, way two (the request had closed before the page opened), when all of this 
   `3.json` is what says both cards were under the `Archived` tab.
 - In `saw`, say that the request had closed before the page opened, so the page showed no result
   line. That is not a fault: the host checks the request itself in the database.
+
+Pass, way three (the request opened and closed between two looks of the page), when all of this
+is true:
+
+- In `3.json`: `closed_between_two_looks` is true, `closed_before_the_page_opened` is false,
+  `label_at_start` is `Apply answers`, `count_at_start` is a count above 0 such as `2 answered`,
+  `count_at_end` is `0 answered`, `labels_seen` holds `Apply answers` and nothing else,
+  `status_line` is null, `tab_at_done` is `Archived`, and `archived_tab_shows` holds `confirm`
+  and `dismiss`.
+- `3-watching.png` shows the footer with the count that `count_at_start` holds.
+- `3-done.png` has the card labelled `confirm` whole, the count `0 answered` in the footer, and
+  no box with a command that starts `claude`. The picture may cut off the card labelled
+  `dismiss`, and it holds the row of tabs only when the card stands near the top of the list.
+- In `saw`, say that the page never saw the request open: the answers left the count and stand
+  under the `Archived` tab, and the button stayed at its resting label. That is not a fault: the
+  host checks the request itself in the database.
 
 The test takes as long as the sync takes, nine minutes at the most. If `test_error` in `3.json`
 begins `inconclusive: the sync was still running after nine minutes`, run the title a second time
