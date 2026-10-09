@@ -333,9 +333,14 @@ begin
   end if;
   perform pg_temp.t187_close(v_r, 'done', '{"lines": ["Nothing new"], "archived": 0, "skip": []}'::jsonb);
 
+  -- X alone in the queue: the sync files because X itself is no longer held (Y, unheld, is set aside).
+  perform pg_temp.t187_archive((select id from _t187 where label = 'y'));
+  if (select array_agg(q.id) from v_inbox_queue q) is distinct from array[v_x] then
+    raise exception 'FAIL 4 (setup): the queue is not X alone';
+  end if;
   v_id := pg_temp.t187_sync_request(v_sync);
   if v_id is null then
-    raise exception 'FAIL 4: with X answered again the sync filed nothing';
+    raise exception 'FAIL 4: with X answered again, and X alone waiting, the sync filed nothing';
   end if;
   update agent_requests set state = 'cancelled' where id = v_id;
 end $$;
@@ -545,6 +550,7 @@ do $$
 declare
   v_o    bigint := pg_temp.t187_item('test187:old');
   v_r    bigint;
+  v_text text;
 begin
   insert into _t187 values ('old', v_o);
   -- Put everything else aside: the old-worker answer is the whole queue.
@@ -561,6 +567,12 @@ begin
   end if;
   if pg_temp.t187_open() <> '1/0' then
     raise exception 'FAIL 18: the failed close left notices %, expected 1/0', pg_temp.t187_open();
+  end if;
+  -- Round 3: the old worker's notice keeps 186's sentence (every sync still retries for it); the new
+  -- sentence is for a close that sends skip_seen (case 9).
+  select question into v_text from attention_items where state = 'open' and ref = 'inbox-apply-failed';
+  if v_text not like '%press Apply answers to run the rest.' or v_text ilike '%sync does not try%' then
+    raise exception 'FAIL 18: the old worker''s not_applied notice reads "%"', v_text;
   end if;
 
   -- A later done close, listing nothing: 186's own arm (a failed request of the worker listed the
