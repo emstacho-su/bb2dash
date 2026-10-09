@@ -7,6 +7,7 @@ import { afterEach, beforeEach, vi } from 'vitest';
 
 import type { CliTurn } from '../../src/providers/claude-cli.js';
 import { createProviders } from '../../src/providers/index.js';
+import type { Retriever, RetrieveRequest, RetrieveResult } from '../../src/retrieve.js';
 import type { RunnerDeps } from '../../src/runner.js';
 import type { TurnDeps } from '../../src/turn.js';
 import { fakeRpc, type FakeRpc } from './fakes.js';
@@ -37,18 +38,70 @@ export function testClock(): TestClock {
   };
 }
 
+/** A retrieval that finds nothing and reads no attachment, and remembers what it was asked. */
+export interface FakeRetrieve {
+  readonly retrieve: Retriever;
+  readonly requests: RetrieveRequest[];
+  result: RetrieveResult;
+}
+
+export const NOTHING_FOUND: RetrieveResult = { state: 'ok', hits: [], found: 0, attachments: [], ms: 0 };
+
+/** One synthetic passage: the default, so an answer does not open with the sentence for nothing matched. */
+export const ONE_PASSAGE: RetrieveResult = {
+  state: 'ok',
+  found: 1,
+  attachments: [],
+  ms: 0,
+  hits: [
+    {
+      kind: 'material',
+      unitId: 9001,
+      fileId: 412,
+      documentId: null,
+      courseId: 'BIO.110',
+      title: 'Week 5 slides.pptx',
+      unitKind: 'slide',
+      unitNo: 7,
+      partNo: 1,
+      similarity: 0.87,
+      score: 0.04,
+      passage: 'Synthetic passage about passive transport.',
+      hasNotes: false,
+      writtenAt: null,
+    },
+  ],
+};
+
+export function fakeRetrieve(result: RetrieveResult = ONE_PASSAGE): FakeRetrieve {
+  const fake: FakeRetrieve = {
+    requests: [],
+    result,
+    retrieve: async (request) => {
+      fake.requests.push(request);
+      return fake.result;
+    },
+  };
+  return fake;
+}
+
+/** The prompt files as plain markers: a test that reads the real files reads them itself. */
+export const fakeReadPrompt = (name: string): string => `prompt:${name}`;
+
 export interface TurnHarness {
   /** Its recorded times are read on `clock.now`. */
   readonly fake: FakeRpc;
   readonly logs: string[];
   readonly deps: TurnDeps;
   readonly clock: TestClock;
+  readonly search: FakeRetrieve;
 }
 
 export function turnHarness(turn: CliTurn, overrides: Partial<TurnDeps> = {}): TurnHarness {
   const clock = testClock();
   const fake = fakeRpc(clock.now);
   const logs: string[] = [];
+  const search = fakeRetrieve();
   const deps: TurnDeps = {
     rpc: fake.rpc,
     providers: createProviders({ claudeCli: turn }),
@@ -56,9 +109,14 @@ export function turnHarness(turn: CliTurn, overrides: Partial<TurnDeps> = {}): T
     budgetUsd: 1,
     budgetCapHolds: true,
     now: clock.now,
+    runnerName: 'workspace@test',
+    retrieve: search.retrieve,
+    readPrompt: fakeReadPrompt,
+    newMarker: () => '0123456789abcdef',
+    mcpFiles: { write: (requestId) => `/run/workspace/mcp-${requestId}.json`, remove: () => undefined },
     ...overrides,
   };
-  return { fake, logs, deps, clock };
+  return { fake, logs, deps, clock, search };
 }
 
 export interface LoopHarness {
@@ -83,6 +141,10 @@ export function loopHarness(turn: CliTurn): LoopHarness {
     budgetCapHolds: true,
     now: clock.now,
     runnerName: 'workspace@test',
+    retrieve: fakeRetrieve().retrieve,
+    readPrompt: fakeReadPrompt,
+    newMarker: () => '0123456789abcdef',
+    mcpFiles: { write: (requestId) => `/run/workspace/mcp-${requestId}.json`, remove: () => undefined },
     touchAlive: () => touches.push(clock.now()),
   };
   return { fake, logs, touches, deps, clock };

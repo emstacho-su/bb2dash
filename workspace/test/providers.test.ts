@@ -9,11 +9,10 @@ import { TIER_ROUTES, TIERS } from '../src/tiers.js';
 
 const INPUT: TurnInput = {
   requestId: '41',
-  conversationId: '0b0e7c1e-58a3-4d0b-9d5e-1d2c3b4a5f60',
+  kind: 'answer',
   model: 'haiku',
   prompt: 'What does the IST.323 syllabus say about late work?',
-  history: [],
-  claudeSessionId: null,
+  systemPrompt: 'You are read-only.',
   budgetUsd: 1,
 };
 

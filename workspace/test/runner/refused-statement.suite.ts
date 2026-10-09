@@ -11,13 +11,15 @@ import { createRpc, isBadStatement, type FinishArgs, type QueryResult } from '..
 import type { StoredToolCall } from '../../src/providers/types.js';
 import { createRunner } from '../../src/runner.js';
 import { startTurn, type TurnHandle, type TurnOutcome } from '../../src/turn.js';
-import { STORED_SESSION_ID, claimOf, dbDown, dbRefusal, delta, result, scriptedTurn, type Step } from '../helpers/fakes.js';
+import { claimOf, contextJson, dbDown, dbRefusal, delta, result, scriptedTurn, type Step } from '../helpers/fakes.js';
 import { RETRY_SCHEDULE, loopHarness, turnHarness, useFakeClock } from '../helpers/turn-harness.js';
 
 /** The character itself, and the six characters JSON writes it as. */
 const NUL = '\u0000';
 const NUL_ESCAPE = '\\u0000';
 
+/** The two steps the runner itself puts in front of the model's calls: its search and its planner feed. */
+const RUNNER_STEPS = 2;
 const tool = (at: number, id: string, call: StoredToolCall): Step => ({ at, event: { type: 'tool', id, call } });
 
 describe('NUL characters and the stored tool calls (ruling Z1, R2-5)', () => {
@@ -29,7 +31,7 @@ describe('NUL characters and the stored tool calls (ruling Z1, R2-5)', () => {
     const handle = startTurn(deps, claimOf());
     await vi.advanceTimersByTimeAsync(1000);
     expect(await handle.done).toEqual({ state: 'done', errorCode: null });
-    expect(fake.finishes[0]?.toolCalls).toEqual([{ tool: 'search_materials', query: 'late work', scope: 'IST.323', ok: true }]);
+    expect(fake.finishes[0]?.toolCalls.slice(RUNNER_STEPS)).toEqual([{ tool: 'search_materials', query: 'late work', scope: 'IST.323', ok: true }]);
     expect(fake.finishes[0]?.content).toBe('the answer');
   });
 
@@ -45,7 +47,7 @@ describe('NUL characters and the stored tool calls (ruling Z1, R2-5)', () => {
     const handle = startTurn(deps, claimOf());
     await vi.advanceTimersByTimeAsync(1000);
     await handle.done;
-    expect(fake.finishes[0]?.toolCalls).toEqual([
+    expect(fake.finishes[0]?.toolCalls.slice(RUNNER_STEPS)).toEqual([
       { tool: 'get_material_text', query: null, scope: '12', ok: false, extra: { key: ['a', { deep: 'xy', count: 3, yes: true, none: null }] } },
     ]);
   });
@@ -56,6 +58,9 @@ describe('NUL characters and the stored tool calls (ruling Z1, R2-5)', () => {
     const sent: Array<{ sql: string; params: readonly unknown[] }> = [];
     const query = async (sql: string, params: readonly unknown[] = []): Promise<QueryResult> => {
       sent.push({ sql, params });
+      if (sql.includes('workspace_turn_context')) return { rows: [{ context: contextJson() }] };
+      if (sql.includes('workspace_planner_feed')) return { rows: [{ feed: null }] };
+      if (sql.includes('workspace_turn_put')) return { rows: [{ kept: 0 }] };
       return { rows: [{ id: '9c9c9c9c-0000-4000-8000-000000000001', ok: true }] };
     };
     const dirty: StoredToolCall = { tool: 'search_context', query: `week ${NUL}8`, scope: null, ok: true };
@@ -67,7 +72,7 @@ describe('NUL characters and the stored tool calls (ruling Z1, R2-5)', () => {
     expect(finish).toHaveLength(1);
     const [, , content, toolCalls] = finish[0]!.params;
     expect(content).toBe('Week 8.');
-    expect(toolCalls).toBe('[{"tool":"search_context","query":"week 8","scope":null,"ok":true}]');
+    expect((JSON.parse(String(toolCalls)) as unknown[]).slice(RUNNER_STEPS)).toEqual([{ tool: 'search_context', query: 'week 8', scope: null, ok: true }]);
     expect(JSON.stringify(finish[0]!.params)).not.toContain(NUL_ESCAPE);
   });
 });
@@ -77,7 +82,7 @@ const dbError = (code: string, message = 'unsupported Unicode escape sequence'):
 /** A session the turn itself reports, so the claim's stored one can be told from it. */
 const TURN_SESSION_ID = '7c1d2e3f-4a5b-4c6d-8e7f-90a1b2c3d4e5';
 
-/** The minimal close: failed / cli_error, nothing of a turn, and the session id the claim came with. */
+/** The minimal close: failed / cli_error, nothing of a turn, and no session id. */
 const minimalClose = (durationMs: number): FinishArgs => ({
   requestId: '41',
   state: 'failed',
@@ -86,7 +91,7 @@ const minimalClose = (durationMs: number): FinishArgs => ({
   errorCode: 'cli_error',
   costUsd: null,
   durationMs,
-  claudeSessionId: STORED_SESSION_ID,
+  claudeSessionId: null,
   model: null,
 });
 
@@ -151,7 +156,7 @@ describe('workspace_finish refused as a statement the database cannot take (ruli
     const call: StoredToolCall = { tool: 'search_materials', query: 'late work', scope: 'IST.323', ok: true };
     const scripted = scriptedTurn([tool(5, 't1', call), delta(10, 'the answer'), result(20, { claudeSessionId: TURN_SESSION_ID, costUsd: 0.03 })]);
     const h = turnHarness(scripted.turn);
-    const start = (): { value: TurnOutcome | null } => outcomeOf(startTurn(h.deps, claimOf({ claudeSessionId: STORED_SESSION_ID })));
+    const start = (): { value: TurnOutcome | null } => outcomeOf(startTurn(h.deps, claimOf()));
     return { ...h, start };
   }
 
@@ -235,8 +240,8 @@ describe('workspace_finish refused as a statement the database cannot take (ruli
     expect(outcome.value).toEqual({ state: 'done', errorCode: null });
     expect(offsets(fake.finishTries)).toEqual(RETRY_SCHEDULE.slice(0, 4));
     expect(fake.finishes).toHaveLength(1);
-    expect(fake.finishes[0]).toMatchObject({ state: 'done', content: 'the answer', errorCode: null, costUsd: 0.03, claudeSessionId: TURN_SESSION_ID });
-    expect(fake.finishes[0]?.toolCalls).toHaveLength(1);
+    expect(fake.finishes[0]).toMatchObject({ state: 'done', content: 'the answer', errorCode: null, costUsd: 0.03, claudeSessionId: null });
+    expect(fake.finishes[0]?.toolCalls).toHaveLength(RUNNER_STEPS + 1);
     expect(logs.some((line) => /finish refused by the database/.test(line))).toBe(false);
   });
 
@@ -259,7 +264,7 @@ describe('workspace_begin refused as a statement the database cannot take (rulin
     const scripted = scriptedTurn([delta(10, 'never streamed'), result(20)]);
     const { fake, logs, deps } = turnHarness(scripted.turn);
     fake.failBegin(dbError(code));
-    const outcome = outcomeOf(startTurn(deps, claimOf({ claudeSessionId: STORED_SESSION_ID })));
+    const outcome = outcomeOf(startTurn(deps, claimOf()));
     await vi.advanceTimersByTimeAsync(100);
     expect(outcome.value).toEqual({ state: 'failed', errorCode: 'cli_error' });
     expect(fake.beginTries).toHaveLength(1);

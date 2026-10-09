@@ -198,7 +198,7 @@ describe('workspace_begin against a database that fails', () => {
     const scripted = scriptedTurn([delta(10, 'never streamed'), result(20)]);
     const { fake, logs, deps } = turnHarness(scripted.turn);
     const seen = beginRefusedAfter(fake, failure, 'workspace_begin: request 41 already has its assistant message');
-    const handle = startTurn(deps, claimOf({ claudeSessionId: STORED_SESSION_ID }));
+    const handle = startTurn(deps, claimOf());
     await vi.advanceTimersByTimeAsync(FINISH_RETRY_MS + 5000);
     expect(await handle.done).toEqual({ state: 'failed', errorCode: 'cli_error' });
     expect(seen.tries).toBe(2);
@@ -213,7 +213,7 @@ describe('workspace_begin against a database that fails', () => {
         errorCode: 'cli_error',
         costUsd: null,
         durationMs: FINISH_BACKOFF_FIRST_MS,
-        claudeSessionId: STORED_SESSION_ID,
+        claudeSessionId: null,
         model: null,
       },
     ]);
@@ -248,7 +248,7 @@ describe('workspace_begin against a database that fails', () => {
     const scripted = scriptedTurn([delta(10, 'never streamed'), result(20)]);
     const { fake, logs, deps } = turnHarness(scripted.turn);
     fake.failBegin(dbDown());
-    const handle = startTurn(deps, claimOf({ claudeSessionId: STORED_SESSION_ID }));
+    const handle = startTurn(deps, claimOf());
     await vi.advanceTimersByTimeAsync(FINISH_RETRY_MS - 1000);
     expect(fake.finishTries).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(2000);
@@ -265,7 +265,7 @@ describe('workspace_begin against a database that fails', () => {
         errorCode: 'cli_error',
         costUsd: null,
         durationMs: FINISH_RETRY_MS,
-        claudeSessionId: STORED_SESSION_ID,
+        claudeSessionId: null,
         model: null,
       },
     ]);

@@ -6,7 +6,9 @@
  * each success. With no heartbeat success for 180 s it ends any turn in flight and exits non-zero,
  * so the restart policy brings the container back; it waits with that while the turn in flight is
  * retrying its `workspace_finish()` inside the 110 s that call is given (rulings V1, CR-3, and X1), so a
- * finished answer is not thrown away by the restart. On SIGTERM or SIGINT it stops polling, ends a
+ * finished answer is not thrown away by the restart. When the queue is empty it may run one background job (`jobs.ts`); during a job the loop keeps asking for
+ * a claim, and a claim ends the job (its lease is freed) before the question is taken. On SIGTERM or SIGINT
+ * it stops polling, ends a
  * turn in flight as `failed` / `stale_claim`, and exits 0.
  *
  * The 180 s and the 110 s are read on a monotonic clock (ruling Z1, R2-2), so a wall clock that
@@ -31,11 +33,14 @@ import {
   readOauthToken,
   readTextOrNull,
 } from './config.js';
-import { createPgQuery, createRpc, newPgClient, type Claim } from './db.js';
+import { createPgQuery, createRpc, newPgClient, type Claim, type JobClaim, type JobKind } from './db.js';
 import { messageOf } from './errors.js';
-import { writeMcpConfig } from './mcp-config.js';
-import { createCliTurn, readSystemPrompt, spawnClaude } from './providers/claude-cli.js';
+import { createJobRunner, jobKinds, type JobRunner } from './jobs.js';
+import { writeNoServerConfig } from './mcp-config.js';
+import { createPromptReader } from './prompts.js';
+import { createCliTurn, spawnClaude } from './providers/claude-cli.js';
 import { createProviders } from './providers/index.js';
+import { createRetriever } from './retrieve.js';
 import { startTurn, type TurnDeps, type TurnHandle } from './turn.js';
 
 const EXIT_OK = 0;
@@ -48,8 +53,10 @@ export const SHUTDOWN_GRACE_MS = 20_000;
 const DB_CLOSE_MS = 2000;
 
 export interface RunnerDeps extends TurnDeps {
-  /** The name the runner claims and sends heartbeats under. */
-  readonly runnerName: string;
+  /** Idle work: a job runs only while the queue is empty. Absent: the runner does none. */
+  readonly jobs?: JobRunner;
+  /** The job kinds asked for; `rolling` alone when not given. */
+  readonly jobKinds?: readonly JobKind[];
   /** Called after every successful heartbeat. */
   readonly touchAlive: () => void;
 }
@@ -67,12 +74,14 @@ export function createRunner(deps: RunnerDeps): Runner {
     stopping: boolean;
     exitCode: number;
     turn: TurnHandle | null;
+    /** The job in flight, so a shutdown can end it. */
+    job: AbortController | null;
     wake: (() => void) | null;
     lastHeartbeatOk: number;
     /** True once the log has said the watchdog is waiting for a finish; a heartbeat that succeeds clears it. */
     watchdogHeld: boolean;
   }
-  const state: LoopState = { stopping: false, exitCode: EXIT_OK, turn: null, wake: null, lastHeartbeatOk: 0, watchdogHeld: false };
+  const state: LoopState = { stopping: false, exitCode: EXIT_OK, turn: null, job: null, wake: null, lastHeartbeatOk: 0, watchdogHeld: false };
 
   let giveUp: () => void = () => undefined;
   const gaveUp = new Promise<'gave up'>((resolve) => {
@@ -86,6 +95,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     state.exitCode = exitCode;
     log(why);
     state.turn?.stop('stale_claim');
+    state.job?.abort();
     state.wake?.();
     // What is in flight gets a bounded time to finish, so the process always exits.
     graceTimer = setTimeout(giveUp, SHUTDOWN_GRACE_MS);
@@ -141,6 +151,58 @@ export function createRunner(deps: RunnerDeps): Runner {
     }
   };
 
+  const nextJob = async (): Promise<JobClaim | null> => {
+    try {
+      return await deps.rpc.jobClaim(deps.runnerName, deps.jobKinds ?? ['rolling']);
+    } catch (error) {
+      log(`job claim failed: ${messageOf(error)}`);
+      return null;
+    }
+  };
+
+  /** A wait of one poll interval that the job's end or a shutdown cuts short. */
+  const tickOrEnd = (running: Promise<unknown>): Promise<'ended' | 'tick'> =>
+    new Promise((resolve) => {
+      const done = (how: 'ended' | 'tick'): void => {
+        clearTimeout(timer);
+        state.wake = null;
+        resolve(how);
+      };
+      const timer = setTimeout(() => done('tick'), POLL_INTERVAL_MS);
+      state.wake = () => done('tick');
+      void running.then(() => done('ended'));
+    });
+
+  /**
+   * One idle job, if there is one, while the loop keeps asking for a claim every poll interval. A
+   * claim ends the job (it is released, its lease freed) and is handed back to be answered.
+   */
+  const idleJob = async (jobs: JobRunner): Promise<{ ran: boolean; claim: Claim | null }> => {
+    const job = await nextJob();
+    if (job === null) return { ran: false, claim: null };
+    const controller = new AbortController();
+    state.job = controller;
+    const running = jobs.run(job, controller.signal).catch((error: unknown) => {
+      log(`job ${job.kind} crashed: ${messageOf(error)}`);
+    });
+    let claim: Claim | null = null;
+    let ended = false;
+    void running.then(() => {
+      ended = true;
+    });
+    while (!ended && !state.stopping) {
+      if ((await tickOrEnd(running)) === 'ended' || state.stopping) break;
+      claim = await nextClaim();
+      if (claim !== null) {
+        controller.abort();
+        break;
+      }
+    }
+    await running;
+    state.job = null;
+    return { ran: true, claim };
+  };
+
   return {
     async run() {
       state.lastHeartbeatOk = deps.now();
@@ -149,8 +211,15 @@ export function createRunner(deps: RunnerDeps): Runner {
       const heartbeatTimer = setInterval(() => void beat(), HEARTBEAT_MS);
       try {
         while (!state.stopping) {
-          const claim = await orGiveUp(nextClaim());
+          let claim = await orGiveUp(nextClaim());
           if (claim === 'gave up') break;
+          if (claim === null && deps.jobs !== undefined && !state.stopping) {
+            const jobbed = await orGiveUp(idleJob(deps.jobs));
+            if (jobbed === 'gave up') break;
+            claim = jobbed.claim;
+            // A job that ran has had its turn at the loop: ask for a claim again before waiting.
+            if (jobbed.ran && claim === null) continue;
+          }
           if (claim === null) {
             if (!state.stopping) await pause(POLL_INTERVAL_MS);
             continue;
@@ -185,12 +254,12 @@ function stamp(line: string): void {
   process.stdout.write(`${new Date().toISOString()} workspace: ${line}\n`);
 }
 
-/** The real wiring: the two secrets by file, the MCP config, one database connection, the claude CLI. */
+/** The real wiring: the two secrets by file, the no-server MCP config, one database connection, the search, the claude CLI. */
 export async function main(): Promise<number> {
   let config;
   try {
     config = loadConfig({ env: process.env, readFile: readTextOrNull, hostname: os.hostname() });
-    writeMcpConfig();
+    writeNoServerConfig();
   } catch (error) {
     stamp(`cannot start: ${messageOf(error)}`);
     return EXIT_CONFIG;
@@ -198,19 +267,25 @@ export async function main(): Promise<number> {
   const query = createPgQuery({ dsn: config.dbUrl, ca: config.dbCa, log: stamp, newClient: newPgClient });
   const claudeCli = createCliTurn({
     spawn: spawnClaude,
-    readSystemPrompt: () => readSystemPrompt(),
     readOauthToken: () => readOauthToken(readTextOrNull),
     baseEnv: process.env,
     log: stamp,
   });
+  const rpc = createRpc(query);
+  const providers = createProviders({ claudeCli });
+  const readPrompt = createPromptReader();
   const runner = createRunner({
-    rpc: createRpc(query),
-    providers: createProviders({ claudeCli }),
+    rpc,
+    providers,
     log: stamp,
     budgetUsd: config.budgetUsd,
     budgetCapHolds: BUDGET_CAP_HOLDS,
     now: monotonicNow,
     runnerName: config.runnerName,
+    retrieve: createRetriever({ now: monotonicNow, log: stamp }),
+    readPrompt,
+    jobs: createJobRunner({ rpc, providers, readPrompt, runnerName: config.runnerName, now: monotonicNow, log: stamp }),
+    jobKinds: jobKinds(process.env),
     touchAlive: () => touchAlive(PATHS.aliveFile),
   });
   process.once('SIGTERM', () => runner.shutdown('SIGTERM'));

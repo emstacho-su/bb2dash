@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { BUDGET_CAP_HOLDS, CLAUDE_CODE_VERSION } from '../src/config.js';
 import { mapTurnEnd } from '../src/errors.js';
 import { ALLOWED_TOOLS } from '../src/hooks/gate-rules.js';
-import { isUuidShaped, shouldRetryAsFresh } from '../src/providers/claude-cli.js';
-import { OAUTH_CREDENTIAL_SOURCE, checkInit, parseLine, readInit } from '../src/stream-json.js';
+import { isUuidShaped } from '../src/providers/claude-cli.js';
+import { OAUTH_CREDENTIAL_SOURCE, checkInit, createTurnStream, parseLine, readInit, type InitFacts } from '../src/stream-json.js';
 import {
   SCRUBBED,
   SEARCH,
@@ -54,6 +54,13 @@ interface Recordings {
 
 const recordings = readJson<Recordings>('recordings.json');
 const RECORDED = Object.keys(recordings.fixtures);
+
+/** A recorded init line as an answering turn starts now: the notes server is not one of its servers. */
+const withoutNotesServer = (init: InitFacts): InitFacts => ({
+  ...init,
+  mcpServers: init.mcpServers.filter((server) => server.name !== 'rag'),
+  tools: init.tools.filter((tool) => !tool.startsWith('mcp__rag__')),
+});
 
 describe('the recorded fixtures as files', () => {
   it('are the four recordings', () => {
@@ -121,14 +128,16 @@ describe('claude-stream-lookup.jsonl', () => {
     expect(init?.credentialSource).toBe(OAUTH_CREDENTIAL_SOURCE);
     expect(init?.credentialSource).toBe('none');
     expect(init?.permissionMode).toBe('dontAsk');
+    // The recording was made in Phase 21, with the notes server too.
     expect(init?.mcpServers.map((server) => server.name).sort()).toEqual(['bb2dash', 'rag']);
     expect(init?.mcpServers.every((server) => server.status === 'connected')).toBe(true);
     for (const tool of ALLOWED_TOOLS) expect(init?.tools).toContain(tool);
     expect(init?.tools).not.toContain('ToolSearch');
     expect(init?.model).toBe('claude-haiku-4-5-20251001');
     expect(isUuidShaped(init?.sessionId)).toBe(true);
-    expect(checkInit(init!)).toEqual([]);
-    expect(summary.init).toEqual(init);
+    expect(checkInit(withoutNotesServer(init!))).toEqual([]);
+    expect(checkInit(init!)).toEqual([expect.stringMatching(/not exactly bb2dash/)]);
+    expect(summary.init).toEqual(withoutNotesServer(init!));
   });
 
   it('joins the deltas of the last assistant message to the recorded final text', () => {
@@ -207,7 +216,7 @@ describe('claude-stream-budget-stop.jsonl', () => {
 
   it('passes the init check', () => {
     expect(readInit(lines[0])).not.toBeNull();
-    expect(checkInit(summary.init!)).toEqual([]);
+    expect(checkInit(withoutNotesServer(summary.init!))).toEqual([]);
     expect(summary.init?.credentialSource).toBe(OAUTH_CREDENTIAL_SOURCE);
   });
 
@@ -273,7 +282,7 @@ describe('claude-stream-sign-in-expired.jsonl', () => {
 
   it('passes the init check: an OAuth token in the environment reads as the same credential source', () => {
     expect(summary.init?.credentialSource).toBe(OAUTH_CREDENTIAL_SOURCE);
-    expect(checkInit(summary.init!)).toEqual([]);
+    expect(checkInit(withoutNotesServer(summary.init!))).toEqual([]);
   });
 
   it('maps to sign_in_expired from the structured fields', () => {
@@ -301,11 +310,6 @@ describe('claude-stream-sign-in-expired.jsonl', () => {
   it('names the model from the init line, never the synthetic error message', () => {
     expect(summary.model).toBe('claude-haiku-4-5-20251001');
   });
-
-  it('is not retried as a fresh start: an assistant message arrived', () => {
-    expect(summary.sawAssistant).toBe(true);
-    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: 1, sawAssistant: summary.sawAssistant, alreadyRetried: false, stoppedByStream: false })).toBe(false);
-  });
 });
 
 describe('claude-stream-resume-missing.jsonl', () => {
@@ -327,20 +331,6 @@ describe('claude-stream-resume-missing.jsonl', () => {
     expect(summary.result).toMatchObject({ subtype: 'error_during_execution', isError: true, totalCostUsd: 0, numTurns: 0 });
     expect(deltasOf(signals)).toBe('');
     expect(mapTurnEnd(summary)).toBe('cli_error');
-  });
-
-  it('is retried once as a fresh start with replay', () => {
-    const exitCode = meta?.exitCode ?? 0;
-    expect(shouldRetryAsFresh({ mode: 'resume', exitCode, sawAssistant: summary.sawAssistant, alreadyRetried: false, stoppedByStream: false })).toBe(true);
-    expect(shouldRetryAsFresh({ mode: 'resume', exitCode, sawAssistant: summary.sawAssistant, alreadyRetried: true, stoppedByStream: false })).toBe(false);
-    expect(shouldRetryAsFresh({ mode: 'fresh', exitCode, sawAssistant: summary.sawAssistant, alreadyRetried: false, stoppedByStream: false })).toBe(false);
-    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: 0, sawAssistant: summary.sawAssistant, alreadyRetried: false, stoppedByStream: false })).toBe(false);
-    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: null, sawAssistant: false, alreadyRetried: false, stoppedByStream: false })).toBe(true);
-  });
-
-  it('is not the case of a start the runner killed on what the stream showed: that one is never started again', () => {
-    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: null, sawAssistant: false, alreadyRetried: false, stoppedByStream: true })).toBe(false);
-    expect(shouldRetryAsFresh({ mode: 'resume', exitCode: 1, sawAssistant: false, alreadyRetried: false, stoppedByStream: true })).toBe(false);
   });
 });
 
@@ -429,7 +419,7 @@ describe('tool calls', () => {
       toolResult('t1', true),
       resultLine(),
     ]);
-    expect(summary.toolCalls).toEqual([{ tool: 'search_context', query: 'quiz 2', scope: 'stack', ok: false }]);
+    expect(summary.toolCalls).toEqual([{ tool: 'search_context', query: null, scope: null, ok: false }]);
     expect(stopsOf(signals)).toEqual([]);
     expect(mapTurnEnd(summary)).toBeNull();
   });
@@ -483,7 +473,7 @@ describe('tool calls', () => {
       { tool: 'get_material_text', query: null, scope: '733', ok: false },
       { tool: 'get_material_text', query: null, scope: '812', ok: false },
       { tool: 'list_courses', query: null, scope: null, ok: false },
-      { tool: 'search_context', query: 'quiz 2', scope: 'bb2dash-inbox-decisions', ok: false },
+      { tool: 'search_context', query: null, scope: null, ok: false },
       { tool: 'search_context', query: null, scope: null, ok: false },
       { tool: 'Bash', query: null, scope: null, ok: false },
     ]);
@@ -511,10 +501,11 @@ describe('the init check', () => {
     ['another permission mode', { permissionMode: 'bypassPermissions' }],
     ['the default permission mode', { permissionMode: 'default' }],
     ['a third MCP server', { mcp_servers: [{ name: 'bb2dash', status: 'connected' }, { name: 'rag', status: 'connected' }, { name: 'supabase', status: 'connected' }] }],
-    ['a missing MCP server', { mcp_servers: [{ name: 'bb2dash', status: 'connected' }] }],
-    ['an MCP server that failed', { mcp_servers: [{ name: 'bb2dash', status: 'connected' }, { name: 'rag', status: 'failed' }] }],
-    ['an MCP server still pending', { mcp_servers: [{ name: 'bb2dash', status: 'pending' }, { name: 'rag', status: 'connected' }] }],
-    ['a missing allowed tool', { tools: ALLOWED_TOOLS.slice(0, 3) }],
+    ['a missing MCP server', { mcp_servers: [] }],
+    ['the notes server in place of the materials one', { mcp_servers: [{ name: 'rag', status: 'connected' }] }],
+    ['an MCP server that failed', { mcp_servers: [{ name: 'bb2dash', status: 'failed' }] }],
+    ['an MCP server still pending', { mcp_servers: [{ name: 'bb2dash', status: 'pending' }] }],
+    ['a missing allowed tool', { tools: ALLOWED_TOOLS.slice(0, 1) }],
     ['ToolSearch among the tools', { tools: [...ALLOWED_TOOLS, 'ToolSearch'] }],
     ['no tools field', { tools: undefined }],
   ])('refuses %s', (_what, overrides) => {
@@ -522,9 +513,64 @@ describe('the init check', () => {
     expect(checkInit(init).length).toBeGreaterThan(0);
   });
 
-  it('records, but does not judge, whether mcp__rag__get_document is listed', () => {
-    const init = readInit(initLine({ tools: [...ALLOWED_TOOLS, 'mcp__rag__get_document'] }))!;
+  it('records, but does not judge, a tool beyond the two that is listed on an answering turn', () => {
+    const init = readInit(initLine({ tools: [...ALLOWED_TOOLS, 'mcp__bb2dash__list_courses'] }))!;
     expect(checkInit(init)).toEqual([]);
+  });
+
+  describe('for a planning, a summary or a rolling turn', () => {
+    const none = (overrides: Line = {}): InitFacts => readInit(initLine({ mcp_servers: [], tools: [], ...overrides }))!;
+
+    it.each(['plan', 'summary', 'rolling'] as const)('passes a %s init line with no server and no tool', (kind) => {
+      expect(checkInit(none(), undefined, kind)).toEqual([]);
+    });
+
+    it.each(['plan', 'summary', 'rolling'] as const)('refuses a %s init line with a server or an MCP tool', (kind) => {
+      expect(checkInit(none({ mcp_servers: [{ name: 'bb2dash', status: 'connected' }] }), undefined, kind).join(' ')).toMatch(/mcp_servers/);
+      expect(checkInit(none({ tools: ['mcp__bb2dash__search_materials'] }), undefined, kind).join(' ')).toMatch(/MCP tool/);
+    });
+
+    it('refuses the answering init line (two tools, one server) as a planning one, and the empty one as an answering one', () => {
+      expect(checkInit(readInit(initLine())!, undefined, 'plan').length).toBeGreaterThan(0);
+      expect(checkInit(none(), undefined, 'answer').length).toBeGreaterThan(0);
+    });
+
+    it('still judges the version, the credential and the permission mode on every kind', () => {
+      expect(checkInit(none({ claude_code_version: '2.1.290' }), undefined, 'plan').join(' ')).toMatch(/claude_code_version/);
+      expect(checkInit(none({ apiKeySource: 'ANTHROPIC_API_KEY' }), undefined, 'summary').join(' ')).toMatch(/credential/);
+      expect(checkInit(none({ permissionMode: 'default' }), undefined, 'rolling').join(' ')).toMatch(/permissionMode/);
+    });
+
+    it('stops a planning stream from inside when its init line shows a server', () => {
+      const stream = createTurnStream(undefined, 'plan');
+      const signals = stream.push(initLine({ mcp_servers: [{ name: 'bb2dash', status: 'connected' }], tools: [] }));
+      expect(stopsOf(signals)[0]?.reason).toMatch(/mcp_servers/);
+    });
+  });
+
+  describe('the assistant text of a turn with no partial messages', () => {
+    const message = (id: string, text: string): Line => ({
+      type: 'assistant',
+      message: { id, model: 'claude-haiku-4-5-20251001', role: 'assistant', content: [{ type: 'text', text }] },
+      session_id: SESSION,
+      parent_tool_use_id: null,
+    });
+    const thinking: Line = {
+      type: 'assistant',
+      message: { id: 'm0', model: 'claude-haiku-4-5-20251001', role: 'assistant', content: [{ type: 'thinking', thinking: 'private', signature: 'x' }] },
+      session_id: SESSION,
+      parent_tool_use_id: null,
+    };
+
+    it('is the text blocks of the assistant messages, never the thinking', () => {
+      const { summary } = replay([initLine(), thinking, message('m1', 'first'), message('m2', 'second'), resultLine()]);
+      expect(summary.assistantText).toBe('first\n\nsecond');
+      expect(summary.text).toBe('');
+    });
+
+    it('is empty for a turn that wrote none', () => {
+      expect(replay([initLine(), resultLine()]).summary.assistantText).toBe('');
+    });
   });
 
   it('stops the turn from inside the stream when the init line fails', () => {

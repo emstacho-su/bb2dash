@@ -6,6 +6,7 @@
 import { CLAUDE_CODE_VERSION } from '../../src/config.js';
 import { ALLOWED_TOOLS } from '../../src/hooks/gate-rules.js';
 import { createTurnStream, type StreamSignal, type TurnSummary } from '../../src/stream-json.js';
+import { asAnsweringInit } from './fakes.js';
 
 /** What every tool-result body in a recording was rewritten to. */
 export const SCRUBBED = '<scrubbed>';
@@ -20,7 +21,7 @@ export interface Replay {
 /** Push every line through a new turn stream: the signals it gave, and its summary at the end. */
 export function replay(lines: readonly unknown[]): Replay {
   const stream = createTurnStream();
-  const signals = lines.flatMap((line) => stream.push(line));
+  const signals = lines.flatMap((line) => stream.push(typeof line === 'object' && line !== null ? asAnsweringInit(line as Line) : line));
   return { signals, summary: stream.summary() };
 }
 
@@ -38,10 +39,7 @@ export const initLine = (overrides: Line = {}): Line => ({
   subtype: 'init',
   session_id: SESSION,
   tools: [...ALLOWED_TOOLS],
-  mcp_servers: [
-    { name: 'bb2dash', status: 'connected', source: 'dynamic' },
-    { name: 'rag', status: 'connected', source: 'dynamic' },
-  ],
+  mcp_servers: [{ name: 'bb2dash', status: 'connected', source: 'dynamic' }],
   model: 'claude-haiku-4-5-20251001',
   permissionMode: 'dontAsk',
   apiKeySource: 'none',
@@ -143,4 +141,5 @@ export const resultLine = (overrides: Line = {}): Line => ({
 });
 
 export const SEARCH = 'mcp__bb2dash__search_materials';
-export const SEARCH_CONTEXT = 'mcp__rag__search_context';
+/** A tool the gate does not allow (the notes store's search is no longer one); the stream's gate counting does not look at the name. */
+export const SEARCH_CONTEXT = 'mcp__other__search_context';

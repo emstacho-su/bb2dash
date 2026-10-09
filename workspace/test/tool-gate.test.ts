@@ -5,13 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  ALLOWED_TOOLS,
-  COLLECTION_DENY_REASON,
-  RAG_COLLECTIONS,
-  decide,
-  runGate,
-} from '../src/hooks/gate-rules.js';
+import { ALLOWED_TOOLS, decide, runGate } from '../src/hooks/gate-rules.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE = path.resolve(HERE, '..');
@@ -20,7 +14,9 @@ const SETTINGS = path.join(PACKAGE, 'claude', 'settings.json');
 const DENY = 2;
 const SILENT = 0;
 
-const SEARCH_CONTEXT = 'mcp__rag__search_context';
+/** The notes store's search, which the gate no longer allows. */
+const NOTES_SEARCH = ['mcp', 'rag', 'search_context'].join('__');
+const LIST_COURSES = 'mcp__bb2dash__list_courses';
 
 function payload(toolName: unknown, toolInput: unknown = {}): Record<string, unknown> {
   return { hook_event_name: 'PreToolUse', tool_name: toolName, tool_input: toolInput, tool_use_id: 'toolu_test' };
@@ -43,25 +39,20 @@ function runBuiltGate(stdin: string | null): GateRun {
 }
 
 describe('the gate rules', () => {
-  it('names the four allowed tools and the two collections', () => {
-    expect([...ALLOWED_TOOLS]).toEqual([
-      'mcp__bb2dash__search_materials',
-      'mcp__bb2dash__get_material_text',
-      'mcp__bb2dash__list_courses',
-      'mcp__rag__search_context',
-    ]);
-    expect([...RAG_COLLECTIONS]).toEqual(['bb2dash', 'bb2dash-inbox-decisions']);
-    expect(COLLECTION_DENY_REASON).toBe('collection must be one of: bb2dash, bb2dash-inbox-decisions');
+  it('names the two allowed tools and nothing else', () => {
+    expect([...ALLOWED_TOOLS]).toEqual(['mcp__bb2dash__search_materials', 'mcp__bb2dash__get_material_text']);
   });
 
-  it('allows the three materials tools', () => {
+  it('allows the two materials tools', () => {
     expect(decide(payload('mcp__bb2dash__search_materials', { q: 'late work', course: 'IST.323' }))).toEqual({ allow: true });
     expect(decide(payload('mcp__bb2dash__get_material_text', { text_id: 12 }))).toEqual({ allow: true });
-    expect(decide(payload('mcp__bb2dash__list_courses'))).toEqual({ allow: true });
   });
 
-  it.each(RAG_COLLECTIONS.map((name) => [name]))('allows search_context on %s', (collection) => {
-    expect(decide(payload(SEARCH_CONTEXT, { query: 'quiz 2', collection }))).toEqual({ allow: true });
+  it('no longer allows the course lister or the notes store: the course list is in the context, the notes are not read', () => {
+    expect(decide(payload(LIST_COURSES)).allow).toBe(false);
+    for (const collection of ['bb2dash', 'bb2dash-inbox-decisions', 'stack', undefined]) {
+      expect(decide(payload(NOTES_SEARCH, { query: 'quiz 2', collection })).allow).toBe(false);
+    }
   });
 
   it.each([
@@ -78,7 +69,9 @@ describe('the gate rules', () => {
     ['mcp__supabase__apply_migration'],
     ['mcp__supabase_admin__list_tables'],
     ['mcp__claude_ai_Supabase__execute_sql'],
-    ['mcp__rag__get_document'],
+    [['mcp', 'rag', 'get_document'].join('__')],
+    [LIST_COURSES],
+    [NOTES_SEARCH],
     ['mcp__bb2dash__search_materials '],
     ['MCP__BB2DASH__SEARCH_MATERIALS'],
     ['mcp__bb2dash__delete_everything'],
@@ -89,47 +82,14 @@ describe('the gate rules', () => {
     expect(decision.allow).toBe(false);
   });
 
-  it('denies search_context with no collection, with the collection sentence as the reason', () => {
-    expect(decide(payload(SEARCH_CONTEXT, { query: 'quiz 2' }))).toEqual({ allow: false, reason: COLLECTION_DENY_REASON });
-    expect(decide(payload(SEARCH_CONTEXT))).toEqual({ allow: false, reason: COLLECTION_DENY_REASON });
-    expect(decide({ hook_event_name: 'PreToolUse', tool_name: SEARCH_CONTEXT })).toEqual({
-      allow: false,
-      reason: COLLECTION_DENY_REASON,
-    });
-  });
-
-  it.each([['stack'], ['estac'], ['ist466'], [''], ['bb2dash,bb2dash-inbox-decisions'], ['bb2dash-inbox']])(
-    'denies search_context on the collection %j, which is off the list',
-    (collection) => {
-      expect(decide(payload(SEARCH_CONTEXT, { query: 'x', collection }))).toEqual({
-        allow: false,
-        reason: COLLECTION_DENY_REASON,
-      });
-    },
-  );
-
-  it.each([['Bb2dash'], [' bb2dash'], ['bb2dash '], ['BB2DASH-INBOX-DECISIONS'], ['bb2dash\n']])(
-    'compares the collection exactly: %j is denied',
-    (collection) => {
-      expect(decide(payload(SEARCH_CONTEXT, { query: 'x', collection })).allow).toBe(false);
-    },
-  );
-
-  it.each([[['bb2dash']], [7], [null], [{ name: 'bb2dash' }], [true]])(
-    'denies a collection that is not a string: %j',
-    (collection) => {
-      expect(decide(payload(SEARCH_CONTEXT, { query: 'x', collection })).allow).toBe(false);
-    },
-  );
-
-  it.each([[undefined], [null], [7], [''], [['mcp__bb2dash__list_courses']], [{}]])(
+  it.each([[undefined], [null], [7], [''], [['mcp__bb2dash__search_materials']], [{}]])(
     'denies a payload whose tool_name is %j',
     (toolName) => {
       expect(decide({ hook_event_name: 'PreToolUse', tool_name: toolName, tool_input: {} }).allow).toBe(false);
     },
   );
 
-  it.each([[null], ['mcp__bb2dash__list_courses'], [7], [[payload('mcp__bb2dash__list_courses')]]])(
+  it.each([[null], ['mcp__bb2dash__search_materials'], [7], [[payload('mcp__bb2dash__search_materials')]]])(
     'denies a payload that is not an object: %j',
     (value) => {
       expect(decide(value).allow).toBe(false);
@@ -139,14 +99,11 @@ describe('the gate rules', () => {
 
 describe('runGate', () => {
   it('stays silent with exit code 0 for an allowed call', () => {
-    expect(runGate(JSON.stringify(payload('mcp__bb2dash__list_courses')))).toEqual({ exitCode: SILENT, stderr: '' });
+    expect(runGate(JSON.stringify(payload('mcp__bb2dash__get_material_text', { text_id: 3 })))).toEqual({ exitCode: SILENT, stderr: '' });
   });
 
   it('answers a denial with exit code 2 and the reason for stderr', () => {
-    expect(runGate(JSON.stringify(payload(SEARCH_CONTEXT, { query: 'x', collection: 'stack' })))).toEqual({
-      exitCode: DENY,
-      stderr: COLLECTION_DENY_REASON,
-    });
+    expect(runGate(JSON.stringify(payload('Bash', { command: 'ls' })))).toEqual({ exitCode: DENY, stderr: 'tool not allowed: Bash' });
   });
 
   it.each([[''], ['not json'], ['{"tool_name":'], ['[]'], ['null']])('exits 2 for the stdin text %j', (text) => {
@@ -154,7 +111,7 @@ describe('runGate', () => {
   });
 
   it('exits 2 when the rule itself throws', () => {
-    const outcome = runGate(JSON.stringify(payload('mcp__bb2dash__list_courses')), () => {
+    const outcome = runGate(JSON.stringify(payload('mcp__bb2dash__search_materials')), () => {
       throw new Error('boom');
     });
     expect(outcome.exitCode).toBe(DENY);
@@ -169,27 +126,26 @@ describe('the built gate, run as a process', () => {
   });
 
   it.each(ALLOWED_TOOLS.map((name) => [name]))('exits 0 with empty stdout for %s', (toolName) => {
-    const run = runBuiltGate(JSON.stringify(payload(toolName, { q: 'x', query: 'x', collection: 'bb2dash' })));
+    const run = runBuiltGate(JSON.stringify(payload(toolName, { q: 'x', text_id: 1 })));
     expect(run.status).toBe(SILENT);
     expect(run.stdout).toBe('');
     expect(run.stderr).toBe('');
   });
 
   it('never prints a permission decision for an allowed call', () => {
-    const run = runBuiltGate(JSON.stringify(payload(SEARCH_CONTEXT, { query: 'x', collection: 'bb2dash-inbox-decisions' })));
+    const run = runBuiltGate(JSON.stringify(payload('mcp__bb2dash__search_materials', { q: 'x' })));
     expect(run.status).toBe(SILENT);
     expect(run.stdout).not.toMatch(/permissionDecision/);
     expect(run.stdout).toBe('');
   });
 
-  it('denies a collection off the list with exit code 2 and the reason on stderr', () => {
-    const run = runBuiltGate(JSON.stringify(payload(SEARCH_CONTEXT, { query: 'x', collection: 'estac' })));
-    expect(run.status).toBe(DENY);
-    expect(run.stderr.trim()).toBe(COLLECTION_DENY_REASON);
-    expect(run.stdout).toBe('');
+  it('exits 2 for an unknown tool, 0 for a listed materials tool and 2 for input that is not JSON (what docker/apply/gate-built.test.mjs also checks)', () => {
+    expect(runBuiltGate(JSON.stringify(payload(NOTES_SEARCH, { query: 'x', collection: 'bb2dash' }))).status).toBe(DENY);
+    expect(runBuiltGate(JSON.stringify(payload('mcp__bb2dash__get_material_text', { text_id: 1 }))).status).toBe(SILENT);
+    expect(runBuiltGate('not json').status).toBe(DENY);
   });
 
-  it.each([['Bash'], ['Write'], ['Task'], ['mcp__supabase__execute_sql'], ['mcp__rag__get_document']])(
+  it.each([['Bash'], ['Write'], ['Task'], ['mcp__supabase__execute_sql'], [LIST_COURSES]])(
     'denies %s with exit code 2 and a reason on stderr',
     (toolName) => {
       const run = runBuiltGate(JSON.stringify(payload(toolName, { command: 'ls' })));
@@ -203,9 +159,8 @@ describe('the built gate, run as a process', () => {
     ['non-JSON stdin', 'not json'],
     ['empty stdin', ''],
     ['a missing tool_name', JSON.stringify({ hook_event_name: 'PreToolUse', tool_input: {} })],
-    ['a collection that is an array', JSON.stringify(payload(SEARCH_CONTEXT, { collection: ['bb2dash'] }))],
-    ['a collection that is a number', JSON.stringify(payload(SEARCH_CONTEXT, { collection: 7 }))],
-    ['a collection that is null', JSON.stringify(payload(SEARCH_CONTEXT, { collection: null }))],
+    ['a tool name that is a number', JSON.stringify(payload(7, { q: 'x' }))],
+    ['a tool name that is null', JSON.stringify(payload(null, { q: 'x' }))],
   ])('exits 2, never 1, for %s', (_what, stdin) => {
     const run = runBuiltGate(stdin);
     expect(run.status).toBe(DENY);

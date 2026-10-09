@@ -12,7 +12,6 @@ import { mapTurnEnd } from '../../src/errors.js';
 import { readFixtureLines } from '../helpers/fakes.js';
 import {
   SEARCH,
-  SEARCH_CONTEXT,
   blockStart,
   deltasOf,
   hookResponse,
@@ -140,14 +139,14 @@ describe('a result that is not an error needs a gate allow for its tool name', (
     const { signals } = replay([
       initLine(),
       toolUse('t1', SEARCH, { q: 'x' }),
-      toolUse('t2', SEARCH_CONTEXT, { query: 'y' }),
+      toolUse('t2', OPEN, { text_id: 5 }),
       hookResponse(SEARCH, 0),
       hookResponse(SEARCH, 0),
       toolResult('t1'),
       toolResult('t2'),
     ]);
     expect(stopsOf(signals)).toHaveLength(1);
-    expect(stopsOf(signals)[0]?.reason).toMatch(/search_context/);
+    expect(stopsOf(signals)[0]?.reason).toMatch(/get_material_text/);
   });
 
   it('counts an allow whenever it arrives before the result, before the call line included', () => {
@@ -203,10 +202,12 @@ describe('a result that is not an error needs a gate allow for its tool name', (
   });
 });
 
+const OPEN = 'mcp__bb2dash__get_material_text';
+
 describe('two calls of one tool in one message, one of them denied', () => {
   const calls = [
-    { id: 'a', name: SEARCH_CONTEXT, input: { query: 'quiz 2', collection: 'bb2dash' } },
-    { id: 'b', name: SEARCH_CONTEXT, input: { query: 'quiz 2', collection: 'stack' } },
+    { id: 'a', name: SEARCH, input: { q: 'quiz 2', course: 'IST.323' } },
+    { id: 'b', name: SEARCH, input: { q: 'quiz 2', course: 'ECN.304' } },
   ];
 
   // The gate's two answers carry the tool name and nothing that says which call each one is for.
@@ -220,7 +221,7 @@ describe('two calls of one tool in one message, one of them denied', () => {
     const { signals, summary } = replay([
       initLine(),
       ...toolUsesInOneMessage(calls),
-      ...exits.map((exit) => hookResponse(SEARCH_CONTEXT, exit)),
+      ...exits.map((exit) => hookResponse(SEARCH, exit)),
       toolResult(denied, true),
       toolResult(answered),
       blockStart('text'),
@@ -230,8 +231,8 @@ describe('two calls of one tool in one message, one of them denied', () => {
     expect(stopsOf(signals)).toEqual([]);
     expect(summary.violation).toBeNull();
     expect(summary.toolCalls).toEqual([
-      { tool: 'search_context', query: 'quiz 2', scope: 'bb2dash', ok: answered === 'a' },
-      { tool: 'search_context', query: 'quiz 2', scope: 'stack', ok: answered === 'b' },
+      { tool: 'search_materials', query: 'quiz 2', scope: 'IST.323', ok: answered === 'a' },
+      { tool: 'search_materials', query: 'quiz 2', scope: 'ECN.304', ok: answered === 'b' },
     ]);
     expect(deltasOf(signals)).toBe('One collection answered.');
     expect(mapTurnEnd(summary)).toBeNull();
@@ -252,8 +253,8 @@ describe('two calls of one tool in one message, one of them denied', () => {
     const { signals, summary } = replay([
       initLine(),
       toolUsesInOneLine(calls),
-      hookResponse(SEARCH_CONTEXT, 2),
-      hookResponse(SEARCH_CONTEXT, 0),
+      hookResponse(SEARCH, 2),
+      hookResponse(SEARCH, 0),
       bothResults,
       resultLine(),
     ]);
@@ -265,8 +266,8 @@ describe('two calls of one tool in one message, one of them denied', () => {
     const { signals } = replay([
       initLine(),
       ...toolUsesInOneMessage(calls),
-      hookResponse(SEARCH_CONTEXT, 0),
-      hookResponse(SEARCH_CONTEXT, 2),
+      hookResponse(SEARCH, 0),
+      hookResponse(SEARCH, 2),
       toolResult('a'),
       toolResult('b'),
     ]);

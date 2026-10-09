@@ -1,10 +1,11 @@
 /**
  * The claude CLI provider: the unmodified `claude` CLI run as `claude -p` on the owner's
- * subscription token (brief 102, Contract, "Argv, frozen" and "Continuity").
+ * subscription token (brief 102, Contract, "Argv, frozen"; brief 109, "Argv, against claude-cli.ts").
  *
- * This file holds the argv, the choice between a fresh start and a resumed one, and the process
- * itself. The argv is an array, spawned without a shell; the prompt is always its last element,
- * after `--`, so a question that begins with a flag is never read as one.
+ * This file holds the argv per turn kind and the process itself. Every turn is a new CLI session
+ * under a new random id and nothing is resumed: the context is rebuilt from the database each time
+ * (brief 109, Sessions). The argv is an array, spawned without a shell; the prompt is always its
+ * last element, after `--`, so a question that begins with a flag is never read as one.
  */
 
 import { spawn } from 'node:child_process';
@@ -15,43 +16,29 @@ import { StringDecoder } from 'node:string_decoder';
 import { CLAUDE_BIN, PATHS, RESULT_EXIT_GRACE_MS } from '../config.js';
 import { mapTurnEnd, messageOf, type ErrorCode } from '../errors.js';
 import { ALLOWED_TOOLS } from '../hooks/gate-rules.js';
-import { asQuestion, buildPrompt } from '../replay.js';
 import { checkInit, createTurnStream, parseLine, type InitFacts, type TurnSummary } from '../stream-json.js';
-import type { Provider, ResultEvent, TurnEvent, TurnInput } from './types.js';
+import type { Provider, ResultEvent, TurnEvent, TurnInput, TurnKind } from './types.js';
 
-/** Tools removed from the model's view; the first six are built in, the seventh is the notes store's whole-note reader. */
-export const DISALLOWED_TOOLS = ['Bash', 'Read', 'Write', 'Edit', 'WebFetch', 'WebSearch', 'mcp__rag__get_document'] as const;
+/** Tools removed from the model's view: the six built-in ones. */
+export const DISALLOWED_TOOLS = ['Bash', 'Read', 'Write', 'Edit', 'WebFetch', 'WebSearch'] as const;
 
 /** The shape migration 140 checks on `workspace_conversations.claude_session_id`. */
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MODEL_ALIAS_SHAPE = /^[a-z][a-z0-9.-]*$/;
 const NEW_ID_ATTEMPTS = 5;
 const BUDGET_DECIMALS = 2;
+/** Freeze amendment F-1: a planning, a summary and a rolling turn run with thinking off. */
+export const THINKING_OFF_ENV = Object.freeze({ MAX_THINKING_TOKENS: '0' });
 
 export function isUuidShaped(value: unknown): value is string {
   return typeof value === 'string' && UUID_SHAPE.test(value);
 }
 
-/** How the CLI is started: a new session under a new random id, or the stored session resumed. */
-export interface SessionStart {
-  readonly mode: 'fresh' | 'resume';
-  readonly sessionId: string;
-}
-
-export interface SessionPlanInput {
-  readonly storedSessionId: string | null;
-  readonly conversationId: string;
-}
-
-/**
- * Resume the stored session when its id is uuid-shaped; otherwise start fresh under a new random
- * uuid, which is never the conversation's own id. A stored id of any other shape never reaches argv.
- */
-export function planSession(input: SessionPlanInput, newUuid: () => string = randomUUID): SessionStart {
-  if (isUuidShaped(input.storedSessionId)) return { mode: 'resume', sessionId: input.storedSessionId };
+/** A new random session id for one turn. */
+export function newSessionId(newUuid: () => string = randomUUID): string {
   for (let attempt = 0; attempt < NEW_ID_ATTEMPTS; attempt += 1) {
     const sessionId = newUuid();
-    if (isUuidShaped(sessionId) && sessionId !== input.conversationId) return { mode: 'fresh', sessionId };
+    if (isUuidShaped(sessionId)) return sessionId;
   }
   throw new Error('claude-cli: could not draw a new session id');
 }
@@ -59,19 +46,17 @@ export function planSession(input: SessionPlanInput, newUuid: () => string = ran
 export interface CliArgsInput {
   /** The model alias (`haiku`, `sonnet`, `opus`). */
   readonly model: string;
-  readonly session: SessionStart;
-  /** The text of `prompts/system.md`. */
+  readonly sessionId: string;
+  readonly kind: TurnKind;
+  /** The turn's system prompt, already assembled. */
   readonly systemPrompt: string;
   readonly budgetUsd: number;
-  /** The question, with the replayed history in front of it on a fresh start that has any. */
+  /** The whole prompt argument: the assembled context, the question last. */
   readonly prompt: string;
-  /** The two paths a host recording substitutes; the image's paths otherwise. */
-  readonly paths?: { readonly mcpConfig: string; readonly settings: string };
-}
-
-function sessionArgs(session: SessionStart): string[] {
-  if (!isUuidShaped(session.sessionId)) throw new Error('claude-cli: the session id is not uuid-shaped');
-  return session.mode === 'resume' ? ['--resume', session.sessionId] : ['--session-id', session.sessionId];
+  /** The MCP config of this turn: a per-request file for an answering turn; the no-server file otherwise. */
+  readonly mcpConfig?: string;
+  /** The settings path a host recording substitutes; the image's path otherwise. */
+  readonly settings?: string;
 }
 
 function budgetArg(budgetUsd: number): string {
@@ -79,19 +64,31 @@ function budgetArg(budgetUsd: number): string {
   return budgetUsd.toFixed(BUDGET_DECIMALS);
 }
 
-/** The CLI's arguments, in the Contract's order. */
+function mcpConfigFor(input: CliArgsInput): string {
+  if (input.kind !== 'answer') return input.mcpConfig ?? PATHS.mcpNone;
+  if (input.mcpConfig === undefined) throw new Error('claude-cli: an answering turn needs its own MCP config file');
+  return input.mcpConfig;
+}
+
+/**
+ * The CLI's arguments. Only an answering turn is allowed tools (the two materials ones) and streams
+ * partial messages; a planning, summary or rolling turn has no `--allowedTools` and a config with
+ * no server. `--no-session-persistence` is in every argv (F-4); no argv resumes a session.
+ */
 export function buildArgs(input: CliArgsInput): string[] {
   if (!MODEL_ALIAS_SHAPE.test(input.model)) throw new Error('claude-cli: the model alias is not a plain alias');
-  const paths = input.paths ?? PATHS;
+  if (!isUuidShaped(input.sessionId)) throw new Error('claude-cli: the session id is not uuid-shaped');
+  const answering = input.kind === 'answer';
   return [
     '-p',
     '--model',
     input.model,
-    ...sessionArgs(input.session),
+    '--session-id',
+    input.sessionId,
+    '--no-session-persistence',
     '--tools',
     '',
-    '--allowedTools',
-    ...ALLOWED_TOOLS,
+    ...(answering ? ['--allowedTools', ...ALLOWED_TOOLS] : []),
     '--disallowedTools',
     ...DISALLOWED_TOOLS,
     '--permission-mode',
@@ -100,11 +97,11 @@ export function buildArgs(input: CliArgsInput): string[] {
     'none',
     '--strict-mcp-config',
     '--mcp-config',
-    paths.mcpConfig,
+    mcpConfigFor(input),
     '--setting-sources',
     'project',
     '--settings',
-    paths.settings,
+    input.settings ?? PATHS.settings,
     '--append-system-prompt',
     input.systemPrompt,
     '--system-prompt-snapshot',
@@ -112,7 +109,7 @@ export function buildArgs(input: CliArgsInput): string[] {
     '--output-format',
     'stream-json',
     '--verbose',
-    '--include-partial-messages',
+    ...(answering ? ['--include-partial-messages'] : []),
     '--include-hook-events',
     '--max-budget-usd',
     budgetArg(input.budgetUsd),
@@ -126,33 +123,9 @@ export function buildArgv(input: CliArgsInput): string[] {
   return [CLAUDE_BIN, ...buildArgs(input)];
 }
 
-/** The system prompt file's text, read on every turn so an edit reaches the next answer. */
+/** A prompt file's text, read on every turn so an edit reaches the next answer. */
 export function readSystemPrompt(file: string = PATHS.systemPrompt): string {
   return fs.readFileSync(file, 'utf8').trimEnd();
-}
-
-export interface StartOutcome {
-  readonly mode: SessionStart['mode'];
-  /** The process's exit code; null when a signal ended it. */
-  readonly exitCode: number | null;
-  /** Whether any `assistant` message arrived before the process ended. */
-  readonly sawAssistant: boolean;
-  readonly alreadyRetried: boolean;
-  /**
-   * Whether the runner killed this start on what its stream showed: a refused init line, a tool
-   * call with no answer from the gate, a turn reported as paid from usage credits.
-   */
-  readonly stoppedByStream: boolean;
-}
-
-/**
- * The one recovery (Contract, Continuity): a `--resume` start that exits non-zero before any
- * `assistant` message is retried, once per turn, as a fresh start with the stored history replayed.
- * It is for a start that ended by itself. A start the runner killed also ends without exit code 0,
- * and is never started again: its turn is stored under the code its stop named.
- */
-export function shouldRetryAsFresh(outcome: StartOutcome): boolean {
-  return outcome.mode === 'resume' && !outcome.alreadyRetried && !outcome.sawAssistant && !outcome.stoppedByStream && outcome.exitCode !== 0;
 }
 
 /** One turn of the CLI, as a stream of events: the real process in the container, a replay in tests. */
@@ -166,7 +139,7 @@ export function createClaudeCliProvider(turn: CliTurn): Provider {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The process: one CLI start per turn (two when a resume finds no session), read line by line.
+// The process: one CLI start per turn, read line by line.
 // ---------------------------------------------------------------------------------------------
 
 /** SIGTERM first; SIGKILL when the process is still there after this long. Under the 2 s a Stop is given. */
@@ -176,7 +149,6 @@ export const OUTPUT_CLOSE_MS = 400;
 const MS_PER_SECOND = 1000;
 const STDERR_KEEP_CHARS = 2000;
 const LOG_VALUE_MAX_CHARS = 80;
-const LOG_STDERR_MAX_CHARS = 200;
 
 export interface CliExit {
   /** The exit code; null when a signal ended the process or it never started. */
@@ -204,7 +176,6 @@ export interface CliProcess {
 
 export interface CliTurnDeps {
   readonly spawn: (argv: readonly string[], options: SpawnOptions) => CliProcess;
-  readonly readSystemPrompt: () => string;
   /** The subscription token, read from its file immediately before each start. */
   readonly readOauthToken: () => string;
   /** The runner's own environment, handed to the child with the token and two switches added. */
@@ -343,24 +314,43 @@ function createLingerGuard(killer: Killer, graceMs: number, log: (message: strin
 const logValue = (value: string | null): string => (value ?? 'missing').replace(/\s+/g, '_').slice(0, LOG_VALUE_MAX_CHARS);
 
 /** The one log line per init line read: the version, the credential source, the mode and the model. Never a token. */
-function initLogLine(init: InitFacts): string {
+function initLogLine(init: InitFacts, kind: TurnKind): string {
   return [
     'init',
     `claude_code_version=${logValue(init.claudeCodeVersion)}`,
     `credential_source=${logValue(init.credentialSource)}`,
     `permissionMode=${logValue(init.permissionMode)}`,
     `model=${logValue(init.model)}`,
-    `check=${checkInit(init).length === 0 ? 'pass' : 'refused'}`,
+    `check=${checkInit(init, undefined, kind).length === 0 ? 'pass' : 'refused'}`,
   ].join(' ');
 }
 
-/** The first line of stderr, short, with the token and the prompt taken out. */
-function stderrForLog(stderr: string, hidden: readonly string[]): string {
-  let line = (stderr.split(/\r?\n/).find((text) => text.trim() !== '') ?? '').trim();
-  for (const secret of hidden) {
-    if (secret !== '') line = line.split(secret).join('<hidden>');
+/**
+ * The classes a CLI exit is logged under (brief 109, Privacy rules). The prompt argument now holds
+ * course passages, attachment text and posted scores, and the system prompt holds the About me
+ * note, so no stderr text is logged: the exit code, the stderr's length and one class from this
+ * short fixed list, matched by pattern. The matched text is never printed.
+ */
+export const STDERR_CLASSES = ['budget', 'sign_in', 'usage_limit', 'other'] as const;
+export type StderrClass = (typeof STDERR_CLASSES)[number];
+
+const STDERR_PATTERNS: ReadonlyArray<readonly [Exclude<StderrClass, 'other'>, RegExp]> = [
+  ['budget', /max[\s_-]*budget|budget (?:was )?exceeded|exceeded[^\n]{0,40}budget/i],
+  ['sign_in', /not logged in|please (?:run )?\/?login|invalid (?:oauth )?(?:token|credentials)|authentication[_ ]failed|oauth token (?:has )?expired|\b401\b/i],
+  ['usage_limit', /usage limit|rate[\s_-]*limit|limit reached|\b429\b/i],
+];
+
+export function stderrClass(stderr: string): StderrClass {
+  for (const [name, pattern] of STDERR_PATTERNS) {
+    if (pattern.test(stderr)) return name;
   }
-  return line.slice(0, LOG_STDERR_MAX_CHARS);
+  return 'other';
+}
+
+/** The child's environment for a turn of `kind`: thinking is off on every kind but an answer (F-1). */
+export function turnEnv(kind: TurnKind, baseEnv: Readonly<Record<string, string | undefined>>, token: string): Record<string, string> {
+  const env = childEnv(baseEnv, token);
+  return kind === 'answer' ? env : { ...env, ...THINKING_OFF_ENV };
 }
 
 interface Attempt {
@@ -390,7 +380,7 @@ function resultOf(attempt: Attempt): ResultEvent {
     ok: errorCode === null,
     errorCode,
     costUsd: summary.result?.totalCostUsd ?? null,
-    // Only a session the CLI actually started: a resume that found none reports the id it was asked for.
+    // Only a session the CLI actually started.
     claudeSessionId: isUuidShaped(sessionId) ? sessionId : null,
     model: summary.model,
     reported,
@@ -403,6 +393,9 @@ function resultOf(attempt: Attempt): ResultEvent {
  * with its own reason, whatever the CLI goes on to write while it is being killed (ruling Z1,
  * R2-1); a result line read before the abort is reported as it was (`reported`), and the CLI that
  * stays after it is killed once its time to exit is over.
+ *
+ * A turn of any kind but an answer is not streamed (`--include-partial-messages` is for answers):
+ * its text is the assistant message's text, handed on as one delta once the process has ended.
  */
 export function createCliTurn(deps: CliTurnDeps): CliTurn {
   const graceMs = deps.killGraceMs ?? KILL_GRACE_MS;
@@ -410,13 +403,20 @@ export function createCliTurn(deps: CliTurnDeps): CliTurn {
   const newUuid = deps.newUuid ?? randomUUID;
 
   return async function* cliTurn(input, signal) {
-    const log = (message: string): void => deps.log(`turn request=${input.requestId} ${message}`);
+    const log = (message: string): void => deps.log(`turn request=${input.requestId} ${input.kind} ${message}`);
 
-    async function* attemptOnce(start: SessionStart, token: string): AsyncGenerator<TurnEvent, Attempt> {
-      const prompt = start.mode === 'fresh' ? buildPrompt(input.history, input.prompt) : asQuestion(input.prompt);
-      const argv = buildArgv({ model: input.model, session: start, systemPrompt: deps.readSystemPrompt(), budgetUsd: input.budgetUsd, prompt });
-      const child = deps.spawn(argv, { cwd: PATHS.turnCwd, env: childEnv(deps.baseEnv, token) });
-      const stream = createTurnStream();
+    async function* attempt(token: string): AsyncGenerator<TurnEvent, Attempt> {
+      const argv = buildArgv({
+        model: input.model,
+        sessionId: newSessionId(newUuid),
+        kind: input.kind,
+        systemPrompt: input.systemPrompt,
+        budgetUsd: input.budgetUsd,
+        prompt: input.prompt,
+        mcpConfig: input.mcpConfig,
+      });
+      const child = deps.spawn(argv, { cwd: PATHS.turnCwd, env: turnEnv(input.kind, deps.baseEnv, token) });
+      const stream = createTurnStream(undefined, input.kind);
       const killer = createKiller(child, graceMs);
       const linger = createLingerGuard(killer, resultExitGraceMs, log);
       const onAbort = (): void => killer.kill();
@@ -429,7 +429,7 @@ export function createCliTurn(deps: CliTurnDeps): CliTurn {
           const line = parseLine(lineText);
           if (line === null) continue;
           for (const out of stream.push(line)) {
-            if (out.kind === 'init') log(initLogLine(out.init));
+            if (out.kind === 'init') log(initLogLine(out.init, input.kind));
             if (out.kind === 'stop') {
               log(`stopped: ${out.reason}`);
               killer.kill();
@@ -447,9 +447,11 @@ export function createCliTurn(deps: CliTurnDeps): CliTurn {
         if (exit.error !== undefined) log(`the CLI did not start: ${exit.error}`);
         else if (exit.code !== 0 && !signal.aborted && !linger.fired()) {
           const how = exit.code ?? `on ${exit.signal ?? 'a signal'}`;
-          log(`the CLI exited ${how}: ${stderrForLog(child.stderrText(), [token, input.prompt])}`);
+          const stderr = child.stderrText();
+          log(`the CLI exited ${how}: stderr_chars=${stderr.length} class=${stderrClass(stderr)}`);
         }
         const summary = stream.summary();
+        if (input.kind !== 'answer' && !signal.aborted && summary.assistantText !== '') yield { type: 'delta', text: summary.assistantText };
         return { summary, exit, aborted: signal.aborted, reported: summary.result !== null && !lateResult };
       } finally {
         signal.removeEventListener('abort', onAbort);
@@ -470,33 +472,14 @@ export function createCliTurn(deps: CliTurnDeps): CliTurn {
       yield failure('sign_in_expired');
       return;
     }
-
-    let start = planSession({ storedSessionId: input.claudeSessionId, conversationId: input.conversationId }, newUuid);
-    let retried = false;
-    for (;;) {
-      let attempt: Attempt;
-      try {
-        attempt = yield* attemptOnce(start, token);
-      } catch (error) {
-        log(`could not run the CLI: ${messageOf(error)}`);
-        yield failure('cli_error');
-        return;
-      }
-      const outcome: StartOutcome = {
-        mode: start.mode,
-        exitCode: attempt.exit.code,
-        sawAssistant: attempt.summary.sawAssistant,
-        alreadyRetried: retried,
-        stoppedByStream: attempt.summary.violation !== null || attempt.summary.overage,
-      };
-      if (!attempt.aborted && shouldRetryAsFresh(outcome)) {
-        retried = true;
-        log('the resumed session did not start; retrying once as a fresh start with replay');
-        start = planSession({ storedSessionId: null, conversationId: input.conversationId }, newUuid);
-        continue;
-      }
-      yield resultOf(attempt);
+    let ended: Attempt;
+    try {
+      ended = yield* attempt(token);
+    } catch (error) {
+      log(`could not run the CLI: ${messageOf(error)}`);
+      yield failure('cli_error');
       return;
     }
+    yield resultOf(ended);
   };
 }

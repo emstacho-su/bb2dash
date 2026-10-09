@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { Claim, FinishArgs, WorkspaceRpc } from '../../src/db.js';
+import type { Claim, FinishArgs, JobClaim, JobFinishArgs, SourceRow, TurnFacts, WorkspaceRpc } from '../../src/db.js';
 import type { CliExit, CliProcess, CliTurn, SpawnOptions } from '../../src/providers/claude-cli.js';
 import type { ResultEvent, TurnEvent, TurnInput } from '../../src/providers/types.js';
 
@@ -18,12 +18,23 @@ export const CONVERSATION_ID = '0b0e7c1e-58a3-4d0b-9d5e-1d2c3b4a5f60';
 export const STORED_SESSION_ID = '5e0c1a52-7d7e-4b8f-9a44-0f6f1f6f0a11';
 export const QUESTION = 'What does the IST.323 syllabus say about late work?';
 
+/**
+ * Phase 21's recordings were made with two MCP servers. An answering turn now starts one, so the
+ * notes server (and its tools) is taken out of an init line; every other line is as recorded.
+ */
+export function asAnsweringInit(line: Record<string, unknown>): Record<string, unknown> {
+  if (line.type !== 'system' || line.subtype !== 'init') return line;
+  const servers = Array.isArray(line.mcp_servers) ? (line.mcp_servers as Array<{ name?: unknown }>).filter((server) => server.name !== 'rag') : line.mcp_servers;
+  const tools = Array.isArray(line.tools) ? (line.tools as unknown[]).filter((tool) => !(typeof tool === 'string' && tool.startsWith('mcp__rag__'))) : line.tools;
+  return { ...line, mcp_servers: servers, tools };
+}
+
 export function readFixtureLines(name: string): Array<Record<string, unknown>> {
   return fs
     .readFileSync(path.join(FIXTURES, name), 'utf8')
     .split('\n')
     .filter((text) => text.trim() !== '')
-    .map((text) => JSON.parse(text) as Record<string, unknown>);
+    .map((text) => asAnsweringInit(JSON.parse(text) as Record<string, unknown>));
 }
 
 export function readFixtureJson<T>(name: string): T {
@@ -36,11 +47,33 @@ export function claimOf(overrides: Partial<Claim> = {}): Claim {
     conversationId: CONVERSATION_ID,
     userMessageId: '7a7a7a7a-0000-4000-8000-000000000001',
     prompt: QUESTION,
-    claudeSessionId: null,
-    priorTier: null,
-    history: [],
     ...overrides,
   };
+}
+
+/** The jsonb of `workspace_turn_context` for a request with no options row: depth auto, format plain, nothing else. */
+export function contextJson(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    options: { depth: 'auto', format: 'plain', routine_id: null, course_display_id: null, course_ids: null },
+    routine: null,
+    attachments: [],
+    about_me: null,
+    rolling_summary: null,
+    summarised_through: null,
+    messages: [],
+    messages_left_out: 0,
+    last_auto_tier: null,
+    courses: [],
+    today: '2026-10-08',
+    ...overrides,
+  };
+}
+
+export interface PutCall {
+  readonly requestId: string;
+  readonly runner: string;
+  readonly facts: TurnFacts | null;
+  readonly sources: readonly SourceRow[];
 }
 
 export interface StreamCall {
@@ -54,6 +87,16 @@ export interface FakeRpc {
   readonly rpc: WorkspaceRpc;
   readonly queue: Claim[];
   readonly claims: number[];
+  /** What `workspace_turn_context` returns; set it to script a turn. */
+  context: unknown;
+  /** What `workspace_planner_feed` returns. */
+  feed: unknown;
+  readonly contextTries: number[];
+  readonly feedCalls: Array<{ from: string | null; to: string | null }>;
+  readonly puts: PutCall[];
+  readonly jobQueue: JobClaim[];
+  readonly jobClaims: Array<{ runner: string; kinds: readonly string[]; at: number }>;
+  readonly jobFinishes: JobFinishArgs[];
   readonly begins: Array<{ requestId: string; tier: string; provider: string; model: string }>;
   /** When each `workspace_begin()` was tried, the tries that failed included. */
   readonly beginTries: number[];
@@ -72,6 +115,12 @@ export interface FakeRpc {
   failBegin(error?: Error, times?: number): void;
   /** The next `times` finishes fail: as a database that cannot be reached, or with `error`. */
   failFinish(times: number, error?: Error): void;
+  /** The next `times` reads of the turn context fail (all of them when no count is given). */
+  failContext(error: Error, times?: number): void;
+  /** The next `times` puts of facts and sources fail. */
+  failPut(times: number, error?: Error): void;
+  /** From now on the feed call fails. */
+  failFeed(error?: Error): void;
 }
 
 /** A refusal one of the five functions raises itself: SQLSTATE 22023 (migration 142). */
@@ -85,6 +134,9 @@ export function fakeRpc(now: () => number = () => Date.now()): FakeRpc {
   let broken = false;
   let beginFailure: { error: Error; left: number } | null = null;
   let finishFailure: { error: Error; left: number } | null = null;
+  let contextFailure: { error: Error; left: number } | null = null;
+  let putFailure: { error: Error; left: number } | null = null;
+  let feedFailure: Error | null = null;
   const down = dbDown;
   /** The failure a scripted call still owes, used up by one. */
   const owed = (failure: { error: Error; left: number } | null): Error | null => {
@@ -95,6 +147,14 @@ export function fakeRpc(now: () => number = () => Date.now()): FakeRpc {
   const fake: FakeRpc = {
     queue: [],
     claims: [],
+    context: contextJson(),
+    feed: null,
+    contextTries: [],
+    feedCalls: [],
+    puts: [],
+    jobQueue: [],
+    jobClaims: [],
+    jobFinishes: [],
     begins: [],
     beginTries: [],
     streams: [],
@@ -116,11 +176,50 @@ export function fakeRpc(now: () => number = () => Date.now()): FakeRpc {
     failFinish: (times, error = down()) => {
       finishFailure = { error, left: times };
     },
+    failContext: (error, times = Number.POSITIVE_INFINITY) => {
+      contextFailure = { error, left: times };
+    },
+    failPut: (times, error = down()) => {
+      putFailure = { error, left: times };
+    },
+    failFeed: (error = down()) => {
+      feedFailure = error;
+    },
     rpc: {
       async claim() {
         fake.claims.push(now());
         if (broken) throw down();
         return fake.queue.shift() ?? null;
+      },
+      async turnContext() {
+        fake.contextTries.push(now());
+        if (broken) throw down();
+        const failure = owed(contextFailure);
+        if (failure !== null) throw failure;
+        return fake.context;
+      },
+      async turnPut(requestId, runner, facts, sources) {
+        if (broken) throw down();
+        const failure = owed(putFailure);
+        if (failure !== null) throw failure;
+        fake.puts.push({ requestId, runner, facts, sources });
+        return sources.length;
+      },
+      async plannerFeed(_requestId, _runner, from, to) {
+        fake.feedCalls.push({ from, to });
+        if (broken) throw down();
+        if (feedFailure !== null) throw feedFailure;
+        return fake.feed;
+      },
+      async jobClaim(runner, kinds) {
+        fake.jobClaims.push({ runner, kinds: [...kinds], at: now() });
+        if (broken) throw down();
+        return fake.jobQueue.shift() ?? null;
+      },
+      async jobFinish(_runner, args) {
+        if (broken) throw down();
+        fake.jobFinishes.push(args);
+        return { stored: args.outcome === 'done', documentId: null };
       },
       async begin(requestId, tier, provider, model) {
         fake.beginTries.push(now());

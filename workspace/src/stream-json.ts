@@ -24,12 +24,14 @@
 import { CLAUDE_CODE_VERSION, TOOL_QUERY_MAX_CHARS } from './config.js';
 import type { ErrorCode } from './errors.js';
 import { ALLOWED_TOOLS } from './hooks/gate-rules.js';
-import type { StoredToolCall } from './providers/types.js';
+import type { StoredToolCall, TurnKind } from './providers/types.js';
 
 /** `apiKeySource` on the init line when no API key is in use: a `/login` session or an OAuth token in the environment. */
 export const OAUTH_CREDENTIAL_SOURCE = 'none';
 export const REQUIRED_PERMISSION_MODE = 'dontAsk';
-export const REQUIRED_MCP_SERVERS = ['bb2dash', 'rag'] as const;
+/** An answering turn's one server; a planning, summary or rolling turn has none. */
+export const REQUIRED_MCP_SERVERS = ['bb2dash'] as const;
+const MCP_TOOL_PREFIX = 'mcp__';
 
 const MCP_CONNECTED = 'connected';
 const FORBIDDEN_TOOL = 'ToolSearch';
@@ -44,7 +46,6 @@ const HOOK_DENY_EXIT = 2;
 const TEXT_BLOCK_SEPARATOR = '\n\n';
 const MATERIALS_SEARCH = 'mcp__bb2dash__search_materials';
 const MATERIALS_TEXT = 'mcp__bb2dash__get_material_text';
-const NOTES_SEARCH = 'mcp__rag__search_context';
 
 type Json = Record<string, unknown>;
 
@@ -87,6 +88,11 @@ export interface TurnSummary {
   readonly init: InitFacts | null;
   /** The joined answer text, exactly what the delta signals carried. */
   readonly text: string;
+  /**
+   * The text blocks of the assistant messages, joined: what a turn with no partial messages (a
+   * planning, summary or rolling turn) wrote. Empty when the turn called a tool and wrote no text.
+   */
+  readonly assistantText: string;
   /** Every tool call in call order, failed and denied ones included; the runner keeps the first 20. */
   readonly toolCalls: readonly StoredToolCall[];
   /** The full model id of the last real assistant message, else the init line's, else null. */
@@ -138,8 +144,12 @@ export function readInit(line: unknown): InitFacts | null {
   };
 }
 
-/** Why the init line does not pass, one sentence per reason; empty when it passes. */
-export function checkInit(init: InitFacts, pinnedVersion: string = CLAUDE_CODE_VERSION): string[] {
+/**
+ * Why the init line does not pass, one sentence per reason; empty when it passes. An answering turn
+ * expects exactly the materials server, connected, and its two tools. A planning, summary or
+ * rolling turn expects no server and no tool whose name starts `mcp__` (brief 109, "Init check").
+ */
+export function checkInit(init: InitFacts, pinnedVersion: string = CLAUDE_CODE_VERSION, kind: TurnKind = 'answer'): string[] {
   const problems: string[] = [];
   if (init.claudeCodeVersion !== pinnedVersion) {
     problems.push(`claude_code_version is ${init.claudeCodeVersion ?? 'missing'}, not the pinned ${pinnedVersion}`);
@@ -150,6 +160,13 @@ export function checkInit(init: InitFacts, pinnedVersion: string = CLAUDE_CODE_V
   if (init.permissionMode !== REQUIRED_PERMISSION_MODE) {
     problems.push(`permissionMode is ${init.permissionMode ?? 'missing'}, not ${REQUIRED_PERMISSION_MODE}`);
   }
+  problems.push(...(kind === 'answer' ? answeringToolProblems(init) : bareToolProblems(init)));
+  if (init.tools.includes(FORBIDDEN_TOOL)) problems.push(`tools holds ${FORBIDDEN_TOOL}`);
+  return problems;
+}
+
+function answeringToolProblems(init: InitFacts): string[] {
+  const problems: string[] = [];
   const names = init.mcpServers.map((server) => server.name).sort();
   if (names.join(',') !== [...REQUIRED_MCP_SERVERS].sort().join(',')) {
     problems.push(`mcp_servers are [${names.join(', ')}], not exactly ${REQUIRED_MCP_SERVERS.join(' and ')}`);
@@ -160,7 +177,14 @@ export function checkInit(init: InitFacts, pinnedVersion: string = CLAUDE_CODE_V
   for (const tool of ALLOWED_TOOLS) {
     if (!init.tools.includes(tool)) problems.push(`tools does not hold ${tool}`);
   }
-  if (init.tools.includes(FORBIDDEN_TOOL)) problems.push(`tools holds ${FORBIDDEN_TOOL}`);
+  return problems;
+}
+
+function bareToolProblems(init: InitFacts): string[] {
+  const problems: string[] = [];
+  if (init.mcpServers.length > 0) problems.push(`mcp_servers are [${init.mcpServers.map((server) => server.name).join(', ')}], not none`);
+  const mcpTools = init.tools.filter((tool) => tool.startsWith(MCP_TOOL_PREFIX));
+  if (mcpTools.length > 0) problems.push(`tools holds ${mcpTools.length} MCP tool(s), not none`);
   return problems;
 }
 
@@ -186,7 +210,6 @@ export function toStoredToolCall(name: string, input: unknown, ok: boolean): Sto
     const id = args.text_id;
     return { tool, query: null, scope: typeof id === 'number' ? String(id) : nonEmpty(id), ok };
   }
-  if (name === NOTES_SEARCH) return { tool, query: cutQuery(args.query), scope: nonEmpty(args.collection), ok };
   return { tool, query: null, scope: null, ok };
 }
 
@@ -230,7 +253,7 @@ function readResult(line: Json): ResultFacts {
   };
 }
 
-export function createTurnStream(pinnedVersion: string = CLAUDE_CODE_VERSION): TurnStream {
+export function createTurnStream(pinnedVersion: string = CLAUDE_CODE_VERSION, kind: TurnKind = 'answer'): TurnStream {
   const tools = new Map<string, ToolState>();
   /** By tool name: the gate's allows seen so far, and the results that were not errors. */
   const allows = new Map<string, number>();
@@ -238,6 +261,8 @@ export function createTurnStream(pinnedVersion: string = CLAUDE_CODE_VERSION): T
   const countOf = (counts: ReadonlyMap<string, number>, name: string): number => counts.get(name) ?? 0;
   let init: InitFacts | null = null;
   let joined = '';
+  /** By message id: its text blocks in order (the CLI writes one `assistant` line per content block). */
+  const messageTexts = new Map<string, string[]>();
   let separatorPending = false;
   let model: string | null = null;
   let sawAssistant = false;
@@ -258,7 +283,7 @@ export function createTurnStream(pinnedVersion: string = CLAUDE_CODE_VERSION): T
     const facts = readInit(line);
     if (facts === null || init !== null) return [];
     init = facts;
-    const problems = checkInit(facts, pinnedVersion);
+    const problems = checkInit(facts, pinnedVersion, kind);
     return problems.length === 0
       ? [{ kind: 'init', init: facts }]
       : [{ kind: 'init', init: facts }, stop('cli_error', `init line refused: ${problems.join('; ')}`)];
@@ -299,12 +324,20 @@ export function createTurnStream(pinnedVersion: string = CLAUDE_CODE_VERSION): T
     return tool.counted ? [{ kind: 'tool', id, call: stored(tool) }] : [];
   };
 
+  const keepText = (message: Json): void => {
+    const blocks = records(message.content).flatMap((block) => (block.type === 'text' && typeof block.text === 'string' ? [block.text] : []));
+    if (blocks.length === 0) return;
+    const id = text(message.id) ?? `anonymous-${messageTexts.size}`;
+    messageTexts.set(id, [...(messageTexts.get(id) ?? []), ...blocks]);
+  };
+
   const onAssistant = (line: Json): StreamSignal[] => {
     sawAssistant = true;
     if (typeof line.error === 'string') assistantError = line.error;
     const message = isRecord(line.message) ? line.message : {};
     const named = text(message.model);
     if (named !== null && named !== SYNTHETIC_MODEL && line.is_api_error_message !== true) model = named;
+    keepText(message);
     return records(message.content)
       .filter((block) => block.type === 'tool_use')
       .flatMap(registerTool);
@@ -381,6 +414,7 @@ export function createTurnStream(pinnedVersion: string = CLAUDE_CODE_VERSION): T
       return {
         init,
         text: joined,
+        assistantText: [...messageTexts.values()].map((blocks) => blocks.join(TEXT_BLOCK_SEPARATOR)).join(TEXT_BLOCK_SEPARATOR),
         toolCalls: [...tools.values()].filter((tool) => tool.counted).map(stored),
         model: model ?? init?.model ?? null,
         sawAssistant,

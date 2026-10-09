@@ -1,29 +1,17 @@
 /**
- * The tool gate's rules (brief 102, Contract, Tool gate). Read-only v1: four read tools, and the
- * notes store only through two collections.
+ * The tool gate's rules (brief 102, Contract, Tool gate; brief 109, "Gate"). Read-only: two tools,
+ * the materials search and the materials reader. The notes store, its collection rule and the
+ * course lister are gone from the Workspace (ruling W-2: one store, in the bb2dash project).
  *
  * The gate only denies or stays silent. A denial is exit code 2 with the reason for stderr; an
  * allowed call is exit code 0 with nothing printed, so the CLI's own permission rules still decide.
- * Anything the gate cannot read (text that is not JSON, a missing tool name, a collection that is
- * not a string, an exception) is a denial: it never fails open.
+ * Anything the gate cannot read (text that is not JSON, a missing tool name, an exception) is a
+ * denial: it never fails open.
  *
  * Pure and dependency-free: `tool-gate.ts` is the process around it.
  */
 
-export const ALLOWED_TOOLS = [
-  'mcp__bb2dash__search_materials',
-  'mcp__bb2dash__get_material_text',
-  'mcp__bb2dash__list_courses',
-  'mcp__rag__search_context',
-] as const;
-
-/** The notes store's search tool: the one allowed tool with a rule on its input. */
-export const RAG_SEARCH_TOOL = 'mcp__rag__search_context';
-
-/** The collections the assistant may search (B-5 (g); O-1, answered 2026-10-05). */
-export const RAG_COLLECTIONS = ['bb2dash', 'bb2dash-inbox-decisions'] as const;
-
-export const COLLECTION_DENY_REASON = `collection must be one of: ${RAG_COLLECTIONS.join(', ')}`;
+export const ALLOWED_TOOLS = ['mcp__bb2dash__search_materials', 'mcp__bb2dash__get_material_text'] as const;
 
 /** Exit code 2 is the CLI's blocking code: the tool call is refused and stderr goes to the model. */
 export const DENY_EXIT_CODE = 2;
@@ -53,14 +41,6 @@ export function decide(payload: unknown): GateDecision {
 
   if (!(ALLOWED_TOOLS as readonly string[]).includes(toolName)) {
     return deny(`tool not allowed: ${toolName.slice(0, TOOL_NAME_SHOWN_MAX)}`);
-  }
-
-  if (toolName === RAG_SEARCH_TOOL) {
-    const input = payload.tool_input;
-    const collection = isRecord(input) ? input.collection : undefined;
-    if (typeof collection !== 'string' || !(RAG_COLLECTIONS as readonly string[]).includes(collection)) {
-      return deny(COLLECTION_DENY_REASON);
-    }
   }
 
   return { allow: true };

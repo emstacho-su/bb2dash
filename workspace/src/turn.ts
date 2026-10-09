@@ -1,6 +1,8 @@
 /**
- * One turn (brief 102, Contract, "The runner"): route, `workspace_begin()`, run the provider, send
- * the answer text through `workspace_stream()` in flushes 250 ms apart, close with
+ * One turn (brief 102, Contract, "The runner"; brief 109, "The question's path"): read the turn
+ * context, route by the chosen depth, `workspace_begin()`, prepare (the planning turn, the retrieval
+ * and the feed, the assembled prompt, the stored facts and sources: `prepare.ts`), run the answering
+ * provider, send the answer text through `workspace_stream()` in flushes 250 ms apart, close with
  * `workspace_finish()`.
  *
  * The runner's own stops: a false from `workspace_stream()` is the owner's Stop (`cancelled`), the
@@ -34,13 +36,19 @@ import {
   TOOL_CALLS_MAX,
   TURN_TIMEOUT_MS,
 } from './config.js';
+import { tierForDepth } from './depth.js';
 import { retryDbCall, type RetryEnd } from './db-retry.js';
 import type { Claim, FinishArgs, WorkspaceRpc } from './db.js';
 import { errorCodeFor, messageOf, type ErrorCode } from './errors.js';
+import { removeRequestConfig, writeRequestConfig, type TurnLimits } from './mcp-config.js';
+import { prepareTurn, type PrepareDeps, type Ready } from './prepare.js';
+import type { ReadPrompt } from './prompts.js';
 import type { Providers } from './providers/index.js';
 import type { Provider, ResultEvent, StoredToolCall, TurnInput } from './providers/types.js';
-import { routeTier } from './router.js';
+import type { Retriever } from './retrieve.js';
+import { toolSourceRows } from './sources.js';
 import { TIER_ROUTES } from './tiers.js';
+import { parseTurnContext, type TurnContext } from './turn-context.js';
 
 const MS_PER_SECOND = 1000;
 
@@ -58,7 +66,25 @@ export interface TurnDeps {
    * duration, the watchdog and its hold), so a step of the wall clock changes none of them.
    */
   readonly now: () => number;
+  /** The name the runner claims under: the context, the feed and the stored facts are checked against it. */
+  readonly runnerName: string;
+  /** The search: the batch child in the container, a fake in tests. */
+  readonly retrieve: Retriever;
+  /** The prompt files. */
+  readonly readPrompt: ReadPrompt;
+  /** A turn's marker; a random one when not given. */
+  readonly newMarker?: () => string;
+  /** The answering turn's own MCP config file: written before the turn and removed after it. */
+  readonly mcpFiles?: McpFiles;
 }
+
+/** The two file calls around an answering turn's MCP config. */
+export interface McpFiles {
+  write(requestId: string, limits: TurnLimits): string;
+  remove(file: string): void;
+}
+
+const realMcpFiles: McpFiles = { write: (requestId, limits) => writeRequestConfig(requestId, limits), remove: (file) => removeRequestConfig(file) };
 
 /** The runner's own reasons to stop a turn. */
 export type StopCode = Extract<ErrorCode, 'cancelled' | 'timeout' | 'stale_claim'>;
@@ -203,12 +229,12 @@ type Ending = { readonly state: 'done' | 'failed'; readonly errorCode: ErrorCode
 /** How the tries of a begin ended when it was not made. */
 type UnbegunEnd = Exclude<RetryEnd<string>, { readonly outcome: 'made' }>;
 
-/** Why a request is closed without having been begun, for the log. */
-const UNBEGUN_REASON: Record<UnbegunEnd['outcome'], string> = {
-  refused: 'begin refused after a failed try, its reply may have been lost',
-  bad_statement: 'begin refused by the database as a statement it cannot take, not tried again',
-  gave_up: 'begin could not be made',
-  stopped: 'begin could not be made',
+/** Why a request is closed without having been begun, for the log: `what` is the call that did not go through. */
+const UNBEGUN_REASON: Record<UnbegunEnd['outcome'], (what: string) => string> = {
+  refused: (what) => `${what} refused after a failed try, its reply may have been lost`,
+  bad_statement: (what) => `${what} refused by the database as a statement it cannot take, not tried again`,
+  gave_up: (what) => `${what} could not be made`,
+  stopped: (what) => `${what} could not be made`,
 };
 
 function endingOf(stopCode: StopCode | null, collected: Collected): Ending {
@@ -297,10 +323,7 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
   /** Whole milliseconds since `startedAt`, a reading of `deps.now`, which counts fractions of one. */
   const elapsedMs = (startedAt: number): number => Math.round(deps.now() - startedAt);
 
-  /**
-   * A close with nothing of a turn in it: no content, no tool calls, no cost, no model, and the
-   * session id the claim came with, so the conversation keeps the session it had.
-   */
+  /** A close with nothing of a turn in it: no content, no tool calls, no cost, no model, no session. */
   const emptyClose = (errorCode: ErrorCode, durationMs: number): FinishArgs => ({
     requestId: claim.requestId,
     state: 'failed',
@@ -309,7 +332,7 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
     errorCode,
     costUsd: null,
     durationMs,
-    claudeSessionId: claim.claudeSessionId,
+    claudeSessionId: null,
     model: null,
   });
 
@@ -327,22 +350,106 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
   }
 
   /**
-   * Begin did not go through as far as the runner can tell, nothing ran, and the request may still
-   * be claimed: every try failed, the runner's own stop ended the tries, the function refused a try
-   * that followed a failed one, or the database refused the statement itself. It is closed under
-   * the runner's own stop when there is one, as `cli_error` otherwise.
+   * A call before the answer did not go through as far as the runner can tell (`what` names it),
+   * nothing ran, and the request may still be claimed: every try failed, the runner's own stop
+   * ended the tries, the function refused a try that followed a failed one, or the database refused
+   * the statement itself. It is closed under the runner's own stop when there is one, as `cli_error`
+   * otherwise.
    */
-  async function closeUnbegun(startedAt: number, end: UnbegunEnd): Promise<TurnOutcome> {
+  async function closeUnbegun(startedAt: number, end: UnbegunEnd, what: string): Promise<TurnOutcome> {
     const errorCode: ErrorCode = stopped.code ?? 'cli_error';
-    log(`${UNBEGUN_REASON[end.outcome]}, nothing ran; closing the request as ${errorCode}: ${messageOf(end.error)}`);
+    log(`${UNBEGUN_REASON[end.outcome](what)}, nothing ran; closing the request as ${errorCode}: ${messageOf(end.error)}`);
     // This close is the minimal one already, so nothing follows it when the database refuses it.
     await finish(emptyClose(errorCode, elapsedMs(startedAt)), null);
     return { state: 'failed', errorCode };
   }
 
+  /** The turn context, tried like begin. A turn whose context cannot be read closes as `cli_error`. */
+  async function readContext(startedAt: number): Promise<TurnContext | TurnOutcome> {
+    const read = await retryDbCall(() => deps.rpc.turnContext(claim.requestId, deps.runnerName), {
+      what: 'context',
+      log,
+      now: deps.now,
+      signal: controller.signal,
+    });
+    if (read.outcome === 'refused' && !read.afterFailure) {
+      log(`context refused, nothing ran: ${messageOf(read.error)}`);
+      return { state: 'skipped', errorCode: null };
+    }
+    if (read.outcome !== 'made') return closeUnbegun(startedAt, read, 'context');
+    try {
+      return parseTurnContext(read.value);
+    } catch (error) {
+      return closeUnbegun(startedAt, { outcome: 'bad_statement', error }, 'context');
+    }
+  }
+
+  /** The close of a turn that ended before its answering model started: a stop, or a code the preparation named. */
+  async function closeBeforeAnswer(startedAt: number, errorCode: ErrorCode): Promise<TurnOutcome> {
+    log(`ended before the answering turn, as ${errorCode}`);
+    await finish(emptyClose(errorCode, elapsedMs(startedAt)), null);
+    return { state: 'failed', errorCode };
+  }
+
+  /** The units the model opened by id, stored as source rows before finish; a failure is logged and the answer is kept. */
+  async function storeToolSources(ready: Ready, calls: readonly StoredToolCall[]): Promise<void> {
+    const rows = toolSourceRows(calls, ready.sourceRows);
+    if (rows.length === 0) return;
+    try {
+      await deps.rpc.turnPut(claim.requestId, deps.runnerName, null, rows);
+    } catch (error) {
+      log(`turn_put of the opened units failed, the answer is kept: ${messageOf(error)}`);
+    }
+  }
+
+  /** The answering turn, with its own MCP config file for as long as it runs. */
+  async function answer(ready: Ready, model: string, provider: Provider, streamer: Streamer): Promise<Collected> {
+    const mcpFiles = deps.mcpFiles ?? realMcpFiles;
+    let file: string;
+    try {
+      file = mcpFiles.write(claim.requestId, ready.limits);
+    } catch (error) {
+      log(`the MCP config could not be written: ${messageOf(error)}`);
+      return { content: '', calls: [], result: null, thrown: { error } };
+    }
+    const input: TurnInput = {
+      requestId: claim.requestId,
+      kind: 'answer',
+      model,
+      prompt: ready.prompt,
+      systemPrompt: ready.systemPrompt,
+      budgetUsd: ready.answerBudgetUsd,
+      mcpConfig: file,
+    };
+    try {
+      return await collect(provider, input, controller.signal, streamer);
+    } finally {
+      try {
+        mcpFiles.remove(file);
+      } catch (error) {
+        log(`the MCP config could not be removed: ${messageOf(error)}`);
+      }
+    }
+  }
+
+  const prepareDeps: PrepareDeps = {
+    rpc: deps.rpc,
+    providers: deps.providers,
+    retrieve: deps.retrieve,
+    readPrompt: deps.readPrompt,
+    newMarker: deps.newMarker,
+    runnerName: deps.runnerName,
+    budgetUsd: deps.budgetUsd,
+    now: deps.now,
+    log,
+  };
+
   async function run(): Promise<TurnOutcome> {
     const startedAt = deps.now();
-    const tier = routeTier(claim.prompt, claim.priorTier);
+    const read = await readContext(startedAt);
+    if ('state' in read) return read;
+    const context = read;
+    const tier = tierForDepth(context.options.depth, claim.prompt, context.lastAutoTier);
     const route = TIER_ROUTES[tier];
     const begun = await retryDbCall(() => deps.rpc.begin(claim.requestId, tier, route.provider, route.model), {
       what: 'begin',
@@ -356,46 +463,47 @@ export function startTurn(deps: TurnDeps, claim: Claim): TurnHandle {
       log(`begin refused, nothing ran: ${messageOf(begun.error)}`);
       return { state: 'skipped', errorCode: null };
     }
-    if (begun.outcome !== 'made') return closeUnbegun(startedAt, begun);
-    log(`started tier=${tier} provider=${route.provider} model=${route.model}`);
+    if (begun.outcome !== 'made') return closeUnbegun(startedAt, begun, 'begin');
+    log(`started tier=${tier} provider=${route.provider} model=${route.model} depth=${context.options.depth}`);
 
     const streamer = createStreamer(deps.rpc, claim.requestId, stopSwitch, deps.now, log);
     const flushTimer = setInterval(() => streamer.tick(), STREAM_FLUSH_MS);
     // The limit counts from the start of the turn: the time begin's tries took is part of it, so a
     // turn still ends under the database's 10-minute sweep. That time is read on the monotonic
-    // clock, so a wall clock that stepped during the tries does not leave the turn a limit of 0.
+    // clock, so a wall clock that stepped during the tries does not leave the turn a limit of 0. One
+    // limit covers the whole request: planning, retrieval and answering.
     const timeLimit = setTimeout(() => stopSwitch.stop('timeout'), Math.max(0, TURN_TIMEOUT_MS - (deps.now() - startedAt)));
-    const input: TurnInput = {
-      requestId: claim.requestId,
-      conversationId: claim.conversationId,
-      model: route.model,
-      prompt: claim.prompt,
-      history: claim.history,
-      claudeSessionId: claim.claudeSessionId,
-      budgetUsd: deps.budgetUsd,
+    const stopTimers = (): void => {
+      clearInterval(flushTimer);
+      clearTimeout(timeLimit);
     };
-    const collected = await collect(deps.providers[route.provider], input, controller.signal, streamer);
-    clearInterval(flushTimer);
-    clearTimeout(timeLimit);
+    const prepared = await prepareTurn(prepareDeps, { claim, context, tier, signal: controller.signal });
+    if (prepared.kind !== 'ready') {
+      stopTimers();
+      return closeBeforeAnswer(startedAt, stopped.code ?? (prepared.kind === 'failed' ? prepared.errorCode : 'cli_error'));
+    }
+    streamer.add(prepared.leadText);
+    const collected = await answer(prepared, route.model, deps.providers[route.provider], streamer);
+    stopTimers();
     if (collected.thrown !== null) log(`the provider failed: ${messageOf(collected.thrown.error)}`);
     await streamer.drain();
+    await storeToolSources(prepared, collected.calls);
 
     const ending = endingOf(stopped.code, collected);
     const durationMs = elapsedMs(startedAt);
-    const answer: FinishArgs = {
+    const finished: FinishArgs = {
       requestId: claim.requestId,
       state: ending.state,
-      content: storedContent(collected.content, ending, deps.budgetCapHolds, log),
-      toolCalls: storedCalls(collected.calls, log),
+      content: storedContent(`${prepared.leadText}${collected.content}`, ending, deps.budgetCapHolds, log),
+      toolCalls: storedCalls([...prepared.runnerCalls, ...collected.calls], log),
       errorCode: ending.errorCode,
       costUsd: collected.result?.costUsd ?? null,
       durationMs,
-      // `workspace_finish()` stamps what it is given, so a turn that reported no session (nothing
-      // started) hands back the stored id: the conversation keeps its session for the next turn.
-      claudeSessionId: collected.result?.claudeSessionId ?? claim.claudeSessionId,
+      // No turn resumes a session, so none is stored (brief 109, Sessions).
+      claudeSessionId: null,
       model: collected.result?.model ?? null,
     };
-    await finish(answer, emptyClose('cli_error', durationMs));
+    await finish(finished, emptyClose('cli_error', durationMs));
     return ending;
   }
 
