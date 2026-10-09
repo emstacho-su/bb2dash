@@ -8,8 +8,8 @@
  * who picked Light sees one dark frame at each open, before the page paints;
  * that is accepted (DECISIONS 2026-10-08).
  *
- * `nativeTheme` is read nowhere in `desktop/`, and this module does not start:
- * the shell has no way to ask the page which theme it is in before it loads, so
+ * The operating system's own theme setting is read nowhere in `desktop/`, and this module
+ * does not start: the shell has no way to ask the page which theme it is in before it loads, so
  * a second colour would be a guess. `test/unit/window-background.test.ts` pins
  * `DARK` to the stylesheet. No Electron import here, so the test loads it as
  * plain Node.

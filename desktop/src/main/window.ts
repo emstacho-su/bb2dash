@@ -331,11 +331,12 @@ export function createWindow(appUrl: string, initialUrl?: string): BrowserWindow
   recordEvent('window-preferences', { ...WEB_PREFERENCES });
   // The options the window was built with, under a kind of their own: shell.spec.ts compares the
   // six keys of 'window-preferences' exactly.
+  const minWidth = MIN_WIDTH;
   recordEvent('window-chrome', {
     titleBarStyle: 'hidden',
     titleBarOverlay: { ...DARK_OVERLAY },
     autoHideMenuBar: true,
-    minWidth: MIN_WIDTH,
+    minWidth,
   });
 
   if (saved?.isMaximized) window.maximize();
