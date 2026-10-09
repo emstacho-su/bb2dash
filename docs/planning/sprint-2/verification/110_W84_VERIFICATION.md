@@ -365,3 +365,7 @@ reads its write log, but if it had one, `test-decisions-skipped` would fail on i
 ### Checks
 
 Final tree: acceptance test 41 pass; the four proof files 86 pass (72 + 14); `--list` shows the seven titles; typecheck exit 0; eslint exit 0.
+
+## Round 3
+
+Merged the PM's playbook sentence (a step 6 wait that ends with the request open is `blocked`, never `unsure`) and kept it. Step 6 now watches **8.5 minutes** (`APPLY_WATCH_MS`) inside the unchanged 9.75 minute test limit: about 30 s of opening, saving and pressing, then 8.5 minutes, leaves about 45 s of slack, so the `inconclusive:` throw comes before Playwright's own timeout. The message builds its figure from the constant (`after ${APPLY_WATCH_MS / MINUTE_MS} minutes`, "8.5"); the spec comment and the playbook now say eight and a half minutes. **Step 3's wait** is 9 minutes in the same 9.75: about 10 s before the watch, so about 35 s of slack on the path that ends `inconclusive:`, which has not the fault, and I left it. (On the path where the request closes just before the limit, the 30 s wait for the count could in theory run past the limit; that is a real failure to show `0 answered`, not an `inconclusive:`, and I did not change it.) Step 3's typed "nine minutes" stays because the playbook quotes that prefix.
