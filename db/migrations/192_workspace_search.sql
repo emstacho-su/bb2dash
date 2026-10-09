@@ -66,14 +66,15 @@ create or replace function public.hybrid_search_workspace_text(
   p_min_similarity double precision default null)
 returns table(kind text, document_id bigint, text_id bigint, course_id text, title text,
               unit_kind text, unit_no integer, score double precision,
-              similarity double precision, passage text, part_no integer)
+              similarity double precision, passage text, part_no integer,
+              written_at timestamptz)
 language sql
 stable
 set search_path = public, pg_temp
 as $function$
   -- The documents in scope: never one being deleted or one that failed.
   with eligible as materialized (
-    select d.id, d.kind, d.course_id, d.title
+    select d.id, d.kind, d.course_id, d.title, d.updated_at
     from workspace_documents d
     where d.state not in ('deleting', 'failed')
       and d.kind = any (coalesce(p_kinds, array['upload', 'memory']))
@@ -125,7 +126,7 @@ as $function$
   --                  (ties: the vector-best part, else the lowest part_no); none -> the unit's head
   --   vector hit  -> the best part, which is the one that earned the row its rank
   hit as materialized (
-    select e.kind, e.id as document_id, t.id as text_id, e.course_id, e.title,
+    select e.kind, e.id as document_id, t.id as text_id, e.course_id, e.title, e.updated_at,
            t.unit_kind, t.unit_no, t.text,
            fused.sc, fused.via_fts, vb.dist,
            case when fused.via_fts then kw.part_no    else vb.part_no    end as snip_part_no,
@@ -162,7 +163,8 @@ as $function$
                    else substring(h.text from lower(h.snip_range) + 1
                                           for upper(h.snip_range) - lower(h.snip_range)) end,
               2000) as passage,
-         h.snip_part_no as part_no
+         h.snip_part_no as part_no,
+         case when h.kind = 'memory' then h.updated_at end as written_at
   from hit h
   order by h.sc desc, h.text_id
   limit p_limit
@@ -190,7 +192,8 @@ create or replace function public.workspace_search(
   p_model text default 'gte-small')
 returns table(kind text, unit_id bigint, file_id bigint, document_id bigint, course_id text,
               title text, unit_kind text, unit_no integer, part_no integer,
-              similarity double precision, score double precision, passage text, has_notes boolean)
+              similarity double precision, score double precision, passage text, has_notes boolean,
+              written_at timestamptz)
 language sql
 stable
 set search_path = public, pg_temp
@@ -203,7 +206,7 @@ as $function$
   mat as (
     select 'material'::text as kind, h.text_id as unit_id, h.file_id, null::bigint as document_id,
            h.course_id, h.file_name as title, h.unit_kind, h.unit_no, h.part_no,
-           h.similarity, h.score, h.snippet as passage
+           h.similarity, h.score, h.snippet as passage, null::timestamptz as written_at
     from prm,
          unnest(case when 'material' = any (prm.kinds)
                      then coalesce(p_courses, array[null::text])
@@ -215,7 +218,7 @@ as $function$
   dox as (
     select w.kind, w.text_id as unit_id, null::bigint as file_id, w.document_id,
            w.course_id, w.title, w.unit_kind, w.unit_no, w.part_no,
-           w.similarity, w.score, w.passage
+           w.similarity, w.score, w.passage, w.written_at
     from prm,
          -- once for each document kind named, so p_limit is a kind's limit
          unnest(array(select distinct k from unnest(prm.kinds) k
@@ -238,7 +241,8 @@ as $function$
   select r.kind, r.unit_id, r.file_id, r.document_id, r.course_id, r.title, r.unit_kind, r.unit_no,
          r.part_no, r.similarity, r.score,
          left(r.passage, 2000) as passage,
-         (position('[notes]' in r.passage) > 0) as has_notes
+         (position('[notes]' in r.passage) > 0) as has_notes,
+         r.written_at
   from ranked r, prm
   where r.rn <= prm.lim
   order by r.similarity desc nulls last, r.score desc, r.kind, r.unit_id
@@ -252,7 +256,7 @@ comment on function public.workspace_search(text, extensions.vector, text[], tex
   'workspace_document_text.id for the others with document_id set). p_limit (1 to 50) is a kind''s '
   'limit: at most p_limit rows of each kind named, best first by similarity, then by score. p_model '
   'is handed to both arms. passage is at most 2000 characters; has_notes says it holds the [notes] '
-  'marker. SECURITY INVOKER; service_role only (the page never searches).';
+  'marker; written_at is the remembered item''s updated_at for kind memory, null otherwise. SECURITY INVOKER; service_role only (the page never searches).';
 
 -- =============================================================================================
 -- 3. workspace_attachment_read

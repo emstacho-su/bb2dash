@@ -500,7 +500,7 @@ and `search`; and, new in 24a, `workspace_documents`, `workspace_document_text`,
 **One search, the kind on every hit.** `workspace_search` returns rows of kind `material`, `upload` or
 `memory`, never null, each with its unit id (`bb_file_text.id` with `file_id`, or
 `workspace_document_text.id` with `document_id`), course, title, unit, part, `similarity`, `score`, a
-passage of at most 2,000 characters and `has_notes`. It calls `hybrid_search_file_text` once for each
+passage of at most 2,000 characters, `has_notes` and `written_at` (the remembered item's `updated_at` for `memory`, null for the other two kinds). It calls `hybrid_search_file_text` once for each
 course of the scope and `hybrid_search_workspace_text`, and keeps at most `p_limit` rows of each kind.
 With a scope, course materials and course-tagged uploads are filtered; untagged uploads and every
 remembered item are always searched. A document in `deleting` or `failed` is never returned.
