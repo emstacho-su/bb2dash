@@ -58,7 +58,7 @@ describe('GradebookTable — item rows', () => {
     expect(within(row).getByText('—')).toBeInTheDocument();
     expect(within(row).queryByText('0 / 50')).toBeNull();
     expect(within(row).getByText('submitted')).toBeInTheDocument();
-    expect(within(row).getByText('last attempt: NEEDS_GRADING')).toBeInTheDocument();
+    expect(within(row).getByText('last attempt: needs grading')).toBeInTheDocument();
   });
 
   it('links an item with a linked assignment to its popout', () => {
@@ -116,7 +116,7 @@ describe('GradebookTable — the submission cell says one thing (G-4)', () => {
 
   it('still shows an attempt status that says something else', () => {
     renderTable([IST352_SUBMITTED]);
-    expect(within(rowFor('Assignment 1')).getByText('last attempt: NEEDS_GRADING')).toBeInTheDocument();
+    expect(within(rowFor('Assignment 1')).getByText('last attempt: needs grading')).toBeInTheDocument();
   });
 });
 

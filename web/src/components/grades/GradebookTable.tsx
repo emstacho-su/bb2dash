@@ -235,7 +235,7 @@ export function GradebookRow({ row, extras = {} }: { row: GradebookLatestRow; ex
               {submission.text}
             </span>
             {submission.attemptStatus && (
-              <span className={styles.note}>last attempt: {submission.attemptStatus}</span>
+              <span className={styles.note}>last attempt: {submission.attemptText}</span>
             )}
           </div>
         </td>
