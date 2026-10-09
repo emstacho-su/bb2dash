@@ -53,7 +53,6 @@
     "query": "when is Deloitte visiting the IST 466 class",
     "type": "exact",
     "truth": { "text_ids": [], "file_ids": [2509, 2773] },
-    "truth_note": "The course re-posts this schedule, so the ids are the current chain ends (74 > 149 > 2509; 150 > 967 > 2640 > 2773). The search hides superseded files, so a stale id here can never score a hit. db/tests/phase18_golden_truth.sql follows the chain and prints a NOTE when a named id has been superseded: refresh these ids then.",
     "answer_phrase": "Deloitte to Visit"
   },
   {
