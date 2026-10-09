@@ -235,3 +235,18 @@ Loaded with the Skill tool at the start of resume 1 and kept for the tasks of th
   rule that won: the skill's "min 44x44 touch" and "16px body" rules (native/mobile scope; the brief pins the sizes and
   asks for the 24px target of task 36); "spring-physics" curves (the brief's `--ease-out` token); "toast auto-dismiss in
   3-5s" (not a W-69 rule; the app's own timer stays); the generated `transition: all` (the Master bans it).
+
+## Task 28: type, titles and dates (W-69's part)
+
+Files read again: `design-system/bb2dash/MASTER.md` typography section, `pages/planner.md`, `pages/inbox.md`; the brief's Type
+rules. `PlannerItemPopover.module.css` `.title` (the popover's `h2`) takes the body face and keeps its weight token;
+`InboxCard.module.css` `.value` takes the body face, so the two date panes leave the code face. The sha, course codes and
+`.command` keep the code face. No size changed. Taste calls T-7 (the popover title, which is a title by its markup) are the
+PM's.
+
+| Check | Before | After |
+|---|---|---|
+| `git grep -c "font-family: var(--font-heading)" -- web/src/components/planner/PlannerItemPopover.module.css` | 1 line | prints nothing (exit 1) |
+| `grep -c "font-family: var(--font-mono)" web/src/components/inbox/InboxCard.module.css` | 1 | 0 |
+| Serif check restricted to W-69's two rules (`.title`, `.value`) | | `2 0 0` |
+| Weight check over the screens A paths | prints nothing | prints nothing |
