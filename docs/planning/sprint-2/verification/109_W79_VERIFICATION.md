@@ -299,3 +299,81 @@ C:/Users/stack/.bb2dash-wt24/test-tags.compose.yaml --profile workspace`, with t
 * P-11 (a 20 MB file of each parsed type in `workspace-extract`): the parser container with `mem_limit 1g` and
   `pids_limit 128`; put `doc-<id>.<ext>` and `request.json` in `/exchange` (or let the worker do it) and watch
   `answer.json`, memory and the 300 s limit. The volume holds 96 MB: the 20 MB file plus its units.
+
+---
+
+# Round 3: code-review and security-review findings
+
+Branch merged with `origin/feat/workspace-24` first. No docker command, no database call. Commits:
+`b3a182f` (comment), `0247a8c` (finding 1), `4bcc34e` (finding 2), `2935933` (finding 3).
+
+Final gates: `workspace-ingest` typecheck clean; suite 118 passed, three runs in a row; line coverage 98.1 %
+(363/370). `node --test docker/workspace-ingest/image.test.mjs docker/workspace/init-firewall.test.mjs
+docker/grep-clean.test.mjs docker/apply/image.test.mjs docker/apply/gate-built.test.mjs`: tests 63, pass 63.
+
+## Finding 1: a large upload could never be indexed
+
+Red (`npx vitest run test/db-embed.test.ts`, six new cases before `embed.ts` changed): `6 failed` (400 parts,
+1,500 parts, no progress, remaining not going down, the time bound, a non-200). Green: `Tests 21 passed (21)`;
+whole suite 104 after the process-document case.
+
+What changed: `embedDocument` still calls `runEmbedLoop` unedited, but with a call budget of 5,000 (a backstop,
+15,000 parts at 3 a call) and a `post` that watches each 200 answer. It stops the try, and says why, when:
+`no_progress` (an answer stored nothing, or its `remaining_parts` did not go down, while parts are left),
+`timed_out` (the document's deadline passed), or `error` (a non-200 or a failed unit, the loop's own stop). It
+returns `{exitCode, calls, stop, progressed, remainingParts}`. 400 parts take 134 calls and 1,500 take 500, both
+ending embedded; the old loop stopped at 60 calls (180 parts).
+
+The time bound, my default: `DOCUMENT_TIME_BUDGET_MS = 540,000` (the claim's 10-minute lease less a 60 s margin
+for the finish call), measured from the start of `processDocument`, so the download and the parser count against
+it and the embed gets what is left (`ProcessDeps.embed(documentId, deadlineMs)`). At about 3 parts a call this
+is not reached by any upload the bucket allows unless a call takes several seconds.
+
+A document larger than that bound can embed: the stored parts stay (the units are not put again), and the
+document is `text_ready`, so the next claim has step `embed` and continues from them. The outcome is `retry`
+(`embed_failed`), because `workspace_ingest_finish` has no other way to free the lease and keep `text_ready`.
+That counts as one of the three tries: so with the frozen function a document that needs more than three
+bounds (about 27 minutes of embedding) still ends `failed`. What I would need in a migration: a fourth outcome
+of `workspace_ingest_finish`, e.g. `'continue'`, that frees the lease, leaves the row `text_ready`, does NOT
+increase `attempts`, and is refused (22023) unless the document's count of embedded units went up since the
+claim (or `embedded_at` moved), so it cannot loop on a document that is stuck. Then the worker would send
+`continue` for `stop = 'timed_out'` with `progressed`, and `retry` for everything else. Also to confirm: whether
+`workspace_ingest_heartbeat` extends the 10-minute lease (if it does, the bound could be longer; I assumed not).
+
+## Finding 2: NUL in parsed text failed the file for ever
+
+Red: two new cases in `process-document.test.ts` failed (a NUL inside a unit reached the put; a unit of NUL
+only was kept). Green: suite 107 passed. `prepareUnits` now strips U+0000 from every unit's text before the
+empty-unit check, so a unit that was only NUL is left out, and a file left with none is `no_text`. A text file
+with a NUL byte stays `bad_bytes` (tested; it is checked before, on the bytes, and never stripped).
+
+## Finding 3: the exchange folder was followed through links
+
+Red (`test/exchange-links.test.ts` before `exchange.ts` changed): `7 failed`. Green: suite 118 passed. This
+machine allows `fs.symlinkSync`, so the real-symlink cases ran and none was skipped (they skip with a stated
+reason where the platform refuses a link); the decision tests run everywhere.
+
+What changed in `exchange.ts` and `parser-loop.ts`:
+* `readRegularFile(file, maxBytes)`: `lstat` on the name, then open with `O_NOFOLLOW | O_NONBLOCK` (no block on a
+  FIFO), then `fstat` on the descriptor; it must be a regular file within the limit, else `'refused'`.
+* `writeNewFile`: create with `O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW`, so a link or anything at the name fails.
+  The document file and the `.tmp` of every JSON file are made this way; a stale or planted `.tmp` is removed
+  first (removing a link removes the link), and the rename replaces whatever stands at the final name.
+* `readAnswer` reads through `readRegularFile`: a link, directory, FIFO or device at `answer.json` is
+  `extract_failed`. `handOver` turns EEXIST, ELOOP, EISDIR, ENXIO, EPERM and EACCES on the create into
+  `extract_failed` and clears the folder in `finally` (clearing removes a link, never its target). Other errors
+  (a missing folder) still throw.
+* Parser side: `request.json` goes through `readRegularFile` (4 KB limit; a link or non-regular entry is removed
+  and dropped), and the named document must be a regular file by `lstat` or the answer is `extract_failed`
+  without calling the extractor. The extractor (Python) still opens the path itself, so the `lstat` narrows the
+  window and does not close it; the parser holds no secret and is the container the claim already treats as
+  hostile.
+
+## Finding 4: the compose comment
+
+`compose.yaml` comment only: `WORKSPACE_MEMORY_JOBS: "off"` turns off the memory jobs (the remembered items)
+and not the rolling summary, which is on from 24a. Nothing else in the file changed.
+
+## Declined
+
+Nothing declined. The migration in finding 1 is the PM's; I did not touch `db/`.
