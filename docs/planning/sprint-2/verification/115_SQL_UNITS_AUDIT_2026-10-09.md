@@ -141,3 +141,76 @@ The whole suite from the merged branch: **passed 79, failed 2, units 81.** The t
 * `phase18_post_embed_checks.sql`, "(a) no text unit: 2851": true, and Stack's to settle (the file).
 * `phase23_188_archived_answers.sql`, "migration 188 is not applied": true until the follow-ups'
   cut-over.
+
+## Stack's second word (2026-10-09): "fix the grades defect, the attendance column. Fix phase 18 as well. Once these are complete merge 87 and cut over."
+
+### The grades defect: migration 107, on prod
+
+Number 107 (free in Phase 16's own block, 105 to 109) was proposed to him with the finding and
+taken on his "fix". Worker W-93 (`115_W93_VERIFICATION.md`), unit first.
+
+* **What it is.** `create or replace view public.v_gradebook_latest`, 047's text with one expression
+  changed: for an item or attendance column, `counts_toward_grade` is false under an excluded link
+  ("Not graded"), true under a link that carries a component, and otherwise 047's rule; every other
+  column kind keeps 047's rule. One left join on `grade_column_links`' primary key, as 081 has it.
+* **The one grant.** The view is security_invoker, so its reader needs the table too.
+  `inbox_apply_runner` reads the view (181) and had nothing on `grade_column_links`: W-93 found that
+  107 would have taken that read away. 107 grants the role select and a select-only policy, nothing
+  else. `phase23_181_inbox_apply_runner.sql` pins the role's reads and now lists the table.
+* **Reviews.** `/security-review`: no HIGH and no MEDIUM; the view text compared line by line with
+  047's, the grant select-only with no write path, three LOW notes (a replay in file-name order
+  reaches 107 before 181 creates the role and skips the grant with a notice; the recorded order on
+  prod is the applied order, as with 091 to 095 and 150). `/code-review main high`: ten findings on
+  the branch. Taken: the left-join form and the kind rule; the 181 unit holds the exact list again;
+  check D matches a column, not one assignment, so a column shared by two assignments is covered;
+  `phase18_122` gained a check that does not rest on the function's own output (a chain's start and
+  end are the same Blackboard item); **the picker's write now also invalidates the gradebook query**
+  (`web/src/lib/queries.grade-model.ts`, with a test), because after 107 the Grades rows depend on
+  the links and would otherwise lag five minutes. Not taken: the chain walker stays in two units (a
+  SQL unit cannot import another).
+* **Dry runs**, rolled back, on each version of the file, the last on its final text
+  (SHA-256 `5b00206c...446a6c`): both controls stop before it (the 107 unit at "not applied", the
+  181 unit at its exact list); after it 15 units pass (`phase16_107`, `phase23_181`,
+  `grading_invariants`, the two `phase10a` units with their loader, the two `phase10b`, the three
+  `phase16_10x`, `phase23_187_accept_objects`, `phase15_101`, `phase18_122`, `_123`,
+  `_golden_truth`); 73 rows before and after; exactly three change; the five dependent views answer
+  with the same counts.
+* **Applied 2026-10-09 04:22Z** as `107_gradebook_counts_toward_links` (version `20261009042254`), no
+  request open. The recorded text is 12,809 characters with the file's SHA-256. On prod now:
+  `GEO.103.lecture/exam-1` true, `GEO.103.lecture/absences` and `GEO.103.recitation/attendance`
+  false; the apply role holds select and nothing else on `grade_column_links`. Runner:
+  `phase16_107_counts_toward_links`, `phase23_181_inbox_apply_runner` and `grading_invariants` PASS.
+* **Visible effect, his to look at:** on GEO.103's Grades tab the two attendance columns he marked
+  "Not graded" leave the item rows for the collapsed group. No preview was possible first: the view
+  is the database's, and Vercel has not deployed since the repository moved.
+
+### Phase 18, part one: file 2851
+
+The file was copied out of the `course-files` volume through a throwaway read-only container (the
+sync container was not touched) and read with a script kept apart from it. It is a scan: nine
+pages, producer "Canon iR-ADV C5255", no font and no text on any page. So the extractor was right,
+and R-61's rule applies ("a future `na` file ... is converted by hand", DECISIONS 2026-09-30).
+
+* OCR on the laptop: RapidOCR with its English model at 2.2 scale; 19,422 characters, 3,084 words,
+  mean confidence 0.90 to 0.996 a page. A first pass with the default model ran words together and
+  was thrown away.
+* Posted as nine `bb_file_text` units (`page` 1 to 9) through PostgREST with the publishable key,
+  the insert `ingest/pull_files.mjs` uses (status 201); then one owner update set `text_status` to
+  `extracted` and appended a note saying the text is OCR, by hand, of 2026-10-09. The recognised
+  text is in the database only, never in this repository.
+* **Not done: the embed.** `node ingest/embed_corpus.mjs` was refused to the PM's session by the
+  permission system, and no other way round was tried. Until it runs, units 1168 to 1176 have no
+  parts: `phase18_post_embed_checks` passes (a) and fails (c) on those nine. Stack's one command.
+
+### Phase 18, part two: the golden question that kept going stale
+
+Q7 asked when a company visits the class; its answer is in a schedule the course keeps as two
+Blackboard items and re-posts about weekly (six and eight versions so far, with file names that
+follow no pattern). The search eval scores by file id and the search hides superseded files, so
+every re-post made the truth stale. The new Q7 (W-92's round 4):
+"how many points is the practice presentation worth in IST 466", truth text units 88 and 101 of
+files 21 and 39, answer phrase "50 points". Both files have one version each. Checked with the
+materials search before the swap: the answer unit is rank 1 in hybrid and in vector mode; keyword
+mode returns nothing for the whole sentence, as for most paraphrase questions. **Not run:**
+`ingest/eval_search.mjs` itself. What is lost: the one golden question that asked search for the
+current version of a re-posted document; `phase18_122` still holds the supersede rule itself.

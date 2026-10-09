@@ -275,14 +275,18 @@ Learned in the Phase 23 follow-ups (2026-10-09; each from `verification/110a_PHA
      `verification/115_SQL_UNITS_AUDIT_2026-10-09.md`; the suite went from 70 of 81 to 79 of 81 with Phase 24a's
      port merged in, and the two left are true: file 2851 and 188 before the cut-over). That also answers item 7 under Phase 21 below. Two things the audit found
      are yours:
-     * **A number for a small grades fix, and your look at it.** The Grades table's "counts toward" flag does not
-       see the "Counts toward…" picker: GEO.103's two attendance columns that you marked "Not graded" are still
-       listed among the items. One expression in one view, proved in a rolled-back transaction. It needs a
-       migration number outside the follow-ups' block (107 is free in Phase 16's own block) and, because it
-       changes what the Grades tab lists, your look before it merges.
-     * **File 2851**, a PDF in ECN.304's readings, has no text and is not in search; the sync said "Files: 3
-       pulled". Open it: if it is a scan, say whether it joins the `na` files or gets read by hand as file 68
-       was.
+     * ~~A number for a small grades fix, and your look at it.~~ **Fixed on your word, 2026-10-09: migration 107
+       is on prod.** The Grades table's "counts toward" flag now follows the picker. **Look at GEO.103's Grades
+       tab once:** the two attendance columns you marked "Not graded" should sit in the collapsed group, not
+       among the items. Say if you want them back.
+     * **File 2851 needs one command from you.** It was a scan; its text is in the database now (OCR, by hand,
+       as file 68 was), but the PM's session was refused the embed step. From the bb2dash checkout:
+       `SB_ANON_JWT=<the legacy anon key> node ingest/embed_corpus.mjs`. Until then the file is found by
+       keyword only and `phase18_post_embed_checks` fails on its nine units.
+     * The search eval's Q7 is replaced (your "Fix phase 18 as well"): it asked for a date in a schedule the
+       course re-posts weekly; it now asks a question answered in two single-version documents. The eval itself
+       (`ingest/eval_search.mjs`) has not been run with the new question; the materials search returns its
+       answer at rank 1 in hybrid and vector mode.
   6. Still yours from Phase 23 itself: the two grading components the writer set (30 and 33), the question in
      archived item 3425's record, and the note on item 3435.
 
