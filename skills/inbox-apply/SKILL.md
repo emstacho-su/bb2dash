@@ -97,6 +97,18 @@ Unattended, the worker has done all of this, and has already archived the rows t
 reading (applied by the transform, kept, or dismissed, with no note; a session answer whose file
 agrees with it). `--items` is what is left.
 
+**Held answers.** A run that ends by itself and leaves an item of its batch unarchived could not
+apply it. The close stores a hold on that answer (migration 187, `inbox_apply_holds`), keyed to the
+answer's `resolved_at` as the run was handed it. A held answer is not sent to Claude again by a
+sync or by a follow-up: a sync files no request for a queue that holds nothing else, and a pass
+that finds only held answers starts no run and closes done, its first line saying that nothing new
+was applied and how many answers wait. Two things release it: Stack answers it again (a new
+`resolved_at` no longer matches the stored one), or he presses Apply answers (that request has no
+`trigger`, so the worker is told `held` is empty and sends them to Claude once more). The worker
+still records a held row it can record itself, and it skips only a held row that would go to a
+reader. In a session the list is `select * from inbox_apply_held_items()`; a session run works every
+answered row either way.
+
 ## The buckets
 
 Sort each row into one of these before spending any agent on it. The bucket fixes the default
@@ -105,7 +117,7 @@ decision and is the `bucket` of its record; only the first needs the context sta
 | Bucket (`bucket`) | How to tell | Default |
 |---|---|---|
 | **Needs a change** (`needs_change`) | `was_applied = false`, `state = resolved`, and the answer names or implies a row change: a stack_must_confirm / missing on an assignment ("add it", "yes", a value), a course-map answer that names a date or group | Context stage, then the change |
-| **Applied by the transform** (`applied_by_transform`) | `was_applied = true`; or a session answer (ref `session_link/<file id>`, entity `bb_file`, field `session_id`) whose file agrees with it: his pick is the file's `session_id`, or he said "none" and the file is unlinked | Record only: "applied by apply_resolutions() at <applied_at>"; for a session answer, what the file's row shows |
+| **Applied by the transform** (`applied_by_transform`) | `was_applied = true` (for a session answer, the fold stamped it: `link_file_sessions`, since migration 188); or a session answer (ref `session_link/<file id>`, entity `bb_file`, field `session_id`) whose file agrees with it: his pick is the file's `session_id`, or he said "none" and the file is unlinked | Record only: "applied by apply_resolutions() at <applied_at>"; for a session answer, "applied by link_file_sessions" and what the file's row shows |
 | **Kept** (`kept`) | `kind = conflict`, `accept = keep` | Record only. `attention_keep_stands()` keeps it settled after archiving (090) |
 | **Dismissed** (`dismissed`) | `state = dismissed` | Record only, with the note as the reason |
 | **Recorded elsewhere** (`recorded_elsewhere`) | the note says another item carried the effect (e.g. "applied via #162") | Verify that item is applied; record only |
@@ -116,8 +128,11 @@ A note can move a row out of its default: "keep mine, and mark it submitted" is 
 applied by `link_file_sessions` at the fold: a pick (`resolution.session_id`) is set on the file
 while it is unlinked and the week's classes are still the ones he was shown (the item's
 `to_value`), "none" (`accept = none`) leaves it unlinked and quiet, and an archived answer still
-counts (migrations 123, 163). `bb_files` cannot be written from here in either mode. So the item
-is always archived with no write, and its bucket says what is true of the file:
+counts (migrations 123, 163). Since migration 188 the fold also stamps `applied_at` on the answer
+when it writes a pick, so the row reads `was_applied = true`: its record names
+`link_file_sessions`, never `apply_resolutions`. An answer of "none" writes nothing and gets no
+stamp. `bb_files` cannot be written from here in either mode. So the item is always archived
+with no write, and its bucket says what is true of the file:
 
 | What the file's row shows | Bucket | Record |
 |---|---|---|
@@ -129,11 +144,14 @@ What its note asks beyond the link (file it under another bucket, treat it as a 
 flagged as a code change, never done. Never raise a new item under the ref `session_link/<file
 id>`: that ref is the fold's, and its next question would overwrite yours.
 
-**A `supersede/<file id>` answer has a known gap.** `supersede_replaced_files` reads it only while
-the item is resolved or dismissed (migration 160), so once it is archived the next fold asks the
-same question again. Archive it all the same (an item left behind fails every run), bucket
-`needs_change`, and flag it: `{"code_change": "supersede_replaced_files must read an archived
-answer, as link_file_sessions does since 163"}`.
+**A `supersede/<file id>` answer is archived, and the question stays closed.** Since migration 188
+`supersede_replaced_files` also reads an archived answer for the same candidates, so the next fold
+does not ask again. Nothing applies the pick, though: the answer `{"superseded_by": <file id>}` is
+recorded and flagged, and the file is still not marked as replaced. Archive it all the same (an item
+left behind fails every run). A pick: bucket `needs_change`, flagged
+`{"code_change": "nothing applies the pick of a supersede answer: file <id> is still not marked as
+replaced by <file id>; set superseded_by by hand or build the rule"}`. An answer of "none"
+(`{"accept": "none"}`) is complete: bucket `kept`, record only, nothing flagged.
 
 ## Step 3 — Context (Sonnet, read-only, one agent per course or per 3 items)
 
@@ -155,20 +173,30 @@ Under `--dry-run`, stop before this step and print the bundles.
 
 ## Step 5 — File the records (session only)
 
-From the bb2dash checkout:
+Filing is two steps, and neither is this skill's to do by hand.
 
-```bash
-node scripts/inbox-decisions-pr.mjs
-```
+- **The scheduled run files the vault notes.** The Windows task `Bb2dash-Exports` runs
+  `scripts/exports-run.mjs` on the host, which runs `scripts/inbox-decisions-export.mjs
+  --notes-only`: one note per decision under the vault's `projects/bb2dash/decisions/`, ingested,
+  each row marked filed (migrations 182, 187). It writes no day file, starts no `git` and opens no
+  pull request. A decision of an acceptance run's test question is marked skipped and gets no note.
+  A failed run shows only on the doctor (`just doctor`).
+- **The manual step files the day files.** When Stack wants them, from bb2dash-stack:
 
-It runs `scripts/inbox-decisions-export.mjs` into a worktree of its own on the
-`docs/inbox-decisions` branch: the exporter resolves the vault, writes one note per decision under
-the vault's `projects/bb2dash/decisions/`, ingests them, appends the day's
-`docs/inbox-decisions/<date>.md` and marks each row filed (migration 182); the script then commits
-the day file, pushes, and keeps one PR open for Stack to merge. It needs `SECRETS_DIR` and
-`HARNESS_DIR` in the environment. It prints one line per decision and files nothing when the vault
-does not resolve: report that line. It never touches the checkout it is run from. Unattended, skip
-this step; the host runs the same script on a schedule.
+  ```bash
+  just file-decisions
+  ```
+
+  It runs `scripts/inbox-decisions-pr.mjs` from the bb2dash checkout with `SECRETS_DIR` and
+  `HARNESS_DIR` from his `.env`: the exporter in its default mode, into a worktree of its own on
+  the `docs/inbox-decisions` branch. It files any note still missing, appends the day's
+  `docs/inbox-decisions/<date>.md` entry for every filed decision that has none, and stamps each as
+  logged; the script then commits the day file, pushes, and keeps one PR open for Stack to merge. It
+  prints one line per decision and files nothing when the vault does not resolve: report that line.
+  It never touches the checkout it is run from.
+
+In a session, offer the manual step; do not run it unasked, because its pull request goes to a public
+repository. Unattended, skip this step.
 
 ## Step 6 — Close the request (session only)
 
