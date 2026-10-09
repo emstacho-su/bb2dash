@@ -141,6 +141,8 @@
 }
 
 .earlier {
+  /* A button does not inherit the app's face. */
+  font-family: var(--font-body);
   display: flex;
   justify-content: center;
   padding: var(--space-2);
