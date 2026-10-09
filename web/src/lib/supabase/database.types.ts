@@ -2635,6 +2635,47 @@ export type Database = {
         }
         Relationships: []
       }
+      workspace_conversation_state: {
+        Row: {
+          conversation_id: string
+          job_claimed_at: string | null
+          job_claimed_by: string | null
+          job_failures: number
+          memory_opt_out: boolean
+          memory_written_at: string | null
+          rolling_summary: string | null
+          summarised_through: string | null
+        }
+        Insert: {
+          conversation_id: string
+          job_claimed_at?: string | null
+          job_claimed_by?: string | null
+          job_failures?: number
+          memory_opt_out?: boolean
+          memory_written_at?: string | null
+          rolling_summary?: string | null
+          summarised_through?: string | null
+        }
+        Update: {
+          conversation_id?: string
+          job_claimed_at?: string | null
+          job_claimed_by?: string | null
+          job_failures?: number
+          memory_opt_out?: boolean
+          memory_written_at?: string | null
+          rolling_summary?: string | null
+          summarised_through?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_conversation_state_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: true
+            referencedRelation: "workspace_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_conversations: {
         Row: {
           archived: boolean
@@ -2659,6 +2700,168 @@ export type Database = {
           id?: string
           title?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      workspace_document_text: {
+        Row: {
+          document_id: number
+          embedded_at: string | null
+          fts: unknown
+          id: number
+          text: string
+          unit_kind: string
+          unit_no: number
+        }
+        Insert: {
+          document_id: number
+          embedded_at?: string | null
+          fts?: unknown
+          id?: never
+          text: string
+          unit_kind: string
+          unit_no?: number
+        }
+        Update: {
+          document_id?: number
+          embedded_at?: string | null
+          fts?: unknown
+          id?: never
+          text?: string
+          unit_kind?: string
+          unit_no?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_document_text_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "v_workspace_memory"
+            referencedColumns: ["document_id"]
+          },
+          {
+            foreignKeyName: "workspace_document_text_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_documents: {
+        Row: {
+          attempts: number
+          byte_size: number | null
+          claimed_at: string | null
+          claimed_by: string | null
+          conversation_id: string | null
+          course_id: string | null
+          created_at: string
+          error_code: string | null
+          id: number
+          kind: string
+          mime: string | null
+          sha256: string | null
+          signed_url: string | null
+          signed_url_expires_at: string | null
+          state: string
+          storage_key: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          byte_size?: number | null
+          claimed_at?: string | null
+          claimed_by?: string | null
+          conversation_id?: string | null
+          course_id?: string | null
+          created_at?: string
+          error_code?: string | null
+          id?: never
+          kind: string
+          mime?: string | null
+          sha256?: string | null
+          signed_url?: string | null
+          signed_url_expires_at?: string | null
+          state?: string
+          storage_key?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          byte_size?: number | null
+          claimed_at?: string | null
+          claimed_by?: string | null
+          conversation_id?: string | null
+          course_id?: string | null
+          created_at?: string
+          error_code?: string | null
+          id?: never
+          kind?: string
+          mime?: string | null
+          sha256?: string | null
+          signed_url?: string | null
+          signed_url_expires_at?: string | null
+          state?: string
+          storage_key?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_documents_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_documents_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_documents_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_corpus"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "workspace_documents_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_grade"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "workspace_documents_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "v_course_points_median"
+            referencedColumns: ["course_id"]
+          },
+        ]
+      }
+      workspace_ingest_heartbeat: {
+        Row: {
+          id: number
+          polled_at: string
+          runner: string
+        }
+        Insert: {
+          id: number
+          polled_at: string
+          runner: string
+        }
+        Update: {
+          id?: number
+          polled_at?: string
+          runner?: string
         }
         Relationships: []
       }
@@ -2738,6 +2941,115 @@ export type Database = {
           },
         ]
       }
+      workspace_profile: {
+        Row: {
+          about_me: string
+          id: number
+          memory_since: string | null
+          updated_at: string
+        }
+        Insert: {
+          about_me?: string
+          id: number
+          memory_since?: string | null
+          updated_at?: string
+        }
+        Update: {
+          about_me?: string
+          id?: number
+          memory_since?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      workspace_request_attachments: {
+        Row: {
+          document_id: number | null
+          file_id: number | null
+          kind: string
+          ord: number
+          request_id: number
+        }
+        Insert: {
+          document_id?: number | null
+          file_id?: number | null
+          kind: string
+          ord: number
+          request_id: number
+        }
+        Update: {
+          document_id?: number | null
+          file_id?: number | null
+          kind?: string
+          ord?: number
+          request_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_request_attachments_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "v_workspace_memory"
+            referencedColumns: ["document_id"]
+          },
+          {
+            foreignKeyName: "workspace_request_attachments_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_request_attachments_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_request_options: {
+        Row: {
+          course_display_id: string | null
+          course_ids: string[] | null
+          depth: string
+          format: string
+          request_id: number
+          routine_id: string | null
+        }
+        Insert: {
+          course_display_id?: string | null
+          course_ids?: string[] | null
+          depth?: string
+          format?: string
+          request_id: number
+          routine_id?: string | null
+        }
+        Update: {
+          course_display_id?: string | null
+          course_ids?: string[] | null
+          depth?: string
+          format?: string
+          request_id?: number
+          routine_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_request_options_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: true
+            referencedRelation: "workspace_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_request_options_routine_id_fkey"
+            columns: ["routine_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_routines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_requests: {
         Row: {
           attempts: number
@@ -2792,6 +3104,39 @@ export type Database = {
           },
         ]
       }
+      workspace_routines: {
+        Row: {
+          description: string
+          enabled: boolean
+          grp: string
+          id: string
+          instructions: string
+          needs: string
+          sort: number
+          title: string
+        }
+        Insert: {
+          description: string
+          enabled?: boolean
+          grp: string
+          id: string
+          instructions: string
+          needs: string
+          sort?: number
+          title: string
+        }
+        Update: {
+          description?: string
+          enabled?: boolean
+          grp?: string
+          id?: string
+          instructions?: string
+          needs?: string
+          sort?: number
+          title?: string
+        }
+        Relationships: []
+      }
       workspace_runner_heartbeat: {
         Row: {
           id: number
@@ -2809,6 +3154,176 @@ export type Database = {
           runner?: string
         }
         Relationships: []
+      }
+      workspace_sources: {
+        Row: {
+          course_id: string | null
+          doc_text_id: number | null
+          document_id: number | null
+          file_id: number | null
+          kind: string
+          ord: number
+          origin: string
+          request_id: number
+          similarity: number | null
+          text_id: number | null
+          title: string | null
+          unit_kind: string | null
+          unit_no: number | null
+        }
+        Insert: {
+          course_id?: string | null
+          doc_text_id?: number | null
+          document_id?: number | null
+          file_id?: number | null
+          kind: string
+          ord: number
+          origin: string
+          request_id: number
+          similarity?: number | null
+          text_id?: number | null
+          title?: string | null
+          unit_kind?: string | null
+          unit_no?: number | null
+        }
+        Update: {
+          course_id?: string | null
+          doc_text_id?: number | null
+          document_id?: number | null
+          file_id?: number | null
+          kind?: string
+          ord?: number
+          origin?: string
+          request_id?: number
+          similarity?: number | null
+          text_id?: number | null
+          title?: string | null
+          unit_kind?: string | null
+          unit_no?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_sources_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "v_workspace_memory"
+            referencedColumns: ["document_id"]
+          },
+          {
+            foreignKeyName: "workspace_sources_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_sources_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_text_embeddings: {
+        Row: {
+          embedded_at: string
+          embedding: string
+          id: number
+          model: string
+          part_no: number
+          part_range: unknown
+          text_id: number
+        }
+        Insert: {
+          embedded_at?: string
+          embedding: string
+          id?: never
+          model: string
+          part_no?: number
+          part_range?: unknown
+          text_id: number
+        }
+        Update: {
+          embedded_at?: string
+          embedding?: string
+          id?: never
+          model?: string
+          part_no?: number
+          part_range?: unknown
+          text_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_text_embeddings_text_id_fkey"
+            columns: ["text_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_document_text"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_turns: {
+        Row: {
+          attachments: Json
+          created_at: string
+          depth: string
+          feed_rows: number
+          found_n: number
+          memory_n: number
+          passages_n: number
+          plan_cost_usd: number | null
+          plan_ms: number | null
+          plan_state: string
+          prompt_bytes: number | null
+          request_id: number
+          retrieval_ms: number | null
+          retrieval_state: string
+          tier: string
+        }
+        Insert: {
+          attachments?: Json
+          created_at?: string
+          depth: string
+          feed_rows?: number
+          found_n?: number
+          memory_n?: number
+          passages_n?: number
+          plan_cost_usd?: number | null
+          plan_ms?: number | null
+          plan_state: string
+          prompt_bytes?: number | null
+          request_id: number
+          retrieval_ms?: number | null
+          retrieval_state: string
+          tier: string
+        }
+        Update: {
+          attachments?: Json
+          created_at?: string
+          depth?: string
+          feed_rows?: number
+          found_n?: number
+          memory_n?: number
+          passages_n?: number
+          plan_cost_usd?: number | null
+          plan_ms?: number | null
+          plan_state?: string
+          prompt_bytes?: number | null
+          request_id?: number
+          retrieval_ms?: number | null
+          retrieval_state?: string
+          tier?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_turns_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: true
+            referencedRelation: "workspace_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -4210,6 +4725,43 @@ export type Database = {
         }
         Relationships: []
       }
+      v_workspace_index_status: {
+        Row: {
+          course_files_text_pending: number | null
+          course_last_embedded: string | null
+          course_units_indexed: number | null
+          course_units_waiting: number | null
+          ingest_polled_age_seconds: number | null
+          memory_failed: number | null
+          memory_indexed: number | null
+          memory_waiting: number | null
+          upload_links_expired: number | null
+          uploads_deleting: number | null
+          uploads_failed: number | null
+          uploads_indexed: number | null
+          uploads_waiting: number | null
+        }
+        Relationships: []
+      }
+      v_workspace_memory: {
+        Row: {
+          conversation_id: string | null
+          created_at: string | null
+          document_id: number | null
+          state: string | null
+          summary: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_documents_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_workspace_status: {
         Row: {
           oldest_open_at: string | null
@@ -4370,6 +4922,32 @@ export type Database = {
           text_id: number
           unit_kind: string
           unit_no: number
+        }[]
+      }
+      hybrid_search_workspace_text: {
+        Args: {
+          p_courses?: string[]
+          p_kinds?: string[]
+          p_limit?: number
+          p_min_similarity?: number
+          p_model?: string
+          q: string
+          query_embedding: string
+          rrf_k?: number
+        }
+        Returns: {
+          course_id: string
+          document_id: number
+          kind: string
+          part_no: number
+          passage: string
+          score: number
+          similarity: number
+          text_id: number
+          title: string
+          unit_kind: string
+          unit_no: number
+          written_at: string
         }[]
       }
       ical_collect: { Args: never; Returns: Json }
@@ -4649,6 +5227,14 @@ export type Database = {
         Args: { p_conversation_id: string; p_text: string }
         Returns: Json
       }
+      workspace_ask_with: {
+        Args: { p_conversation_id: string; p_options: Json; p_text: string }
+        Returns: Json
+      }
+      workspace_attachment_read: {
+        Args: { p_id: number; p_kind: string; p_max_chars: number }
+        Returns: Json
+      }
       workspace_begin: {
         Args: {
           p_model: string
@@ -4671,6 +5257,19 @@ export type Database = {
           user_message_id: string
         }[]
       }
+      workspace_claim_v2: {
+        Args: { p_runner: string }
+        Returns: {
+          conversation_id: string
+          prompt: string
+          request_id: number
+          user_message_id: string
+        }[]
+      }
+      workspace_document_delete: {
+        Args: { p_document_id: number; p_object_removed: boolean }
+        Returns: Json
+      }
       workspace_finish: {
         Args: {
           p_claude_session_id: string
@@ -4686,10 +5285,112 @@ export type Database = {
         Returns: undefined
       }
       workspace_heartbeat: { Args: { p_runner: string }; Returns: undefined }
+      workspace_ingest_claim: { Args: { p_runner: string }; Returns: Json }
+      workspace_ingest_finish: {
+        Args: {
+          p_document_id: number
+          p_error_code: string
+          p_outcome: string
+          p_runner: string
+        }
+        Returns: string
+      }
+      workspace_ingest_heartbeat: {
+        Args: { p_runner: string }
+        Returns: undefined
+      }
+      workspace_ingest_put_text: {
+        Args: { p_document_id: number; p_runner: string; p_units: Json }
+        Returns: number
+      }
+      workspace_job_claim: {
+        Args: { p_kinds: string[]; p_runner: string }
+        Returns: Json
+      }
+      workspace_job_finish: {
+        Args: {
+          p_conversation_id: string
+          p_kind: string
+          p_outcome: string
+          p_runner: string
+          p_summary: string
+          p_through: string
+        }
+        Returns: Json
+      }
+      workspace_planner_feed: {
+        Args: {
+          p_from: string
+          p_request_id: number
+          p_runner: string
+          p_to: string
+        }
+        Returns: Json
+      }
       workspace_prompt_max: { Args: never; Returns: number }
+      workspace_search: {
+        Args: {
+          p_courses?: string[]
+          p_kinds?: string[]
+          p_limit?: number
+          p_min_similarity?: number
+          p_model?: string
+          p_q: string
+          p_query_embedding: string
+        }
+        Returns: {
+          course_id: string
+          document_id: number
+          file_id: number
+          has_notes: boolean
+          kind: string
+          part_no: number
+          passage: string
+          score: number
+          similarity: number
+          title: string
+          unit_id: number
+          unit_kind: string
+          unit_no: number
+          written_at: string
+        }[]
+      }
       workspace_stream: {
         Args: { p_delta: string; p_request_id: number; p_seq: number }
         Returns: boolean
+      }
+      workspace_turn_context: {
+        Args: { p_request_id: number; p_runner: string }
+        Returns: Json
+      }
+      workspace_turn_put: {
+        Args: {
+          p_facts: Json
+          p_request_id: number
+          p_runner: string
+          p_sources: Json
+        }
+        Returns: number
+      }
+      workspace_upload_register: {
+        Args: {
+          p_byte_size: number
+          p_course_id?: string
+          p_mime: string
+          p_sha256: string
+          p_signed_url: string
+          p_signed_url_expires_at: string
+          p_title: string
+        }
+        Returns: Json
+      }
+      workspace_upload_retry: {
+        Args: {
+          p_document_id: number
+          p_signed_url: string
+          p_signed_url_expires_at: string
+        }
+        Returns: Json
       }
     }
     Enums: {
