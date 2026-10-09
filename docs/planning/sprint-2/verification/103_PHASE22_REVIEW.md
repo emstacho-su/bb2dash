@@ -53,3 +53,36 @@ names. Since task 8 no web font was requested by a built app: Turbopack drops an
 and direction D's `fontsHref` asks Source Serif 4 for the optical-size range `8..60`. Every harness run failed at
 the font check. W-67 found it and fixed it (2a29b5e): the same Google Fonts stylesheet is linked from the root
 layout. The PM confirmed the cause on a local build, where no built stylesheet named `fonts.googleapis.com`.
+
+## Visual round (the PM's pre-walk, before the second review)
+
+Not one of the three gates; recorded here because its findings went to the same workers as a numbered round.
+On 2026-10-09 (UTC) the PM ran the whole theme walk with shots on the integrated branch at 1862098, run
+`20261009T034707Z`: 64 passed, 31 dark and 31 light shots, the no-writes fingerprint the same before and
+after. Two independent checkers opened all 62 shots and judged each against direction D. No shot was in the
+wrong theme, none was unreadable, and red was never the colour of words. What they found, by where it went:
+
+| # | Where | Finding | Owner | State |
+|---|---|---|---|---|
+| V-1 | top bar | The unread badge covered most of the Activity icon | W-68 | fixed, 6042f66: 4.6% of the icon covered with a two-digit count |
+| V-2 | the popout's submission line | The "seen" time had grown to about 15 px when `tokens.mono` came off it (task 28) | W-68 | fixed, 73b9fb2 |
+| V-3 | the bar at 800 px | The Account icon is cut off: the idle bar is 815 px | W-68 | measured, nothing changed: the document is 815 wide in an 800 window and still scrolls sideways, as on `main`. Brief 103 records the band as not fixed. Put to Stack as taste call T-12 |
+| V-4 | the assignment popout | Its foot is below the window's edge | W-68 | not a defect: the backdrop scrolls, as on `main`, and the foot is reached |
+| V-5 | `theme-walk.spec.ts` rows 19 and 23 | The shot was taken while the panel still read "Loading…" | W-67 | sent |
+| V-6 | the Inbox footer | "Apply answers" was not a pill and its switched-off look was a faint outline | W-69 | fixed, c8c2d84 |
+| V-7 | Home's today list at 820 px and under | The status select shows only its caret | W-69 | not this phase: `main` has the same grid rule (four tracks for five children). Known, not this phase |
+| V-8 | the planner wizard | The step markers had lost their pill | W-69 | fixed, 956a554: direction D halved the radius token they used |
+| V-9 | the series scope dialog | Native radio buttons, checked in blue | W-67 | sent |
+| V-10 | the Grades report-card strip | The strip's scroll box clipped the card's new edge | W-70 | fixed, d0e0c59 |
+| V-11 | the Stream | The "scroll up for weeks" button was in the browser's own face | W-70 | fixed, 516a07d (`main`'s rule set no face) |
+| V-12 | the Stream | The tentative and attendance tags had gone square: their own `calc` on `--radius-md` | W-70 | fixed, c1ac1a3; the dashes are `main`'s and stay |
+| V-13 | the gradebook's Seen column | The stamp had lost its size and tone with `tokens.mono` | W-70 | fixed, be4e30e |
+| V-14 | the bar's icon labels | A drawn label stays up behind its own open panel | W-67 | sent |
+| V-15 | the popouts | The focus ring is drawn round the whole dialog when it opens from a link | W-67 | sent |
+
+Same on `main`, or not chosen by Stack, so not built here; each goes under "Known, not this phase" in
+`WALK.md`: the blank gap under the wizard's title field and its fields stopping short of the panel; the first
+hour label on the rule under the Events row; the Inbox's empty line under a failed read; the browser's own
+caret, calendar and clock glyphs on selects and date fields (D-4); the disclosure triangle on "N earlier"
+(D-3 added no mark where no character stood); table columns that do not line up between course blocks on
+`/grades`; the assignment page marking Stream as the current tab.
