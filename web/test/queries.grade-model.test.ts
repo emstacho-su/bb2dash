@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { gradesKeys } from '@/lib/queries.grades';
 import {
   IST466_COMPONENTS,
   IST466_SCHEME,
@@ -267,6 +268,17 @@ describe('useLinkColumn', () => {
       }),
     ]);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['grade-model', 'items'] });
+  });
+
+  it("also invalidates the Grades table's gradebook rows, whose counts_toward_grade follows the link (107)", async () => {
+    const invalidate = await link({ kind: 'excluded' });
+    // The gradebook query's key has no course part: its tail is the shell-set cache key, so the
+    // whole family is invalidated. The prefix is read from the real key, so a rename fails here.
+    const prefix = gradesKeys.gradebook(['GEO.103.recitation']).slice(0, 2);
+    expect(prefix).toEqual(['grades', 'gradebook']);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: prefix });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['grade-model', 'items'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['grade-model', 'items-for'] });
   });
 
   it('writes "Not graded" as excluded with no component', async () => {
