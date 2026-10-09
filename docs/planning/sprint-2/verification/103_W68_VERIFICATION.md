@@ -446,3 +446,14 @@ The five characters in `components/popout/` are drawn by marks: `PopoutShell.tsx
 Mark characters before my files `41 20`, after `36 17` (5 characters in 3 files, as the row says). `grep -c "<MarkedLabel"`: `SubmissionBlock.tsx` 1, `SyncButton.tsx` 1; `grep -c "{STAGED_LABEL}</span>" web/src/components/popout/SubmissionBlock.tsx` 1.
 `npx vitest run test/marks.test.tsx test/TopNav.search.test.tsx test/SyncButton.test.tsx test/Bell.test.tsx test/ItemPopout.test.tsx test/SubmissionBlock.test.tsx test/AssignmentPopout.test.tsx test/SessionPopout.test.tsx`: 8 files, 128 passed, the six old files unedited.
 `cd web && npm test`: 172 files, 3340 passed; typecheck 0; eslint 0.
+
+### Findings after the merge of W-67's task 16, and the full run
+
+* The fonts `@import` finding under task 32 is closed by W-67's `fonts-href.test.ts` and the `<link>` in the root layout (merged before the run below); no override was needed for it.
+  The `.tip` doubling of the accessible name (finding 2) is not closed: the `aria-label`s stay.
+* One more regression of mine, found by the full run and fixed in 18523f3: the drawn icon labels (`.tip::after`, opacity 0 but still in the scrollable overflow) widened the nav to 411 px at 390 px with search open.
+  They are not drawn at 720 px and under (`.bar .ic[data-tip]::after { display: none }`, held by a case in `TopNav.fold.test.tsx`).
+* **Full run, `node scripts/walk-box.mjs web/e2e/phone-width.spec.ts`, run 20261009T015506Z, commit 5e699f8, `"dirty": false`: exit 1, `2 failed`, `52 passed`.** The two failures are
+  `route / [dark]` and `route / [light]`: `page scrollWidth=402`. The element is W-69's: the Upcoming work strip on Home (`UpcomingTracker.module.css`, the `.day` buttons reach right=400 and the strip is not held to the pane's width at 390 px).
+  I did not touch it. The earlier full run 20261009T014210Z (before the label fix) was `4 failed, 50 passed`: the same two and `open state 7 search` in both themes.
+* Printed in the same run: `unfolded bar at 721: nav scrollWidth=815` (it was 851 in Inter), `bar at 390 longest label: nav scrollWidth=390`, `bar at 900 longest label: nav scrollWidth=900`.
