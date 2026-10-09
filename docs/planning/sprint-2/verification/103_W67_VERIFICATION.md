@@ -1086,3 +1086,18 @@ The rule is `.tip[data-tip][aria-expanded='true']:not([aria-controls='course-sid
 `aria-controls={SIDEBAR_ID}` beside the toggle's `data-tip`. `foundation-round2.test.ts` pins the selector, its place after the hover and focus rules (which it now also
 outweighs), that the toggle is the one excluded, and that no other rule hides a `.tip` label. RED against the old rule: 3 failed; GREEN: 99 passed with the audit.
 `cd web`: `npm test` exit 0 (187 files, 3428 passed); `npm run typecheck` exit 0; `npx eslint . --max-warnings 0` exit 0; `foundation.json` is `{}`.
+
+### S-2, the route case after the integrated run (shape 2)
+
+On the PM's loaded machine the route case failed four times of four with `ERR_ABORTED (-3) loading 'http://127.0.0.1:<port>/'`: the address in that message is the app's own base
+address, so the route load was superseded by the loader's own backoff retry, which falls inside the route load there and after it on mine. That is the race `main` has, and the case asserted
+something that depended on it. The case now proves S-2's claim and nothing about the backoff's timing (shape 2, because the retry's place cannot be held still without reading the schedule
+off a timer the suite does not control): the rejection is **either** the real connection error **or** an abort whose superseding address is the app's own base address, and it is
+never an abort that names a `data:` address, which would be the failed-load page superseding the load. `isBenignLoadFailure` is asserted false only in the first branch. The schedule of
+`attachLoader` is unchanged and no product code changed.
+
+Ten runs of `npx playwright test test/e2e/chrome.spec.ts -g "cannot reach the app"`, each its own line: runs 1 to 10 all exit 0, `3 passed`, each printing
+`rejected with "ERR_CONNECTION_REFUSED (-102) loading 'http://127.0.0.1:<port>/'"` (the first branch; the abort branch is the PM's message and is covered by the assertion's logic, checked
+against that exact string). `npm run typecheck` 0; `npm test` 0 (892); `npm run test:e2e` 0, 33 passed, 0 failed; `git diff --diff-filter=MD --name-only origin/main...HEAD -- desktop/test` prints nothing.
+
+A deep link that arrives while the app is unreachable can be superseded by the loader's own retry and is then recorded as benign, as on `main`; S-2 fixed the failed-load page's part, not that.
