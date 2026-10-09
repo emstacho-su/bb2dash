@@ -380,7 +380,9 @@ begin
   end if;
   select state, params into v_row from agent_requests where id = v_follow;
   if v_row.state <> 'queued'
-     or v_row.params is distinct from jsonb_build_object('trigger', 'followup', 'after', v_r1, 'skip', '[]'::jsonb) then
+     -- 187 (R3): this request has no trigger, so it is a press's request and its follow-up carries
+     -- retry_held: true; before 187 it carries nothing more. The unit reads both the same.
+     or (v_row.params - 'retry_held') is distinct from jsonb_build_object('trigger', 'followup', 'after', v_r1, 'skip', '[]'::jsonb) then
     raise exception 'FAIL 6: the follow-up reads %', row_to_json(v_row);
   end if;
   insert into _t181 values ('r2', v_follow, null);

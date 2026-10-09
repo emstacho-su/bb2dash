@@ -27,14 +27,18 @@
 --       answer and still need a reader (a row with applied_at set and no note needs none: the worker
 --       records it without a run). SECURITY DEFINER, because the table grants nothing.
 --     - re-created: sync_request_inbox_apply(bigint), inbox_apply_prepare(bigint),
---       inbox_apply_close(bigint, text, jsonb)
+--       inbox_apply_close(bigint, text, jsonb). Round 2 (brief 110): a press of Apply answers tries
+--       held answers through its whole chain (a retry request: no trigger, or retry_held true); a
+--       NEW hold is written by a failed close only; the failure notice also keeps 186's own arm, so
+--       the old worker (no skip_seen, no hold) is no step back from 186
 --   Section 2, filing in two steps
 --     - re-created: inbox_decision_filed(bigint, jsonb)
 --     - new: inbox_decisions_unlogged(integer), inbox_decision_logged(bigint, text),
 --       inbox_decision_skipped(bigint, text); all four invoker rights, the service role's alone (and
 --       the test login's, as 182's are)
---     - item 3782, the test item of the cut-over run, is marked skipped when that row is an archived
---       inbox-decision/1 row with nothing filed; on a database without it the call does nothing
+--     - item 3782, the test item of the cut-over run, is marked skipped by this file's own guarded
+--       statement (it has a logged write, which inbox_decision_skipped refuses, R5); on a database
+--       without that row nothing is marked
 --   Section 3, the acceptance objects
 --     - view v_inbox_apply_runs: one row per inbox_feedback request, typed columns only
 --     - inbox_accept_question(text, text): SECURITY DEFINER, authenticated only, owner check first
@@ -211,10 +215,22 @@ begin
 
   select a.params into v_params from agent_requests a where a.id = p_request;
 
-  -- 187: those three kinds of request carry a trigger in their params; the Inbox button's carries
-  -- none, so a press gets an empty list and tries held answers again (open item O-1). A login that
-  -- can insert a request can have held answers tried once; it cannot make anything held.
-  if coalesce(v_params->>'trigger', '') <> '' then
+  -- 187 (R3): a sync's, a follow-up's and the fallback skill's request carry a trigger; the Inbox
+  -- button's carries none, so a press gets an empty list and tries held answers again (open item
+  -- O-1). Inside a press's chain (a follow-up with retry_held, the JSON boolean true and nothing
+  -- else) only what that chain itself already failed on, the request's own skip, is left alone,
+  -- which is 186's rule and keeps the chain from looping. Every other request gets the held set.
+  -- A login that can insert a request can at most ask for what a press does; it cannot make
+  -- anything held.
+  if coalesce(v_params->>'trigger', '') = '' then
+    null;
+  elsif v_params->'retry_held' = 'true'::jsonb then
+    select coalesce(jsonb_agg(s.v order by s.ord), '[]'::jsonb) into v_held
+      from jsonb_array_elements(case when jsonb_typeof(v_params->'skip') = 'array'
+                                     then v_params->'skip' else '[]'::jsonb end)
+           with ordinality as s(v, ord)
+     where jsonb_typeof(s.v) = 'number';
+  else
     select coalesce(jsonb_agg(h.id order by h.id), '[]'::jsonb) into v_held
       from public.inbox_apply_held_items() as h(id);
   end if;
@@ -256,8 +272,9 @@ comment on function public.inbox_apply_prepare(bigint) is
   'Step 2 of /inbox-apply for the apply worker (181, 185, 187): runs apply_resolutions(), then returns '
   '{params, queue, runs_today, held}: the request''s params, every v_inbox_queue row in the skill''s '
   'order, how many of the worker''s requests started Claude on this New York day (the worker''s daily '
-  'cap), and held: a JSON array of item ids the worker must not hand to Claude (inbox_apply_held_items) '
-  'for a request whose params carry a trigger, an empty array for one that carries none (the button''s). '
+  'cap), and held: a JSON array of item ids the worker must not hand to Claude: inbox_apply_held_items() '
+  'for a request whose params carry a trigger, the request''s own params.skip for one with retry_held '
+  'true (a follow-up inside a press''s chain), an empty array for one that carries no trigger (the button''s). '
   'Since 185 each queue row carries session_link: for a session answer (session_link/<file id>) the '
   'file, Stack''s pick and the session the file carries now; null for any other row. '
   'Refuses a request that is not the worker''s own claim. inbox_apply_runner only.';
@@ -281,6 +298,8 @@ declare
   v_signed_in  boolean;
   v_stuck      boolean;
   v_one        jsonb;
+  v_params     jsonb;
+  v_retry      boolean;
 begin
   if p_result is null or jsonb_typeof(p_result) <> 'object'
      or jsonb_typeof(p_result->'lines') is distinct from 'array'
@@ -330,7 +349,7 @@ begin
     v_archived := (p_result->>'archived')::numeric::integer;
   end if;
 
-  perform 1 from agent_requests a
+  select a.params into v_params from agent_requests a
     where a.id = p_request and a.kind = 'inbox_feedback' and a.state = 'claimed'
       and a.claimed_by = c_claimant
     for update;
@@ -338,16 +357,21 @@ begin
     raise exception 'inbox_apply_close: request % is not the apply worker''s claim', coalesce(p_request::text, 'null')
       using errcode = '22023';
   end if;
+  -- 187 (R3): a retry request is one a press of Apply answers started: no trigger in its params, or
+  -- retry_held as the JSON boolean true (a follow-up inside that press's chain; nothing else counts).
+  v_retry := coalesce(v_params->>'trigger', '') = '' or v_params->'retry_held' = 'true'::jsonb;
 
   update agent_requests a
      set state = p_state, finished_at = now(), result = p_result
    where a.id = p_request;
 
-  -- 187: the holds, before either test below. One for each id of this close's skip that skip_seen
-  -- gives a time for, that is still in the queue, and whose queue row still carries that same time:
-  -- an answer given again while the run was open carries a newer time and is not held, because no
-  -- run tried it. A hold for the same answer is kept as it is; one for an older answer is replaced.
-  if p_result ? 'skip_seen' then
+  -- 187: the holds, before either test below. A new hold is a FAILED close's alone: the worker never
+  -- closes done with an answer newly left behind (that is not_applied, a failed close), and only a
+  -- failed close raises the notice. One for each id of this close's skip that skip_seen gives a time
+  -- for, that is still in the queue, and whose queue row still carries that same time: an answer
+  -- given again while the run was open carries a newer time and is not held, because no run tried
+  -- it. A hold for the same answer is kept as it is; one for an older answer is replaced.
+  if p_state = 'failed' and p_result ? 'skip_seen' then
     insert into inbox_apply_holds (item_id, request_id, resolved_at, held_at)
     select distinct on (q.id) q.id, p_request, q.resolved_at, now()
       from jsonb_array_elements(p_result->'skip_seen') as e(value)
@@ -360,7 +384,7 @@ begin
       set request_id = excluded.request_id, resolved_at = excluded.resolved_at, held_at = excluded.held_at
       where inbox_apply_holds.resolved_at is distinct from excluded.resolved_at;
   end if;
-  -- 187: and the holds whose item has left the queue or was answered again are removed.
+  -- 187: and, on either close, the holds whose item has left the queue or was answered again are removed.
   delete from inbox_apply_holds h
    where not exists (select 1 from v_inbox_queue q
                       where q.id = h.item_id and q.resolved_at is not distinct from h.resolved_at);
@@ -389,13 +413,23 @@ begin
   -- "Sign in again": a run that started Claude and got as far as a result has signed in.
   v_signed_in := p_result->'claude'->>'started' = 'true'
                  and (p_state = 'done' or (p_result->>'error' = any (c_signed_in)) is true);
-  -- "The apply run failed ... ": an answer a failed run could not apply still waits. 187 reads it
-  -- from the hold (inbox_apply_held_items), not from agent_requests; this close's own skip counts
-  -- either way, as in 186.
+  -- "The apply run failed ... ": an answer a failed run could not apply still waits. Three arms
+  -- (R4): this close's own skip; a waiting answer that is held; and 186's own arm exactly as it was
+  -- (a failed request of the worker listed the id in its skip and finished at or after the answer's
+  -- resolved_at), which still covers the old worker, that sends no skip_seen and so writes no
+  -- hold. Only this notice reads that third arm, and it decides nothing else: the hold,
+  -- inbox_apply_held_items(), sync_request_inbox_apply and prepare never read agent_requests for it,
+  -- because other logins can write it (finding F2). The request just closed is in that arm when it
+  -- failed.
   v_stuck := exists (
     select 1 from v_inbox_queue q
      where q.id = any (v_skip)
-        or exists (select 1 from public.inbox_apply_held_items() as h(id) where h.id = q.id));
+        or exists (select 1 from public.inbox_apply_held_items() as h(id) where h.id = q.id)
+        or exists (select 1 from agent_requests a
+                    where a.kind = 'inbox_feedback' and a.state = 'failed' and a.claimed_by = c_claimant
+                      and jsonb_typeof(a.result->'skip') = 'array'
+                      and a.result->'skip' @> to_jsonb(q.id)
+                      and a.finished_at >= coalesce(q.resolved_at, '-infinity'::timestamptz)));
   update attention_items i
      set state = 'archived', archived_at = now(), archived_by = c_claimant,
          decision = jsonb_build_object('closed_itself', true, 'rule', 'a later apply run finished',
@@ -405,18 +439,22 @@ begin
           or (i.ref = 'inbox-apply-failed' and p_state = 'done' and not v_stuck));
 
   -- The rest of the queue: one follow-up, only after a run that archived something (so a batch
-  -- that gets nowhere never loops), and never for rows this run could not apply (skip) or that are
-  -- held (187: a follow-up would only skip them).
+  -- that gets nowhere never loops), and never for rows this run could not apply (skip). 187: a
+  -- retry request's (R3) follow-up is filed while any row outside this close's skip waits, held or
+  -- not, and carries retry_held so its own prepare leaves alone only this close's skip; every other
+  -- request's also leaves out the held rows, which a follow-up would only skip.
   if v_archived > 0 and exists (
        select 1 from v_inbox_queue q
         where not (q.id = any (v_skip))
-          and not exists (select 1 from public.inbox_apply_held_items() as h(id) where h.id = q.id)) then
+          and (v_retry
+               or not exists (select 1 from public.inbox_apply_held_items() as h(id) where h.id = q.id))) then
     perform pg_advisory_xact_lock(c_lock_key);
     if not exists (select 1 from agent_requests a
                     where a.kind = 'inbox_feedback' and a.state in ('queued', 'claimed')) then
       insert into agent_requests (kind, scope, state, params, note)
       values ('inbox_feedback', 'all', 'queued',
-              jsonb_build_object('trigger', 'followup', 'after', p_request, 'skip', to_jsonb(v_skip)),
+              jsonb_build_object('trigger', 'followup', 'after', p_request, 'skip', to_jsonb(v_skip))
+                || case when v_retry then jsonb_build_object('retry_held', true) else '{}'::jsonb end,
               format('queued by the apply worker after request %s', p_request))
       returning id into v_follow;
     end if;
@@ -435,10 +473,14 @@ comment on function public.inbox_apply_close(bigint, text, jsonb) is
   'for error sign_in_expired; for error not_applied it says a sync does not try the answers again). '
   'apply-login-required is archived by a close whose run started Claude and ended done or with not_applied, '
   'timed_out, usage_limit or budget_exceeded; inbox-apply-failed by a done close unless an answer in this '
-  'close''s skip, or a held answer (inbox_apply_held_items), is still in v_inbox_queue. When the run '
-  'archived something (result.archived > 0) and v_inbox_queue still holds a row outside result.skip that '
-  'is not held, files one queued follow-up {trigger: followup, after, skip} and returns its id; null '
-  'otherwise. Refuses any other transition. inbox_apply_runner only.';
+  'close''s skip, a held answer (inbox_apply_held_items), or 186''s own arm (a failed request of the '
+  'worker listed it in its skip at or after the answer''s resolved_at), is still in v_inbox_queue. A new '
+  'hold is written by a failed close only. When the run archived something (result.archived > 0) and '
+  'v_inbox_queue still holds a row outside result.skip that is not held, files one queued follow-up '
+  '{trigger: followup, after, skip} and returns its id; for a retry request (no trigger in its params, '
+  'or retry_held the JSON true: a press of Apply answers and its chain) held rows count too and the '
+  'follow-up carries retry_held: true. Null otherwise. Refuses any other transition. inbox_apply_runner '
+  'only.';
 
 -- =============================================================================================
 -- 2. Filing a decision in two steps
@@ -532,6 +574,13 @@ begin
     raise exception 'inbox_decision_skipped: p_why must say why' using errcode = '22023';
   end if;
 
+  -- R5: a decision whose item has a logged write (inbox_apply_writes) is never skipped: every write
+  -- must reach that day's log, and the worker's role can raise a row of the shape the exporter skips
+  -- as a test question. Refused as "nothing to mark" (false), so the exporter files the row as usual.
+  if exists (select 1 from inbox_apply_writes w where w.item_id = p_id) then
+    return false;
+  end if;
+
   update attention_items i
      set decision_filed_at = now(),
          decision_filed = jsonb_build_object('skipped', true, 'why', left(btrim(p_why), 200))
@@ -544,8 +593,9 @@ end $$;
 comment on function public.inbox_decision_skipped(bigint, text) is
   'Marks one archived inbox-decision/1 row as filed with nothing to file (187): decision_filed = '
   '{"skipped": true, "why": ...}, no path. Neither inbox_decisions_unfiled nor inbox_decisions_unlogged '
-  'lists it afterwards. Once only: false when the row is already filed or skipped, is not archived, or '
-  'carries no inbox-decision/1 record. Invoker rights; service_role only (the host exporter).';
+  'lists it afterwards. Once only: false when the row is already filed or skipped, is not archived, '
+  'carries no inbox-decision/1 record, or has a row in inbox_apply_writes (a logged write is never '
+  'skipped, R5). Invoker rights; service_role only (the host exporter).';
 
 revoke all on function
   public.inbox_decision_filed(bigint, jsonb),
@@ -561,19 +611,23 @@ grant execute on function
   public.inbox_decision_skipped(bigint, text)
 to service_role, db_test_runner;
 
--- Item 3782, the test item of the cut-over run, gets no vault note and no day-file entry. One
--- guarded call: on a database without that row (or with it filed, or not a decision record) it does
--- nothing.
+-- Item 3782, the test item of the cut-over run, gets no vault note and no day-file entry (Stack's
+-- answer: "Mark it filed, no note"). It has a logged write, so inbox_decision_skipped would refuse it
+-- (R5): it is marked by this migration's own guarded statement instead, with the shape that function
+-- writes, once only; on a database without that row (or with it filed, or not a decision record)
+-- it marks nothing.
 do $$
+declare
+  v_n integer;
 begin
-  if exists (select 1 from public.attention_items i
-              where i.id = 3782 and i.state = 'archived'
-                and i.decision->>'schema' = 'inbox-decision/1' and i.decision_filed_at is null) then
-    perform public.inbox_decision_skipped(3782, 'test item of the Phase 23 cut-over run: no note, no day-file entry');
-    raise notice '187: item 3782 marked skipped';
-  else
-    raise notice '187: item 3782 is not an unfiled archived decision here; nothing marked';
-  end if;
+  update public.attention_items i
+     set decision_filed_at = now(),
+         decision_filed = jsonb_build_object('skipped', true,
+                            'why', 'test item of the Phase 23 cut-over run: no note, no day-file entry')
+   where i.id = 3782 and i.state = 'archived'
+     and i.decision->>'schema' = 'inbox-decision/1' and i.decision_filed_at is null;
+  get diagnostics v_n = row_count;
+  raise notice '187: item 3782 marked skipped: % row(s)', v_n;
 end $$;
 
 -- =============================================================================================
@@ -843,11 +897,20 @@ begin
     raise exception 'FAIL 187: inbox_apply_runner executes SECURITY DEFINER functions %', v_got;
   end if;
 
+  -- (g2) The exporter runs as the service role with invoker rights: inbox_decision_skipped reads
+  -- inbox_apply_writes (R5), so that role must be able to.
+  if not has_table_privilege('service_role', 'public.inbox_apply_writes', 'select') then
+    raise exception 'FAIL 187: service_role cannot read inbox_apply_writes (inbox_decision_skipped reads it)';
+  end if;
+
   -- (h) The bodies are 187's, and keep the two words the standing units pin.
   if position('session_link' in (select prosrc from pg_proc where oid = 'public.inbox_apply_prepare(bigint)'::regprocedure)) = 0
      or position('inbox_apply_held_items' in (select prosrc from pg_proc where oid = 'public.inbox_apply_prepare(bigint)'::regprocedure)) = 0
      or position('c_signed_in' in (select prosrc from pg_proc where oid = 'public.inbox_apply_close(bigint, text, jsonb)'::regprocedure)) = 0
      or position('skip_seen' in (select prosrc from pg_proc where oid = 'public.inbox_apply_close(bigint, text, jsonb)'::regprocedure)) = 0
+     or position('retry_held' in (select prosrc from pg_proc where oid = 'public.inbox_apply_close(bigint, text, jsonb)'::regprocedure)) = 0
+     or position('retry_held' in (select prosrc from pg_proc where oid = 'public.inbox_apply_prepare(bigint)'::regprocedure)) = 0
+     or position('inbox_apply_writes' in (select prosrc from pg_proc where oid = 'public.inbox_decision_skipped(bigint, text)'::regprocedure)) = 0
      or position('inbox_apply_held_items' in (select prosrc from pg_proc where oid = 'public.sync_request_inbox_apply(bigint)'::regprocedure)) = 0 then
     raise exception 'FAIL 187: a re-created body is not the 187 body';
   end if;

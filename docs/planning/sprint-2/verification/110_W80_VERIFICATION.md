@@ -63,7 +63,7 @@ PASS  phase23_186_notices.sql          (after the edit below; it also passed bef
 
 There is no `phase23_184` unit in `db/tests`.
 
-## Standing unit edited (one)
+## Standing unit edited (one) -- SUPERSEDED in Round 2: the 186 edit was reverted, see the end of this file
 
 `db/tests/phase23_186_notices.sql`, case 3a only. 186's unit pins "the failed run's own skip list
 holds the notice", which is the rule 187 changes: the hold is now a stored fact written from
@@ -216,3 +216,93 @@ superseded file, an unlinked file or a row already stamped).
   task 1's read (items 905 to 914, 1915, 3436, 3437, 3453) unless a fold moved something. Expect
   `phase23_182`, `_186` and `_180` to PASS inside the same transaction, and `phase23_185` too (the
   `held` key is additive).
+
+## Round 2 (the review of the database branch; brief 110, "Round 2")
+
+Merged `origin/fix/phase23-followups` first (no conflict; none of the other workers' files touched).
+Units first (`f546cd9`, red), then the migration (`01d101d`).
+
+### Runner results
+
+```
+$ node scripts/db-test.mjs --only phase23_187_held_answers.sql
+FAIL  phase23_187_held_answers.sql  FAIL phase23_187_held_answers: migration 187 is not applied (the hold table or inbox_apply_held_items() is missing)
+$ node scripts/db-test.mjs --only phase23_187_held_answers_b.sql
+FAIL  phase23_187_held_answers_b.sql  FAIL phase23_187_held_answers_b: migration 187 is not applied (the hold table or inbox_apply_held_items() is missing)
+$ node scripts/db-test.mjs --only phase23_187_decision_filing.sql      -> ... migration 187 is not applied
+$ node scripts/db-test.mjs --only phase23_187_accept_objects.sql       -> ... migration 187 is not applied
+PASS  phase23_180 / _181 / _182 / _183 / _185 / _186 (the 186 file is byte-identical to origin/main)
+```
+
+The round's "red" runs are on the local stand-in (PGlite, as in the first round), against round 1's
+187, with the new units: 3 (retry follow-up handed its own skip) failed in the held unit, 17 (the
+button's follow-up carried no `retry_held`) in the second, 3b (a logged write was skipped) in the
+filing unit, and the unedited `phase23_186_notices.sql` failed 3c (the review's R4 finding). With
+the round-2 187 on the stand-in all of them PASS: both held units, the filing unit, the accept-objects
+unit and `phase23_180`, `_182`, `_186`. Mutation checks (each rule broken in turn: the third arm,
+the failed-only hold, the strict `retry_held`, the R5 refusal, the `retry_held` key, the retry arm of
+the follow-up test) each fail the intended case.
+
+### Per fix
+
+1. **R3.** `prepare` returns `held`: `[]` without a `trigger`; the request's own `params.skip` (numbers
+   only, in order) when `retry_held` is the JSON true; `inbox_apply_held_items()` otherwise. `close`
+   reads the request's params under the same lock as before and computes `v_retry` the same strict way.
+   Cases: held unit 3 (twelve request kinds: sync, follow-up, skill, button, `trigger: null`, a retry
+   follow-up with skip [999001, 999002], a skip with non-numbers, no skip, `retry_held` with no trigger,
+   and `retry_held` as the text "true", 1 and false, which are not retry), and in the second file case 17: the button's
+   close with a held untried row beyond its batch files a follow-up with `{trigger, after, skip,
+   retry_held: true}`; that follow-up's `prepare` returns exactly the first close's skip, not the held
+   set; a further retry follow-up is filed when only held rows are left; a sync-filed request's follow-up
+   gets the held set and no `retry_held`; held rows alone after a sync-filed close file nothing, after
+   the button's they file a retry follow-up; a retry follow-up that archived nothing, and a
+   `retry_held` text, file nothing.
+2. **R4.** `v_stuck` has the three arms (this close's skip, a held waiting answer, 186's arm verbatim).
+   `db/tests/phase23_186_notices.sql` is back to `origin/main`'s bytes (`git diff origin/main --
+   <file>` is empty) and PASSes through the runner now and on the stand-in against 187. Case 18 (first
+   held file): a failed close with a skip and no `skip_seen` writes no hold, raises the notice, a later done
+   close keeps it open, the sync and the worker still see the answer as unheld, and a new answer lets the
+   next done close archive it. Two unit changes follow from the third arm, both in my own units:
+   the `reanswer` helper now moves `resolved_at` past the transaction's `now()` (the unit's failed
+   requests finish at `now()`, so an older time would still count for the arm), and case 8 sets Z aside
+   (case 7's two hand-written failed requests list it in their skip, and the arm lets such a request keep
+   the notice open, which is exactly 186's behaviour).
+3. **A new hold is a failed close's alone.** `p_state = 'failed' and p_result ? 'skip_seen'`. Case 19:
+   a done close with `skip` and `skip_seen` for a waiting, unheld row writes no hold, and a hold that
+   stands survives it; stale holds are still removed by a done close (case 15). All earlier hold-writing
+   cases already used failed closes.
+4. **R5.** `inbox_decision_skipped` returns false before any update when `inbox_apply_writes` has a row
+   for the item; item 3782 is marked by the migration's own `update` (same `{"skipped": true, "why"}`
+   shape, `decision_filed_at is null` guard, a NOTICE with the row count), with a comment saying why.
+   Filing unit 3b: a row with a logged write is refused, marks nothing, stays on the unfiled list and can
+   still be filed; a row without one is skipped as before. The fixture row is inserted under
+   `set local role inbox_apply_runner` (181: the one login with insert on the log; its foreign keys are
+   checked as the table's owner), so the test login needs no grant.
+5. **File length.** `phase23_187_held_answers.sql` (593 lines: cases 0 to 9 and 18) and
+   `phase23_187_held_answers_b.sql` (610 lines: cases 0, 10 to 17 and 19); each repeats the helpers, the
+   installed check and the setup, and has its own PASS line and rollback; each header says which cases it
+   holds. Migration 187 is one file of **917 lines** (it was 854): I did not pad it, but the round's
+   additions and the comments a reviewer needs (R3, R4, R5, the failed-only hold) outweigh what I merged.
+
+### Standing unit edited this round (one)
+
+`db/tests/phase23_181_inbox_apply_runner.sql` line 383. The unit's request is hand-made with no
+`trigger`, so under R3 it is a retry request and its follow-up now carries `retry_held: true`. The
+check reads `(v_row.params - 'retry_held')`, so it passes both before 187 (PASS through the runner now)
+and after. The rest of that unit (a follow-up for a row left, none for a skipped row or a run that
+archived nothing, the notices) holds under the new rules by reading; it could not be run on the
+stand-in (it needs 184's claim function). `phase23_186_notices.sql` is no longer edited.
+
+### Guard block, defaults
+
+* The 187 guard (h) also pins `retry_held` in prepare and close and `inbox_apply_writes` in
+  `inbox_decision_skipped`, and a new (g2) asserts `service_role` can `select` `inbox_apply_writes`:
+  `inbox_decision_skipped` is invoker rights and the exporter runs as that role; 181 revokes only
+  public, anon and authenticated, so it should hold, and the guard fails the migration loudly if not.
+  (An invoker function that reads it is why I did not make a definer helper.)
+* Defaults taken: `retry_held` is also honoured only when a `trigger` is present (a request with no
+  trigger gets `[]` anyway); the `skip` of a retry follow-up keeps its order and drops non-numbers;
+  a retry follow-up is filed while any row outside the close's `skip` waits, as the brief says, even if
+  every such row is held; the 3782 statement notices the row count rather than raising.
+* Not checked: 181's unit and the `phase14_*` / `phase18_*` units against round 2 on the stand-in; the
+  `service_role` privilege above on prod (the guard reads it at apply).

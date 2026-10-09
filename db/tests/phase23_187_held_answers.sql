@@ -1,13 +1,15 @@
 -- bb2dash :: db/tests/phase23_187_held_answers.sql
--- Phase 23 follow-ups (brief 110, Item 1; DECISIONS 2026-10-08, "Remember a skipped answer").
+-- Phase 23 follow-ups (brief 110, Item 1, with Round 2's R3, R4 and the failed-close rule).
 -- Tests migration 187, section 1: an answer the apply worker could not apply is held, and a sync
--- does not try it again.
+-- does not try it again. This is the FIRST of two units (the second is phase23_187_held_answers_b.sql);
+-- they are split to stay under 800 lines. THIS FILE HOLDS cases 0 to 9 and 18:
 --
 --   0. installed: the hold table, inbox_apply_held_items(), the three re-created bodies
 --   1. a close whose skip lists an item, with the resolved_at the run was handed, holds it
 --   2. with only that item waiting, sync_request_inbox_apply files nothing; with a second, unheld
 --      row it files one request
---   3. prepare returns the id under `held` for a request with a trigger, and [] for one with none
+--   3. prepare returns the id under `held` for a request with a trigger, [] for one with none; R3:
+--      a retry follow-up is handed its own skip, and only a JSON true retry_held counts
 --   4. once the item is answered again it is not held
 --   5. an answer given again after the claim and before the close gets no hold
 --   6. a held item whose applied_at is then set, with no note, is not held, and a sync files for it
@@ -17,15 +19,8 @@
 --      none is
 --   9. the `not_applied` notice says a sync does not try the answers again, names a new answer and
 --      the button, and holds no "Undo"; every other failure keeps its sentence
---  10. anon, authenticated, inbox_apply_runner and sync_runner cannot execute
---      inbox_apply_held_items(); the service role and the test login can
---  11. on the table, no privilege is held by anon, authenticated or service_role, the test login
---      holds select alone, and an insert as authenticated and as the test login is refused
---  12. a hold for the same answer is kept by a later close; a different answer replaces it
---  13. a malformed skip_seen is refused with 22023 and changes nothing
---  14. a close with no skip_seen, or with an id outside its skip, writes no hold
---  15. a close removes the hold of an item that left the queue
---  16. no follow-up is filed for a queue that holds held answers alone
+--  18. R4: a failed close with a skip and NO skip_seen (the old worker) writes no hold, and a later
+--      done close still keeps `inbox-apply-failed` open while that answer waits
 --
 -- Every call to a worker function is made under `set local role inbox_apply_runner` (181 grants
 -- db_test_runner the role with inherit false); the sync's under `sync_runner` (094).
@@ -58,9 +53,10 @@ create function pg_temp.t187_item(p_ref text, p_note text default null) returns 
   returning id
 $$;
 
--- Answered again: a new answer carries a new resolved_at.
+-- Answered again: a new answer carries a new resolved_at, later than the transaction's now() (the
+-- failed requests of this unit finish at now(), so an older time would still read as held by 186's arm).
 create function pg_temp.t187_reanswer(p_id bigint) returns void language sql as $$
-  update attention_items set resolved_at = resolved_at + interval '1 minute' where id = p_id
+  update attention_items set resolved_at = greatest(resolved_at, now()) + interval '1 minute' where id = p_id
 $$;
 
 create function pg_temp.t187_archive(p_id bigint) returns void language sql as $$
@@ -259,10 +255,8 @@ begin
     raise exception 'FAIL 2: more than one request is open';
   end if;
   update agent_requests set state = 'cancelled' where id = v_id;
-end $$;
-
--- =============================================================================================
--- 3. prepare: `held` for a request with a trigger, [] for one with none
+end $$;-- =============================================================================================
+-- 3. prepare: `held` for a request with a trigger, [] for one with none (and R3's retry requests)
 -- =============================================================================================
 do $$
 declare
@@ -270,29 +264,38 @@ declare
   v_case record;
   v_r    bigint;
   v_prep jsonb;
+  v_want jsonb;
 begin
+  -- want: 'set' is the held set ([X]), 'empty' is [], anything else is the JSON it must be.
   for v_case in
     select * from (values
-      ('a sync request',        '{"trigger": "sync", "after": 1}'::jsonb,    true),
-      ('a follow-up request',   '{"trigger": "followup", "after": 1, "skip": []}'::jsonb, true),
-      ('the fallback skill''s', '{"trigger": "skill", "after": 1}'::jsonb,   true),
-      ('a button request',      '{}'::jsonb,                                  false),
-      ('a trigger of null',     '{"trigger": null}'::jsonb,                   false)
-    ) t(label, params, expect_held)
+      ('a sync request',        '{"trigger": "sync", "after": 1}'::jsonb,    'set'),
+      ('a follow-up request',   '{"trigger": "followup", "after": 1, "skip": []}'::jsonb, 'set'),
+      ('the fallback skill''s', '{"trigger": "skill", "after": 1}'::jsonb,   'set'),
+      ('a button request',      '{}'::jsonb,                                  'empty'),
+      ('a trigger of null',     '{"trigger": null}'::jsonb,                   'empty'),
+      -- R3: a follow-up of a retry chain is handed back its own skip, and only that.
+      ('a retry follow-up',     '{"trigger": "followup", "after": 1, "skip": [999001, 999002], "retry_held": true}'::jsonb, '[999001, 999002]'),
+      ('a retry follow-up whose skip holds a non-number', '{"trigger": "followup", "skip": [999003, "x", null], "retry_held": true}'::jsonb, '[999003]'),
+      ('a retry follow-up with no skip', '{"trigger": "followup", "retry_held": true}'::jsonb, '[]'),
+      ('retry_held with no trigger', '{"retry_held": true, "skip": [999004]}'::jsonb, 'empty'),
+      -- Only the JSON boolean true counts.
+      ('retry_held as the text "true"', '{"trigger": "followup", "skip": [999005], "retry_held": "true"}'::jsonb, 'set'),
+      ('retry_held as 1',       '{"trigger": "followup", "skip": [999005], "retry_held": 1}'::jsonb, 'set'),
+      ('retry_held false',      '{"trigger": "followup", "skip": [999005], "retry_held": false}'::jsonb, 'set')
+    ) t(label, params, want)
   loop
+    v_want := case v_case.want when 'set' then jsonb_build_array(v_x) when 'empty' then '[]'::jsonb else v_case.want::jsonb end;
     v_r := pg_temp.t187_request(v_case.params);
     v_prep := pg_temp.t187_prepare(v_r);
     if not (v_prep ? 'held') or jsonb_typeof(v_prep->'held') <> 'array' then
       raise exception 'FAIL 3: prepare for % returned no held array: %', v_case.label, v_prep;
     end if;
-    if v_case.expect_held and v_prep->'held' is distinct from jsonb_build_array(v_x) then
-      raise exception 'FAIL 3: prepare for % returned held %, expected [%]', v_case.label, v_prep->'held', v_x;
-    end if;
-    if not v_case.expect_held and v_prep->'held' is distinct from '[]'::jsonb then
-      raise exception 'FAIL 3: prepare for % returned held %, expected []', v_case.label, v_prep->'held';
+    if v_prep->'held' is distinct from v_want then
+      raise exception 'FAIL 3: prepare for % returned held %, expected %', v_case.label, v_prep->'held', v_want;
     end if;
     -- The numbers are numbers, and the rest of what prepare sent is still there.
-    if v_case.expect_held and jsonb_typeof(v_prep->'held'->0) <> 'number' then
+    if jsonb_array_length(v_prep->'held') > 0 and jsonb_typeof(v_prep->'held'->0) <> 'number' then
       raise exception 'FAIL 3: held holds a % and not a number', jsonb_typeof(v_prep->'held'->0);
     end if;
     if not (v_prep ?& array['params', 'queue', 'runs_today'])
@@ -306,6 +309,7 @@ begin
     raise exception 'FAIL 3: the closes of section 3 changed the held set to %', pg_temp.t187_held();
   end if;
 end $$;
+
 
 -- =============================================================================================
 -- 4. Answered again: not held
@@ -453,6 +457,9 @@ declare
   v_x    bigint := (select id from _t187 where label = 'x');
   v_r    bigint;
 begin
+  -- Z (section 7) is set aside: the two hand-written failed requests of section 7 list it in their
+  -- skip, and 186's arm of the notice test (kept by R4) lets such a request keep the notice open.
+  perform pg_temp.t187_archive((select id from _t187 where label = 'z'));
   -- X is answered again and then held on the new answer by a failing run (which raises the notice).
   perform pg_temp.t187_reanswer(v_x);
   update attention_items set applied_at = null, resolution_note = null where id = v_x;
@@ -529,290 +536,53 @@ begin
   end if;
   perform pg_temp.t187_archive_notices();
 end $$;
+-- =============================================================================================
+-- 18. An old worker: a skip and no skip_seen holds nothing, and the notice still waits (R4)
+-- =============================================================================================
+select pg_temp.t187_archive_notices();
 
--- =============================================================================================
--- 10. Who can run inbox_apply_held_items()
--- =============================================================================================
 do $$
 declare
-  c_fn constant text := 'public.inbox_apply_held_items()';
-  v_state text;
-  v_raised boolean;
-  v_role text;
+  v_o    bigint := pg_temp.t187_item('test187:old');
+  v_r    bigint;
 begin
-  if has_function_privilege('anon', c_fn, 'execute') or has_function_privilege('authenticated', c_fn, 'execute')
-     or has_function_privilege('inbox_apply_runner', c_fn, 'execute') or has_function_privilege('sync_runner', c_fn, 'execute') then
-    raise exception 'FAIL 10: inbox_apply_held_items() is executable beyond the service role and the test login';
-  end if;
-  if not has_function_privilege('service_role', c_fn, 'execute') or not has_function_privilege('db_test_runner', c_fn, 'execute') then
-    raise exception 'FAIL 10: the service role or the test login cannot execute inbox_apply_held_items()';
-  end if;
-
-  -- A call, not just a catalog read.
-  foreach v_role in array array['anon', 'authenticated', 'inbox_apply_runner', 'sync_runner'] loop
-    v_raised := false;
-    begin
-      execute format('set local role %I', v_role);
-      perform inbox_apply_held_items();
-    exception when others then
-      get stacked diagnostics v_state = returned_sqlstate;
-      v_raised := v_state = '42501';
-    end;
-    reset role;
-    if not v_raised then
-      raise exception 'FAIL 10: % was not refused when it called inbox_apply_held_items()', v_role;
-    end if;
-  end loop;
-end $$;
-
--- =============================================================================================
--- 11. The table grants nothing
--- =============================================================================================
-do $$
-declare
-  c_tbl constant text := 'public.inbox_apply_holds';
-  v_role text;
-  v_priv text;
-  v_state text;
-  v_raised boolean;
-begin
-  foreach v_role in array array['anon', 'authenticated', 'service_role', 'inbox_apply_runner', 'sync_runner'] loop
-    foreach v_priv in array array['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger'] loop
-      if has_table_privilege(v_role, c_tbl, v_priv) then
-        raise exception 'FAIL 11: % holds % on the hold table', v_role, v_priv;
-      end if;
-    end loop;
-  end loop;
-  if not has_table_privilege('db_test_runner', c_tbl, 'select') then
-    raise exception 'FAIL 11: the test login cannot read the hold table';
-  end if;
-  foreach v_priv in array array['insert', 'update', 'delete', 'truncate', 'references', 'trigger'] loop
-    if has_table_privilege('db_test_runner', c_tbl, v_priv) then
-      raise exception 'FAIL 11: the test login holds % on the hold table', v_priv;
-    end if;
-  end loop;
-  if not (select c.relrowsecurity from pg_class c where c.oid = c_tbl::regclass) then
-    raise exception 'FAIL 11: row level security is off on the hold table';
-  end if;
-  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'inbox_apply_holds') then
-    raise exception 'FAIL 11: the hold table has a policy';
-  end if;
-
-  -- An insert as authenticated, then as the test login: refused.
-  v_raised := false;
-  begin
-    set local role authenticated;
-    insert into inbox_apply_holds (item_id, request_id, resolved_at) values (-1, -1, now());
-  exception when others then
-    get stacked diagnostics v_state = returned_sqlstate;
-    v_raised := v_state = '42501';
-  end;
-  reset role;
-  if not v_raised then
-    raise exception 'FAIL 11: an insert as authenticated was not refused with 42501';
-  end if;
-
-  v_raised := false;
-  begin
-    insert into inbox_apply_holds (item_id, request_id, resolved_at) values (-1, -1, now());
-  exception when others then
-    get stacked diagnostics v_state = returned_sqlstate;
-    v_raised := v_state = '42501';
-  end;
-  if not v_raised then
-    raise exception 'FAIL 11: an insert as the test login was not refused with 42501';
-  end if;
-end $$;
-
--- =============================================================================================
--- 12. A hold for the same answer is kept; a different answer replaces it
--- =============================================================================================
-do $$
-declare
-  v_w    bigint := pg_temp.t187_item('test187:w');
-  v_r1   bigint := pg_temp.t187_request();
-  v_r2   bigint;
-  v_r3   bigint;
-  v_h1   record;
-  v_h2   record;
-begin
-  insert into _t187 values ('w', v_w);
-  perform pg_temp.t187_close(v_r1, 'failed', pg_temp.t187_skip_result(array[v_w], jsonb_build_array(pg_temp.t187_seen(v_w))));
-  select * into v_h1 from inbox_apply_holds where item_id = v_w;
-
-  -- The same answer, held again by a later run: the row is the first run's, untouched.
-  v_r2 := pg_temp.t187_request();
-  perform pg_temp.t187_close(v_r2, 'failed', pg_temp.t187_skip_result(array[v_w], jsonb_build_array(pg_temp.t187_seen(v_w))));
-  select * into v_h2 from inbox_apply_holds where item_id = v_w;
-  if v_h2.request_id is distinct from v_r1 or v_h2.held_at is distinct from v_h1.held_at
-     or v_h2.resolved_at is distinct from v_h1.resolved_at
-     or (select count(*) from inbox_apply_holds where item_id = v_w) <> 1 then
-    raise exception 'FAIL 12: the hold for the same answer was not kept: first %, then %', row_to_json(v_h1), row_to_json(v_h2);
-  end if;
-
-  -- A new answer, held by a new run: the one row now names the new run and the new time.
-  perform pg_temp.t187_reanswer(v_w);
-  v_r3 := pg_temp.t187_request();
-  perform pg_temp.t187_close(v_r3, 'failed', pg_temp.t187_skip_result(array[v_w], jsonb_build_array(pg_temp.t187_seen(v_w))));
-  select * into v_h2 from inbox_apply_holds where item_id = v_w;
-  if v_h2.request_id is distinct from v_r3
-     or v_h2.resolved_at is distinct from (select resolved_at from attention_items where id = v_w)
-     or (select count(*) from inbox_apply_holds where item_id = v_w) <> 1 then
-    raise exception 'FAIL 12: the hold for a new answer did not replace the old: %', row_to_json(v_h2);
-  end if;
-  if pg_temp.t187_held() <> array[v_w] then
-    raise exception 'FAIL 12: held set is %, expected {%}', pg_temp.t187_held(), v_w;
-  end if;
-end $$;
-
--- =============================================================================================
--- 13. A malformed skip_seen is refused
--- =============================================================================================
-do $$
-declare
-  v_w     bigint := (select id from _t187 where label = 'w');
-  v_r     bigint := pg_temp.t187_request();
-  v_case  record;
-  v_state text;
-  v_raised boolean;
-  v_holds int := (select count(*) from inbox_apply_holds);
-begin
-  for v_case in
-    select * from (values
-      ('an object',            '{"id": 1}'::jsonb),
-      ('a string',             '"x"'::jsonb),
-      ('a list of numbers',    '[1, 2]'::jsonb),
-      ('an id as text',        jsonb_build_array(jsonb_build_object('id', v_w::text, 'resolved_at', null))),
-      ('a missing id',         jsonb_build_array(jsonb_build_object('resolved_at', null))),
-      ('a fractional id',      jsonb_build_array(jsonb_build_object('id', 1.5, 'resolved_at', null))),
-      ('a numeric time',       jsonb_build_array(jsonb_build_object('id', v_w, 'resolved_at', 5))),
-      ('a time that is no time', jsonb_build_array(jsonb_build_object('id', v_w, 'resolved_at', 'not a time')))
-    ) t(label, seen)
-  loop
-    v_raised := false;
-    begin
-      perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(array[v_w], v_case.seen));
-    exception when others then
-      get stacked diagnostics v_state = returned_sqlstate;
-      v_raised := v_state = '22023';
-    end;
-    reset role;
-    if not v_raised then
-      raise exception 'FAIL 13: skip_seen as % was not refused with 22023', v_case.label;
-    end if;
-    if (select state from agent_requests where id = v_r) <> 'claimed' then
-      raise exception 'FAIL 13: the refused close for % changed the request', v_case.label;
-    end if;
-  end loop;
-  if (select count(*) from inbox_apply_holds) <> v_holds then
-    raise exception 'FAIL 13: a refused close changed the holds';
-  end if;
-
-  -- Well-formed variants are taken: a null time (the row has none), and a list that is empty.
-  perform pg_temp.t187_close(v_r, 'done', pg_temp.t187_skip_result(array[v_w], '[]'::jsonb));
-end $$;
-
--- =============================================================================================
--- 14. No skip_seen, or an id outside the skip: no hold
--- =============================================================================================
-do $$
-declare
-  v_a bigint := pg_temp.t187_item('test187:a');
-  v_b bigint := pg_temp.t187_item('test187:b');
-  v_r bigint;
-begin
-  insert into _t187 values ('a', v_a), ('b', v_b);
-
-  -- The worker before its rebuild: a skip and no skip_seen.
+  insert into _t187 values ('old', v_o);
+  -- Put everything else aside: the old-worker answer is the whole queue.
+  update attention_items
+     set state = 'archived', archived_at = now(), archived_by = 'phase23_187 setup', decision = '{"change": "test setup"}'::jsonb
+   where state in ('resolved', 'dismissed') and id <> v_o;
+  -- The worker before its rebuild: it reports a skip and no skip_seen.
   v_r := pg_temp.t187_request();
   perform pg_temp.t187_close(v_r, 'failed', jsonb_build_object(
     'lines', jsonb_build_array('1 could not be applied'), 'error', 'not_applied', 'archived', 0,
-    'skip', jsonb_build_array(v_a), 'claude', jsonb_build_object('started', true)));
-  if exists (select 1 from inbox_apply_holds where item_id = v_a) or v_a = any (pg_temp.t187_held()) then
-    raise exception 'FAIL 14: a close with no skip_seen wrote a hold';
+    'skip', jsonb_build_array(v_o), 'claude', jsonb_build_object('started', true)));
+  if exists (select 1 from inbox_apply_holds where item_id = v_o) or v_o = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 18: a failed close with no skip_seen wrote a hold';
+  end if;
+  if pg_temp.t187_open() <> '1/0' then
+    raise exception 'FAIL 18: the failed close left notices %, expected 1/0', pg_temp.t187_open();
   end if;
 
-  -- A time seen for an item the run did not skip: no hold either.
+  -- A later done close, listing nothing: 186's own arm (a failed request of the worker listed the
+  -- id and finished at or after the answer) still holds the notice open while the answer waits.
   v_r := pg_temp.t187_request();
-  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(array[v_a], jsonb_build_array(pg_temp.t187_seen(v_b))));
-  if exists (select 1 from inbox_apply_holds where item_id in (v_a, v_b)) then
-    raise exception 'FAIL 14: a hold was written for an id that is not both in skip and in skip_seen';
-  end if;
-
-  -- An id that is not in the queue at all is not held, and does not break the close.
-  v_r := pg_temp.t187_request();
-  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(
-    array[-5::bigint], jsonb_build_array(jsonb_build_object('id', -5, 'resolved_at', null))));
-  if exists (select 1 from inbox_apply_holds where item_id = -5) then
-    raise exception 'FAIL 14: an id outside the queue was held';
-  end if;
-end $$;
-
--- =============================================================================================
--- 15. A close removes the hold of an item that left the queue
--- =============================================================================================
-do $$
-declare
-  v_w bigint := (select id from _t187 where label = 'w');
-  v_r bigint := pg_temp.t187_request();
-begin
-  if not exists (select 1 from inbox_apply_holds where item_id = v_w) then
-    raise exception 'FAIL 15 (setup): W has no hold';
-  end if;
-  perform pg_temp.t187_archive(v_w);
-  -- Nothing removes the row until a close runs; held_items ignores it meanwhile.
-  if v_w = any (pg_temp.t187_held()) then
-    raise exception 'FAIL 15: an archived item is held';
-  end if;
   perform pg_temp.t187_close(v_r, 'done', '{"lines": ["Nothing new"], "archived": 0, "skip": []}'::jsonb);
-  if exists (select 1 from inbox_apply_holds where item_id = v_w) then
-    raise exception 'FAIL 15: the hold of an item that left the queue survived a close';
+  if pg_temp.t187_open() <> '1/0' then
+    raise exception 'FAIL 18: a done close closed the notice while the unapplied answer waited (%)', pg_temp.t187_open();
   end if;
-end $$;
+  -- The sync and the worker still see the answer as unheld: the third arm decides nothing else.
+  if pg_temp.t187_sync_request(pg_temp.t187_sync()) is null then
+    raise exception 'FAIL 18: the sync filed nothing for an answer that holds no hold';
+  end if;
+  update agent_requests set state = 'cancelled' where kind = 'inbox_feedback' and state = 'queued';
 
--- =============================================================================================
--- 16. A queue of held answers alone gets no follow-up
--- =============================================================================================
-do $$
-declare
-  v_c bigint := pg_temp.t187_item('test187:c');
-  v_d bigint;
-  v_r bigint;
-  v_follow bigint;
-  v_row record;
-begin
-  insert into _t187 values ('c', v_c);
-  -- Put everything else aside: C is the whole queue, and it is held.
-  update attention_items
-     set state = 'archived', archived_at = now(), archived_by = 'phase23_187 setup',
-         decision = '{"change": "test setup"}'::jsonb
-   where state in ('resolved', 'dismissed') and id <> v_c;
+  -- Answered again after the failed run: a new answer, the arm no longer holds it.
+  perform pg_temp.t187_reanswer(v_o);
   v_r := pg_temp.t187_request();
-  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(array[v_c], jsonb_build_array(pg_temp.t187_seen(v_c))));
-  if pg_temp.t187_held() <> array[v_c] then
-    raise exception 'FAIL 16 (setup): C is not held: %', pg_temp.t187_held();
+  perform pg_temp.t187_close(v_r, 'done', '{"lines": ["Nothing new"], "archived": 0, "skip": []}'::jsonb);
+  if pg_temp.t187_open() <> '0/0' then
+    raise exception 'FAIL 18: an answer given again still held the notice (%)', pg_temp.t187_open();
   end if;
-
-  -- A run that archived something, leaving only a held answer: nothing to follow up.
-  v_r := pg_temp.t187_request();
-  v_follow := pg_temp.t187_close(v_r, 'done', '{"lines": ["1 answer applied"], "archived": 1, "skip": []}'::jsonb);
-  if v_follow is not null then
-    raise exception 'FAIL 16: a follow-up % was filed for a queue of held answers alone', v_follow;
-  end if;
-
-  -- With an unheld row also waiting, the follow-up is filed, as in 186, with the close's own skip.
-  v_d := pg_temp.t187_item('test187:d');
-  v_r := pg_temp.t187_request();
-  v_follow := pg_temp.t187_close(v_r, 'done', '{"lines": ["1 answer applied"], "archived": 1, "skip": []}'::jsonb);
-  if v_follow is null then
-    raise exception 'FAIL 16: no follow-up was filed with an unheld row waiting';
-  end if;
-  select state, params into v_row from agent_requests where id = v_follow;
-  if v_row.state <> 'queued'
-     or v_row.params is distinct from jsonb_build_object('trigger', 'followup', 'after', v_r, 'skip', '[]'::jsonb) then
-    raise exception 'FAIL 16: the follow-up reads %', row_to_json(v_row);
-  end if;
-  update agent_requests set state = 'cancelled' where id = v_follow;
 end $$;
 
 -- =============================================================================================
