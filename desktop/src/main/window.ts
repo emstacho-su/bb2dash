@@ -142,6 +142,11 @@ function trackWindowState(window: BrowserWindow): void {
 
 /** Windows that are showing the failed-load page (task 27): they have no app in them. */
 const failedPages = new WeakSet<BrowserWindow>();
+/** Windows whose failed-load page is scheduled but not yet loading (see wireChrome). */
+const failedPageQueued = new WeakSet<BrowserWindow>();
+const failedPageTimers = new WeakMap<BrowserWindow, NodeJS.Timeout>();
+/** If loading never reports that it stopped, the failed-load page is shown this long after the failure. */
+const FAILED_PAGE_FALLBACK_MS = 1_000;
 
 /**
  * R2-7 — is this window showing the app, or is it blank?
@@ -215,6 +220,8 @@ function attachLoader(window: BrowserWindow, appUrl: string, initialUrl: string 
       (error: unknown) => {
         loading = false;
         logError(`could not load ${url}`, error);
+        // What the load's own promise rejected with, for the e2e suite (a no-op outside the test variable).
+        recordEvent('load-rejected', { url, message: error instanceof Error ? error.message : String(error) });
         const delay = LOAD_RETRY_DELAYS_MS[Math.min(attempt, LOAD_RETRY_DELAYS_MS.length - 1)];
         attempt += 1;
         if (attempt > LOAD_RETRY_DELAYS_MS.length) {
@@ -279,19 +286,46 @@ function wireChrome(window: BrowserWindow, appUrl: string): void {
   // Only a real failure of the main frame: never an aborted load (code -3), never a subframe.
   contents.on('did-fail-load', (_event, errorCode, _description, _url, isMainFrame) => {
     if (!showsLoadFailed(errorCode, isMainFrame)) return;
-    // Already showing it: a retry that fails again leaves the page as it is.
-    if (failedPages.has(window) && contents.getURL().startsWith('data:')) return;
+    // Already showing it, or about to: a retry that fails again leaves the page as it is.
+    if (failedPages.has(window) && (failedPageQueued.has(window) || contents.getURL().startsWith('data:'))) return;
     failedPages.add(window);
+    failedPageQueued.add(window);
     recordEvent('load-failed', { errorCode });
-    contents.loadURL(failedLoadDataUrl(appUrl)).catch((error: unknown) => {
-      logError('the failed-load page could not be shown', error);
+    // Not now. Electron settles the failing load's promise when loading stops (did-stop-loading),
+    // with the error it recorded; a navigation started before that supersedes it, and the promise
+    // rejects with ERR_ABORTED (-3) in place of the real code. deeplink.ts treats -3 as benign, so an
+    // offline deep link would be reported as a success and the log would lose the cause (S-2, observed
+    // in test/e2e/chrome.spec.ts). So the page is shown on the turn after loading has stopped, and a
+    // timer shows it anyway if loading never reports that it stopped.
+    const fallback = setTimeout(showFailedPage, FAILED_PAGE_FALLBACK_MS);
+    fallback.unref?.();
+    failedPageTimers.set(window, fallback);
+  });
+
+  const showFailedPage = (): void => {
+    const timer = failedPageTimers.get(window);
+    if (timer !== undefined) clearTimeout(timer);
+    failedPageTimers.delete(window);
+    setImmediate(() => {
+      failedPageQueued.delete(window);
+      if (window.isDestroyed() || !failedPages.has(window)) return;
+      contents.loadURL(failedLoadDataUrl(appUrl)).catch((error: unknown) => {
+        logError('the failed-load page could not be shown', error);
+      });
     });
+  };
+
+  contents.on('did-stop-loading', () => {
+    if (failedPageQueued.has(window) && failedPageTimers.has(window)) showFailedPage();
   });
 
   // The app loaded over the page (the Retry link, or the backoff): the window has an app in it again.
   contents.on('did-finish-load', () => {
     try {
-      if (!contents.getURL().startsWith('data:')) failedPages.delete(window);
+      // A failed load also finishes (on Chromium's own error page, while getURL still names the address
+      // that failed), so a finish while the failed-load page is still being scheduled is the failure
+      // and not the app. Only an http(s) page after that counts.
+      if (!failedPageQueued.has(window) && /^https?:/.test(contents.getURL())) failedPages.delete(window);
     } catch {
       // A destroyed window has nothing to clear.
     }
