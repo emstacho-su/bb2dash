@@ -139,3 +139,24 @@ the two course text tables are as the brief lists them. `workspace_runner` execu
 bucket, `bb-files`. No role `workspace_ingest_runner`. 41 requests, none open; 11 conversations.
 The counts the challenge round cited (work rows, score rows, byte sizes) were not read again:
 check 21 holds them on synthetic rows.
+
+## Worker branches
+
+Cut from the freeze commit 40cf386 and pushed, 2026-10-09 00:2xZ:
+`git worktree list | grep -c "feat/workspace-24"` gives 5.
+
+| worker | worktree | branch | started | this run |
+|---|---|---|---|---|
+| W-76, db | `bb2dash-wt-24-db` | `feat/workspace-24-db` | at the freeze | tasks 13 to 20, 49, 50 and task 22's lines |
+| W-77, runner | `bb2dash-wt-24-runner` | `feat/workspace-24-runner` | at the freeze | tasks 28 to 35 |
+| W-78, search and embed | `bb2dash-wt-24-search` | `feat/workspace-24-search` | at the freeze | tasks 23 to 26 |
+| W-79, ingest, sync and containers | `bb2dash-wt-24-ingest` | `feat/workspace-24-ingest` | at the freeze | tasks 36 and 39; 37 and 38 wait for W-77's task 32 and W-78's task 25 on the phase branch |
+| W-85, umbrella | not cut | | waits for the follow-ups' bb2dash-stack PR on that `origin/main` | task 40 |
+
+All four are Sonnet 5.5. The SQL runner answers `--ping` in `bb2dash-wt-24` and in
+`bb2dash-wt-24-db` ("connected as db_test_runner").
+
+**How a migration is proved.** The test login cannot run DDL, and no worker reaches the database
+by any other way. W-76 hands back each migration with its unit and the unit's red run. The PM runs
+`begin; <migration>; <unit>; rollback;` as the dry run of task 21 before a migration goes to Stack
+for his word, and the unit's green run through the runner follows the apply.
