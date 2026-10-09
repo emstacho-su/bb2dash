@@ -1,0 +1,26 @@
+{
+  "name": "bb2dash-workspace-ingest",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Workspace ingest worker and the parser's loop (Phase 24a): two services of one image that meet only in the exchange folder. The worker claims uploads and remembered items through the four workspace_ingest_runner functions, downloads and checks the bytes, hands a parsed file to the parser, puts the units and embeds them; the parser reads one request at a time and answers with the units.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "esbuild src/main.ts src/parser-main.ts src/healthcheck.ts --bundle --platform=node --format=esm --target=node22 --outdir=dist --outbase=src --packages=external --external:../../ingest/*",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.9.2",
+    "@types/pg": "8.23.1",
+    "@vitest/coverage-v8": "5.0.1",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "vitest": "5.0.1"
+  }
+}

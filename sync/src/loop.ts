@@ -39,6 +39,8 @@ export interface FilesStepResult {
   files: FilesSummary;
   stopped: 'session_expired' | null;
   embedError: string | null;
+  /** Units this pass posted; with none, an embed failure is a report line and not the sync's error. */
+  unitsPosted: number;
 }
 
 export interface PassDeps {
@@ -67,7 +69,7 @@ function message(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).split('\n')[0] ?? '';
 }
 
-const NO_FILES: FilesStepResult = { files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null };
+const NO_FILES: FilesStepResult = { files: { pulled: 0, not_pulled: [] }, stopped: null, embedError: null, unitsPosted: 0 };
 
 /** Steps 8–10 for a run that has folded: the files and the embed step (unless the fold failed), then the close. */
 async function finishRun(d: PassDeps, id: string, outcome: RunOutcome, attempts: number): Promise<'done' | 'failed'> {
@@ -87,6 +89,7 @@ async function finishRun(d: PassDeps, id: string, outcome: RunOutcome, attempts:
     filesStopped: files.stopped,
     filesError,
     embedError: files.embedError,
+    unitsPosted: files.unitsPosted,
   });
   await d.rpc.close(id, state, report);
   d.log(`pass: request ${id} closed ${state}`);

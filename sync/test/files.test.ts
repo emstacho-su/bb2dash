@@ -223,7 +223,7 @@ describe('the files step', () => {
     const r = await runFilesStep(p);
     expect(r.files.pulled).toBe(1);
     expect(stored[0]!.textStatus).toBe('extracted');
-    expect(p.embed).not.toHaveBeenCalled();
+    expect(p.embed).toHaveBeenCalledTimes(1);
   });
 
   it('a submission already in Storage (409 or Duplicate) is reported in not_pulled, never done, never stored', async () => {
@@ -302,7 +302,7 @@ describe('the files step', () => {
     const r = await runFilesStep(p);
     expect(r.files.not_pulled).toEqual([{ id: '61', reason: 'bb_file_text 500: boom' }]);
     expect(stored.map((s) => s.id)).toEqual(['62']);
-    expect(p.embed).not.toHaveBeenCalled();
+    expect(p.embed).toHaveBeenCalledTimes(1);
   });
 
   it('an extraction that fails still stores the bytes, with text_status failed', async () => {
@@ -333,26 +333,37 @@ describe('the files step', () => {
     ]);
   });
 
-  it('spawns embed_corpus.mjs once after at least one unit, and never on none', async () => {
+  it('runs the embed loop once on every pass, with or without new units (Phase 24a)', async () => {
     const two = ports([row('81'), row('82')]);
-    await runFilesStep(two.p);
+    const withUnits = await runFilesStep(two.p);
     expect(two.p.embed).toHaveBeenCalledTimes(1);
+    expect(withUnits.unitsPosted).toBe(2);
 
     const none = ports([row('83')], { extract: vi.fn(async () => []) });
-    await runFilesStep(none.p);
-    expect(none.p.embed).not.toHaveBeenCalled();
+    const noUnits = await runFilesStep(none.p);
+    expect(none.p.embed).toHaveBeenCalledTimes(1);
+    expect(noUnits.unitsPosted).toBe(0);
 
     const empty = ports([]);
     const r = await runFilesStep(empty.p);
-    expect(empty.p.embed).not.toHaveBeenCalled();
+    expect(empty.p.embed).toHaveBeenCalledTimes(1);
     expect(r.files).toEqual({ pulled: 0, not_pulled: [] });
+    expect(r.unitsPosted).toBe(0);
   });
 
-  it('an embed that exits non-zero is the step\'s embedError', async () => {
+  it("an embed that exits non-zero is the step's embedError", async () => {
     const { p } = ports([row('84')], { embed: vi.fn(async () => ({ code: 1, tail: 'embed-corpus 401' })) });
     const r = await runFilesStep(p);
-    expect(Object.keys(r).sort()).toEqual(['embedError', 'files', 'stopped']);
+    expect(Object.keys(r).sort()).toEqual(['embedError', 'files', 'stopped', 'unitsPosted']);
     expect(r.embedError).toBe("embed_corpus.mjs's loop ended 1: embed-corpus 401");
+    expect(r.unitsPosted).toBe(1);
+  });
+
+  it('an embed that exits non-zero on a pass with no new unit is still reported, with unitsPosted 0', async () => {
+    const { p } = ports([], { embed: vi.fn(async () => ({ code: 1, tail: 'one unit cannot embed' })) });
+    const r = await runFilesStep(p);
+    expect(r.unitsPosted).toBe(0);
+    expect(r.embedError).toBe("embed_corpus.mjs's loop ended 1: one unit cannot embed");
   });
 });
 

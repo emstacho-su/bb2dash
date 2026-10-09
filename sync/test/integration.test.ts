@@ -304,7 +304,7 @@ describe('the runner end to end, on fakes', () => {
       await until(() => db.applyAsked.length === 2, 'the second request to close and the Inbox apply request to be asked for');
       await again.stop();
       expect(second.state).toBe('done');
-      expect(passOrder(db.events)).toEqual(['claim', 'register', 'crawl', 'wait', 'files', 'close', 'apply_request']);
+      expect(passOrder(db.events)).toEqual(['claim', 'register', 'crawl', 'wait', 'files', 'embed', 'close', 'apply_request']);
       // An empty answered queue: asked, and nothing filed.
       expect(db.applyAsked).toEqual([String(first), String(second.id)]);
       expect(db.applyFiled).toHaveLength(1);

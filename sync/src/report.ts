@@ -44,6 +44,11 @@ export interface ReportInput {
   filesError?: string | null;
   /** The embed step's failure, if it ran and failed. */
   embedError?: string | null;
+  /**
+   * Units the files step posted. With exactly 0, an embed failure is a report line and never the
+   * sync's error (Phase 24a): a failed sync files no Inbox apply request. Left out, it fails the sync.
+   */
+  unitsPosted?: number;
 }
 
 const EMPTY_FILES: FilesSummary = Object.freeze({ pulled: 0, not_pulled: [] }) as FilesSummary;
@@ -114,8 +119,12 @@ export function buildReport(input: ReportInput): { state: 'done' | 'failed'; rep
 
   if (input.embedError) {
     const message = clip(input.embedError, ERROR_MAX);
-    lines.push(`Sync runner: embedding failed: ${message}`);
-    error = error ?? `embed failed: ${message}`;
+    if (input.unitsPosted === 0) {
+      lines.push(`Embedding did not finish: ${message}; it is tried again at the next sync`);
+    } else {
+      lines.push(`Sync runner: embedding failed: ${message}`);
+      error = error ?? `embed failed: ${message}`;
+    }
   }
 
   return {
