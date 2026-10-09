@@ -343,3 +343,4 @@ gives exit 2, reason `config`, the fixed keys.
 
 Defaults: `status: null` from a killed child is now mapped to 1 inside `runCommand`, so the runner sees 1
 rather than null (same outcome: exit 1, reason `error`); one re-read per run, not one per refused row.
+- Follow-up (security review, LOW): the registration script also refuses the four typographic single quotes U+2018 to U+201B in a folder path or node's path (shared `Test-UnsafePath`, written as [char]0x2018 etc.; the file stays ASCII); test added in `register-exports.test.mjs`; path literal count 1, control characters 0, non-ASCII bytes 0, parse errors 0.

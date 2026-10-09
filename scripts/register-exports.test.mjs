@@ -46,7 +46,7 @@ test('it refuses the four typographic single quotes, named by code point, and th
   // PowerShell reads U+2018 to U+201B as single quotes, so one in a folder path would end the quoted
   // literal inside -Command. They are written as [char]0x... so that the file holds no non-ASCII byte.
   for (const point of ['2018', '2019', '201A', '201B']) {
-    assert.match(source, new RegExp(`\[char\]0x${point}`, 'i'), `U+${point}`);
+    assert.ok(source.toLowerCase().includes(`[char]0x${point}`.toLowerCase()), `U+${point}`);
   }
   assert.doesNotMatch(source, /[^\x00-\x7F]/);
   assert.ok(source.includes('Test-UnsafePath $Value'), 'the folder check uses the shared test');
