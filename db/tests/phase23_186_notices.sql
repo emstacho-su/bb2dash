@@ -225,18 +225,13 @@ declare
   v_y bigint := (select id from _t186 where label = 'y');
   v_r bigint;
   v_follow bigint;
-  v_seen_at timestamptz;
 begin
   -- (a) A run could not apply X.
   v_r := pg_temp.t186_request();
-  select q.resolved_at into v_seen_at from v_inbox_queue q where q.id = v_x;
   set local role inbox_apply_runner;
   perform inbox_apply_close(v_r, 'failed', jsonb_build_object(
     'lines', jsonb_build_array('1 could not be applied'), 'error', 'not_applied', 'archived', 0,
-    'skip', jsonb_build_array(v_x), 'claude', jsonb_build_object('started', true),
-    -- 187: since the hold is a stored fact written from skip_seen (the time the run was handed for
-    -- each skipped id), this failed close hands it back as the worker does. 186's close ignores the key.
-    'skip_seen', jsonb_build_array(jsonb_build_object('id', v_x, 'resolved_at', v_seen_at))));
+    'skip', jsonb_build_array(v_x), 'claude', jsonb_build_object('started', true)));
   reset role;
   if pg_temp.t186_open() <> '1/0' then
     raise exception 'FAIL 3a: a failed close left notices %, expected 1/0 (failed/login)', pg_temp.t186_open();
@@ -255,7 +250,7 @@ begin
   end if;
 
   -- (c) A request a sync files knows no skip list. It finishes without touching X (the day's
-  --     batch was full of other rows): the failed run's own skip list still holds the notice (since 187 as a stored hold, written by that close from skip_seen).
+  --     batch was full of other rows): the failed run's own skip list still holds the notice.
   v_r := pg_temp.t186_request();
   set local role inbox_apply_runner;
   perform inbox_apply_close(v_r, 'done', '{"lines": ["6 recorded only"], "archived": 0, "skip": []}'::jsonb);

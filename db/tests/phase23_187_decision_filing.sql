@@ -9,6 +9,8 @@
 --   2. inbox_decision_logged adds log_path and logged_at once, and the row leaves the list
 --   3. inbox_decision_skipped marks a row with {"skipped": true, "why"} and no path, once; such a
 --      row is on neither list; a row that is filed or skipped cannot be skipped again
+--  3b. R5: a row with a logged write (inbox_apply_writes) is refused by inbox_decision_skipped,
+--      marks nothing and stays on the unfiled list
 --   4. refusals: a blank or a numeric log path, a missing note path, a blank why / log path
 --   5. the other reads and stamps still refuse what 182 refused (not archived, not inbox-decision/1)
 --   6. inbox_apply_runner and authenticated can execute none of the four functions
@@ -277,6 +279,48 @@ begin
   -- And o5, left alone, is still the one unfiled row of this unit besides the unlogged ones.
   if pg_temp.t187f_unfiled() <> array[v_o5] then
     raise exception 'FAIL 3: unfiled is %, expected o5 alone', pg_temp.t187f_unfiled();
+  end if;
+end $$;
+
+-- =============================================================================================
+-- 3b. R5: a row with a logged write is never skipped
+-- =============================================================================================
+-- The exporter skips a test question by its ref, entity and missing course, and the worker's role
+-- can raise a row of that shape. If a run wrote for the item (inbox_apply_writes), the decision must
+-- reach the day's log, so the function refuses. The fixture row is written as inbox_apply_runner,
+-- the one login with insert on the log (181); the foreign keys are checked as the table's owner.
+do $$
+declare
+  v_w1 bigint := pg_temp.t187f_decided('w1', 40);
+  v_w2 bigint := pg_temp.t187f_decided('w2', 39);
+  v_row record;
+begin
+  insert into _t187f values ('w1', v_w1), ('w2', v_w2);
+  set local role inbox_apply_runner;
+  insert into inbox_apply_writes (item_id, table_name, op, new_row) values (v_w1, 'assignments', 'insert', '{}'::jsonb);
+  reset role;
+
+  if inbox_decision_skipped(v_w1, 'a test question of an acceptance run') then
+    raise exception 'FAIL 3b: a row with a logged write was skipped';
+  end if;
+  select decision_filed_at, decision_filed into v_row from attention_items where id = v_w1;
+  if v_row.decision_filed_at is not null or v_row.decision_filed is not null then
+    raise exception 'FAIL 3b: the refused skip marked the row: %', row_to_json(v_row);
+  end if;
+  if not v_w1 = any (pg_temp.t187f_unfiled()) then
+    raise exception 'FAIL 3b: the refused row left the unfiled list';
+  end if;
+  -- It can still be filed like any other row.
+  if not inbox_decision_filed(v_w1, '{"note_path":"projects/bb2dash/decisions/inbox-w1.md"}'::jsonb) then
+    raise exception 'FAIL 3b: the refused row could not be filed';
+  end if;
+
+  -- A row with no logged write is skipped as before.
+  if not inbox_decision_skipped(v_w2, 'a test question of an acceptance run') then
+    raise exception 'FAIL 3b: a row with no logged write was not skipped';
+  end if;
+  if v_w2 = any (pg_temp.t187f_unfiled()) then
+    raise exception 'FAIL 3b: the skipped row is still unfiled';
   end if;
 end $$;
 
