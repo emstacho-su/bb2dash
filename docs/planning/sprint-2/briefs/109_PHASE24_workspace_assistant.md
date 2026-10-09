@@ -225,7 +225,10 @@ most are edited in place and say "freeze amendment".
 * **W-85's files** gain `scripts/lib/accept-docker.mjs` and `scripts/lib/accept-constants.mjs`
   with their tests: the services a compose command may name are listed there
   (`accept-docker.mjs:59`, read on bb2dash-stack `main` at c4a54f8).
-* **Item 23** of 109a: put to Stack in the session's first report. The freeze waits for his line.
+* **Item 23** of 109a, answered by Stack on 2026-10-08: "a". The hybrid search keeps its ranking
+  and uses no index in this phase; both vector columns get their HNSW index; proof 4 stands as
+  written. Nothing in the store's clause moves.
+* **Frozen 2026-10-08** on that answer. Worker branches are cut from this commit.
 
 ## Why
 

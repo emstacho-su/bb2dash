@@ -311,6 +311,8 @@ a question put to him before the freeze, and the freeze waits for his answer.
     * **His answer** is then written under this item on a line of its own, indented four spaces,
       that begins with the bold words `His answer to item 23` and carries its date. Brief 109's
       task 12 looks for that line, and the freeze waits for it.
+
+    **His answer to item 23, 2026-10-08:** "a". The assistant's ranking stays as it is. Every vector column gets its index in 24a, and the assistant's search moves onto the index later, when its timed median passes 60 ms. Put to him in the 24a session's first report and again with the probes' results, with the timings above (the plain search on the index at 1.0 ms warm; the assistant's search at a median of 30.0 ms over seven calls).
 24. **Direct paths to the store's tables: one is closed, three older ones stay, and the page has
     two of its own.** The rule "only through named functions" holds for every service 24a builds,
     for text and for vectors. It was not true of the course half before.

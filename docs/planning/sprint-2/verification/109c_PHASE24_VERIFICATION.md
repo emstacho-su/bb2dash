@@ -125,5 +125,17 @@ beside them. The first P-4 run overlapped one and is not the run that counts.
 
 Prepared: the nineteen JSON files, the three text files, the routine wording
 (`workspace/test/fixtures/contract24/`, its `README.md` with every SQL signature) and the PM's test.
-**Not frozen yet:** `grep -c "^    \*\*His answer to item 23" docs/planning/sprint-2/briefs/109a_PHASE24_open_questions.md`
-gives 0, so no worker branch is cut.
+**Frozen 2026-10-08** on Stack's answer to item 23, "a", given in the terminal after the probes'
+report: `grep -c "^    \*\*His answer to item 23" docs/planning/sprint-2/briefs/109a_PHASE24_open_questions.md`
+gives 1; `ls workspace/test/fixtures/contract24/*.json | wc -l` gives 19 and each parses (the PM's
+test, 25 of 25); the worktree count is under "Worker branches" below.
+
+**The facts re-read at the cut** (one read-only SELECT on prod, 2026-10-09 00:13Z; `git fetch` at
+00:15Z). `origin/main` is a58be34, unmoved; bb2dash-stack `origin/main` is c4a54f8, so the
+follow-ups have not merged and W-85 is not cut. No migration named 187 to 199 is on prod; the newest
+is `186_inbox_apply_notices`. One vector column. A sync has run since the brief was written: 1,005
+units and 2,039 vectors (the brief read 982 and 2,011), none without a vector. The four policies on
+the two course text tables are as the brief lists them. `workspace_runner` executes the five. One
+bucket, `bb-files`. No role `workspace_ingest_runner`. 41 requests, none open; 11 conversations.
+The counts the challenge round cited (work rows, score rows, byte sizes) were not read again:
+check 21 holds them on synthetic rows.
