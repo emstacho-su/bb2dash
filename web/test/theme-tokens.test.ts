@@ -596,3 +596,12 @@ describe('globals.css, direction D', () => {
     }
   });
 });
+
+describe('the visual round: radios (V-9)', () => {
+  const css = GLOBALS.replace(COMMENTS, '');
+
+  it('a radio is drawn in the ink: one weightless rule on :where(input[type=radio]) with accent-color', () => {
+    const rule = /:where\(input\[type='radio'\]\)\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule.replace(/\s+/g, ' ').trim()).toBe('accent-color: var(--color-accent);');
+  });
+});
