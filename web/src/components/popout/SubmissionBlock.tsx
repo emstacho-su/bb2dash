@@ -48,6 +48,7 @@ import { FileOpenAction } from '@/components/materials/FileOpenAction';
 import { ScoreHistory } from '@/components/grades/ScoreHistory';
 import { UploadDropZone } from '@/components/grades/UploadDropZone';
 import { QueryState, isQueryUnresolved } from '@/components/shared/QueryState';
+import { MarkedLabel } from '@/components/shell/icons';
 import tokens from '@/styles/tokens.module.css';
 import styles from './SubmissionBlock.module.css';
 
@@ -92,7 +93,7 @@ function FileRow({
               rel="noreferrer"
               title="bb2dash cannot submit for you — open Blackboard and attach it there."
             >
-              {STAGED_LABEL}
+              <MarkedLabel label={STAGED_LABEL} />
             </a>
           ) : (
             <span className={styles.stagedLink}>{STAGED_LABEL}</span>
@@ -172,7 +173,7 @@ export function SubmissionBlock({
             {submission.text}
           </span>
           {submission.attemptStatus && (
-            <span className={styles.note}>last attempt: {submission.attemptStatus}</span>
+            <span className={styles.note}>last attempt: {submission.attemptText}</span>
           )}
           {grade.last_attempt_submitted && (
             <span className={styles.note}>
@@ -182,7 +183,7 @@ export function SubmissionBlock({
           {attemptCount > 0 && (
             <span className={tokens.tagOutline}>{attemptsText(attemptCount, allowed)}</span>
           )}
-          <span className={tokens.mono} title="When a Blackboard sync last saw this.">
+          <span title="When a Blackboard sync last saw this.">
             seen {formatSeenAt(grade.seen_at)}
           </span>
         </div>

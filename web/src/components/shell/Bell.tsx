@@ -19,7 +19,7 @@
  * is what runs on every screen.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -30,6 +30,9 @@ import {
   type AnnouncementCard,
 } from '@/lib/queries.announcements';
 import { BellIcon } from './icons';
+import tokens from '@/styles/tokens.module.css';
+import { useEscapeFocus } from './useEscapeFocus';
+import { useExit } from './useExit';
 import { usePopover } from './usePopover';
 import styles from './Bell.module.css';
 
@@ -38,6 +41,9 @@ const DROPDOWN_LIMIT = 8;
 
 export function Bell() {
   const [popover, anchor] = usePopover<HTMLSpanElement>();
+  const [exit, exitRef] = useExit(popover.open);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  useEscapeFocus(popover.open, buttonRef);
   const unread = useUnreadAnnouncements();
   const list = useQuery({ ...allAnnouncementsOptions(), enabled: popover.open });
 
@@ -59,11 +65,13 @@ export function Bell() {
     <span ref={anchor} className={styles.anchor}>
       <button
         type="button"
-        className={popover.open ? styles.icOpen : styles.ic}
+        ref={buttonRef}
+        className={`${popover.open ? styles.icOpen : styles.ic} ${tokens.tip}`}
         onClick={() => popover.toggle()}
         aria-expanded={popover.open}
         aria-haspopup="menu"
-        title="Announcements"
+        data-tip="Announcements"
+        aria-label={badge > 0 ? `Announcements ${badge}` : 'Announcements'}
       >
         <BellIcon />
         <span className="sr-only">Announcements</span>
@@ -74,8 +82,10 @@ export function Bell() {
         )}
       </button>
 
-      {popover.open && (
+      {exit.present && (
         <BellPanel
+          panelRef={exitRef}
+          leaving={exit.leaving}
           rows={rows}
           state={list.isPending ? 'loading' : list.isError ? list.error.message : 'ready'}
           onNavigate={popover.close}
@@ -87,17 +97,28 @@ export function Bell() {
 
 /** The pop-down itself: a state line, the rows, and "See all". */
 function BellPanel({
+  panelRef,
+  leaving,
   rows,
   state,
   onNavigate,
 }: {
+  panelRef: (node: HTMLElement | null) => void;
+  /** The panel has closed and stays for one exit. */
+  leaving: boolean;
   rows: AnnouncementCard[];
   /** 'loading' | 'ready' | an error message. */
   state: string;
   onNavigate: () => void;
 }) {
   return (
-    <div className={styles.panel} role="menu" aria-label="Announcements">
+    <div
+      ref={panelRef}
+      className={styles.panel}
+      role="menu"
+      aria-label="Announcements"
+      data-leaving={leaving ? '' : undefined}
+    >
       <div className={styles.head}>Announcements</div>
 
       {state === 'loading' && <div className={styles.note}>Loading…</div>}

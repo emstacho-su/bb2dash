@@ -21,14 +21,18 @@
  * placeholder on both sides; the panel follows on the next render. The panels
  * themselves are not gated, because `AssignmentDetailBody` is shared with the
  * assignment page, which has no Suspense boundary to hydrate inside.
+ *
+ * Leaving (task 29): when the parameter goes the popout is kept for one exit (`--motion-exit-lg`),
+ * marked `data-leaving`, with the item it last showed. `close` is called at once either way.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { parseItemParam } from '@/lib/queries.popout';
 import { useHydrated } from '@/lib/use-hydrated';
 import { AssignmentPopout } from './AssignmentPopout';
 import { SessionPopout } from './SessionPopout';
+import { EXIT_TOKEN_LG, useExit } from '@/components/shell/useExit';
 import { PopoutShell } from './PopoutShell';
 import styles from './Popout.module.css';
 
@@ -42,7 +46,11 @@ export function ItemPopout() {
   const hydrated = useHydrated();
 
   const raw = searchParams.get('item');
-  const target = parseItemParam(raw);
+  // The item last shown, kept so the popout can leave with its own words.
+  const [shownRaw, setShownRaw] = useState(raw);
+  if (raw !== null && raw !== shownRaw) setShownRaw(raw);
+  const [exit, exitRef] = useExit(parseItemParam(raw) !== null, EXIT_TOKEN_LG);
+  const target = parseItemParam(raw ?? shownRaw);
 
   const close = useCallback(() => {
     const next = new URLSearchParams(searchParams.toString());
@@ -51,10 +59,12 @@ export function ItemPopout() {
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }, [pathname, router, searchParams]);
 
-  if (!target) return null;
+  if (!target || !exit.present) return null;
 
   return (
     <PopoutShell
+      leaving={exit.leaving}
+      onPanelNode={exitRef}
       label={target.kind === 'assignment' ? 'Assignment detail' : 'Session detail'}
       onClose={close}
     >

@@ -447,6 +447,12 @@ for (const theme of THEMES) {
     await quietSync(context);
     await openAt(page, PHONE, '/');
 
+    // The first Tab stop is "Skip to content", and Enter on it puts focus on the content pane.
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('main#content')).toBeFocused();
+
     for (const [name, control] of Object.entries(barControls(page))) {
       await expectReachable(page, `reachability [${theme}] ${name}`, control);
     }

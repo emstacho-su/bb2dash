@@ -319,3 +319,151 @@ route /planner [light]: box scrollWidth=764 clientWidth=368
 route /course/IST.466/grades [dark]: box scrollWidth=620 clientWidth=345
 route /course/IST.466/grades [light]: box scrollWidth=620 clientWidth=345
 ```
+
+## Resume 2: the mount, the marks, the sweep
+
+Start checks (each by itself, all exit 0 and one line): `data-theme='light'` in `globals.css`, `.errorNotice` and `.tip` in `tokens.module.css`,
+`motion-control` and `size-target` in `globals.css`, `attemptText` in `queries.grades.ts`, `ThemeMenu.tsx` present on `origin/feat/styling-22`.
+
+### Task 10, the mount (6509975)
+
+One `<ThemeMenu />` line in `TopNav.tsx`, in the account menu between the desktop update row and Sign out. `cd web && npx vitest run test/ThemeMenu.test.tsx test/TopNav.update.test.tsx test/TopNav.fold.test.tsx`:
+3 files, 47 passed, exit 0. `grep -c "<ThemeMenu" web/src/components/shell/TopNav.tsx` prints 1. `TopNav.search` and `TopNav.workspace` tests also pass.
+
+### Task 31, `icons.tsx` (6e023d3), pushed by itself
+
+`Mark` (five marks: caret right, down, left, close, arrow up right), `MarkedLabel` and `MARK_CHAR` (six characters by name) are in
+`icons.tsx`; the bell and Sync are redrawn on the 256 grid (Phosphor regular paths) and `SyncButton.tsx`'s own 24-grid icon is gone
+(`grep -c 'viewBox="0 0 24 24"' web/src/components/shell/SyncButton.tsx` prints 0). `Mark.module.css` sizes a mark at `1em`.
+`git grep -c "export const MARK_CHAR" -- web/src/components/shell/icons.tsx` prints one line. `cd web && npx vitest run test/marks.test.tsx test/TopNav.search.test.tsx test/SyncButton.test.tsx test/Bell.test.tsx test/ItemPopout.test.tsx test/SubmissionBlock.test.tsx test/AssignmentPopout.test.tsx test/token-audit.test.ts`:
+8 files, 208 passed, exit 0; the six old files unedited. (`marks.test.tsx` was written with the component and not run red on its own; I did not stash the component to show it.)
+Mark characters before my own files of this task: `41 20`.
+The Phosphor paths are written from memory of the regular weight set and checked only by a test that each path is non-empty and distinct;
+nobody has looked at the drawn marks yet (the PM's shots 03, 06 and 28 are the first look).
+
+### Task 17, the sweep of the shell cluster
+
+`shell.json` is `{}` (every file at 0, taken out of the JSON). Printed lines:
+
+```
+Baseline sum (shell.json)      0
+Weight check (shell, popout)   (nothing, exit 1)
+Time check (shell paths)       (nothing, exit 1)
+Field check                    5 2 2
+No-select check (5 files)      5 0 0
+Strength check                 8 5
+Ring check (shell, popout)     17 0 0
+Red files (components/shell)   Bell.module.css, CourseSidebar.module.css, TopNav.module.css
+Notice files (popout)          components/popout/Popout.module.css
+```
+
+`git grep -c "cursor: progress"` over shell and popout: `Popout.module.css:1`, `SearchPanel.module.css:1`, `SyncButton.module.css:1`.
+`@starting-style`: Popout (2: the backdrop and the panel), Bell, NavSearch, SyncButton, TopNav (2: `.dd` and the phone menu), five files.
+`overscroll-behavior: contain`: Bell, SearchPanel, TopNav, Popout, four files. `backdrop-filter` in Popout: 0. `outline: none|0` in shell and popout: nothing (exit 1).
+`var(--color-panel)` in CourseSidebar 1, `var(--radius-control)` in SyncButton 1, `var(--shadow-mark)` in TopNav 1.
+`cd web && npm test`: 167 files, 3301 passed, exit 0. `npm run typecheck` exit 0. `npx eslint . --max-warnings 0` exit 0.
+`ScreenStub.tsx` (no importer) and `.stub`, `.stubTitle`, `.stubMeta` are deleted; `.stubBody` is swept. `TopNav.tsx:154`'s `padding: 0` is the class `.ddHeadFlush`.
+
+Defaults taken in the sweep: the Field and Strength rules for a disabled select/field carry `:disabled:not([aria-busy='true'])`
+for `SearchPanel`'s `.courseSelect` now (the other rules follow with task 37); the nav-search pill keeps the one ring and the field inside it is
+`outline-color: transparent` rather than `outline: none` (the Ring check counts the latter as a removed ring); `--size-nav-search-width` (240px) is used for the
+three 240 px literals of the shell (account menu, search field, course select) because it is the only declared name for that value.
+
+### Task 28, type (my part)
+
+`CourseSidebar` `.head` and `SearchPanel` `.modeBtn, .modeBtnActive` take `--font-body` (weights `--font-weight-medium` and `--font-weight-semibold`), `SubmissionBlock` `.attemptNo` takes
+`--font-body` and keeps its weight. The popout's "seen" stamp loses `tokens.mono` (the sha keeps it). `git grep -c "font-family: var(--font-heading)" -- <the three>` prints nothing (exit 1);
+`grep -c "tokens.mono" web/src/components/popout/SubmissionBlock.tsx` prints 1; Weight check over shell and popout prints nothing. Tests: SubmissionBlock, CourseSidebar, audit, type-tokens: all passed.
+
+### Task 29, panels leave
+
+RED: `cd web && npx vitest run test/useExit.test.tsx` before `useExit.ts` existed failed to resolve the import (1 file failed, no tests). GREEN: 8 passed. The hook is
+`const [exit, exitRef] = useExit(open, token?)` (the ref apart from the state, as `usePopover` does since R-51: the React Compiler lint reported 6 `react-hooks/refs` errors when they travelled in one object).
+It reads the panel's computed `--motion-exit` (the popout: `--motion-exit-lg`) when `open` goes false; 0 or unreadable means removed in that render.
+Panels using it: the account menu, the phone Menu (`TopNav.tsx`), Bell, Activity, the search popover (`NavSearch.tsx`; search's field goes at once, a new expansion is a new field), the Sync toast
+(`SyncButton.tsx`, keeping the words the toast had), and the popout where `ItemPopout` hosts it (`PopoutShell` gained `leaving` and `onPanelNode`; it calls `onClose` in the same tick).
+The row's command (10 test files) passed: 11 files with the audit, 225 passed, exit 0, the pre-existing files unedited. Printed lines:
+
+```
+git grep -c "var(--motion-exit)" -- web/src/components/shell        Bell 2, NavSearch 2, SyncButton 2, TopNav 4   (four files)
+git grep -c "var(--motion-exit-lg)" -- web/src/components/popout    Popout.module.css 3                            (one file)
+git grep -c "var(--ease-in)" -- shell popout                        the same five files
+Exit tokens                                                          3 0
+Time check over the shell paths                                      (nothing, exit 1)
+```
+`cd web && npm test`: 168 files, 3309 passed; `npm run typecheck` 0; `npx eslint . --max-warnings 0` 0; Audit green (shell.json stays `{}`).
+
+### Task 30, smooth sidebar and search
+
+`web/test/shell-motion.css.test.ts` first: RED 7 failed, 1 passed (the width transition, the keyframes' `width`, no transform on the drawer, no sign case); GREEN 8 passed with `NavSearch.css.test.ts`, `CourseSidebar.test.tsx`, `TopNav.search.test.tsx` and the audit (134 passed, exit 0; the three old files unedited).
+`git grep -n -E "(transition|animation)[a-z-]*:[^;]*width" -- web/src/components/shell` prints nothing (exit 1); Time check prints nothing. The closed drawer is `translateX(100%)` (today's `row-reverse`); the test fails when `--sidebar-side` moves and the sign does not.
+Harness `-g "open state 7|sidebar toggle|bar at"` on c9827fc: run 20261009T010533Z, 6 failed, all at the font check (see the finding under task 32): not a result for task 30. After the one-line override described there the same cases are covered by the final run below.
+
+### Task 32, keyboard polish
+
+RED: `shell-keyboard.test.tsx` (import of `SkipLink` unresolved) and `SyncButton.toast-timer.test.tsx` (3 failed: pointer, focus, Dismiss). GREEN: 9 files, 199 passed with the five old files unedited
+(`SyncButton`, `TopNav.search`, `TopNav.update`, `TopNav.workspace`, `Bell`), `TopNav.fold` and the audit. `cd web && npm test`: 171 files, 3335 passed; typecheck 0; eslint 0.
+`grep -c "Skip to content" "web/src/app/(app)/layout.tsx"` prints 1; `git grep -c "title=" -- TopNav.tsx Bell.tsx ActivityMenu.tsx NavSearch.tsx` prints nothing (exit 1); `grep -c "title={title}" web/src/components/shell/SyncButton.tsx` prints 1.
+Built: `SkipLink.tsx`, `useEscapeFocus.ts`; the account menu focuses its first row on open and takes Down, Up, Home and End (wrapping); Escape returns focus to the Account, Bell, Activity and Menu buttons; Dismiss focuses Sync;
+the toast's timer waits while the pointer or focus is on it (kept as "the toast that is held", so a toast removed under the pointer cannot leave the next one held); five icon buttons lose their `title` and carry `data-tip` and `tokens.tip`.
+The Dismiss case is in `SyncButton.toast-timer.test.tsx` (it needs the Sync stubs), not in `shell-keyboard.test.tsx`.
+
+`phone-width.spec.ts` `reachability` now presses Tab (the first stop is "Skip to content") and Enter (focus is on `main#content`) before the old steps. Harness `-g "reachability"`: run **20261009T012754Z**, exit 0, `2 passed`, 0 failed
+(on the tree with the globals override below, which was not committed).
+
+Two findings in W-67's files, not fixed by me:
+
+1. **`globals.css` line 24: the fonts `@import` is dropped by the production build.** The built CSS holds no `fonts.googleapis.com` import and `document.fonts.size` is 0 in the box, so the page runs on its fallback faces and
+   `phone-width.spec.ts`'s font check ("a face of Source Sans 3 with status loaded") fails every case that reads a width. Isolated with four builds: the `main` Inter import survives; an import whose URL holds
+   `Source+Serif+4:opsz,wght@8..60,600` is dropped (the comma and the `..` range), while `Source+Sans+3:wght@400;500`, a two-family URL and `Source+Serif+4:wght@600` all survive. The fix is one value in
+   `direction-d.json`'s `fontsHref` and `globals.css`: `family=Source+Serif+4:wght@600` (the Direction check compares `fontsHref`). For my harness runs I applied that one-line change to the working tree only, ran, and restored the file; `git status` on `globals.css` is clean.
+2. **`tokens.module.css` `.tip` doubles the accessible name.** `content: attr(data-tip)` is part of the name Chromium computes, so "Courses sidebar" became "Courses sidebarCourses sidebar" and `getByRole('button', { name: 'Courses sidebar', exact: true })` found nothing. The clean fix is
+   `content: attr(data-tip) / ''` (alt text for the generated content). Until then the four buttons carry an `aria-label` equal to their name (with the count: "Activity 3"), which wins over the generated content; Search already had one.
+
+### Task 34, captions and codes (my part)
+
+`SubmissionBlock.tsx:175` prints `submission.attemptText` (inside the `submission.attemptStatus &&` it had), and `SubmissionBlock.test.tsx:146` reads `'last attempt: needs grading'`, the one line the brief lets me edit
+(the test and the component were changed together, so there is no separate RED run for this one). `grep -c "submission.attemptText"` prints 1, `grep -c "last attempt: needs grading"` prints 1,
+`git diff --numstat origin/main...HEAD -- web/test/SubmissionBlock.test.tsx` prints `1 1` (after the commit; see below). `npx vitest run test/SubmissionBlock.test.tsx test/status-vocabulary.test.ts`: 2 files, 29 passed.
+
+### Task 36, larger click targets (my part)
+
+`web/test/shell-targets.css.test.ts` first: RED 3 failed, 2 passed; GREEN 5 passed. `Popout.module.css` `.close::after` and, inside `(max-width: 480px)`, `TopNav.module.css` `.brand::after` are `--size-target` square, centred, absolutely positioned;
+neither rule gains a `min-width`, `min-height` or padding. `npx vitest run test/shell-targets.css.test.ts test/ItemPopout.test.tsx test/TopNav.fold.test.tsx` plus the audit and `shell-motion`: 128 passed, exit 0.
+
+### Task 37, busy says busy (my part)
+
+The six `controlsDisabled` sites of `AssignmentPlannerBlock.tsx` take `aria-busy={pending}` and `SyncButton.tsx` takes `aria-busy={busy}`.
+`git grep -c -E "aria-busy=\{(pending|busy)\}" -- web/src/components/popout/AssignmentPlannerBlock.tsx web/src/components/shell/SyncButton.tsx` prints `…AssignmentPlannerBlock.tsx:6` and `…SyncButton.tsx:1`;
+`grep -c "aria-busy" web/src/components/shell/TopNav.tsx` prints 1 (the update row's). `Popout.module.css` `.control` gets the switched-off look on `:disabled:not([aria-busy='true'])` (flat grey, `cursor: not-allowed`, opacity 1); a busy one stays at half strength with `cursor: progress`.
+`SearchPanel.module.css` `.courseSelect` already carries its pair (task 17). Busy sites with the other workers' files not yet merged: `24 7` (my seven are among the 7). `cd web && npm test`: 172 files, 3340 passed; typecheck 0; eslint 0.
+
+### Task 31, my own files (after the `icons.tsx` commit)
+
+The five characters in `components/popout/` are drawn by marks: `PopoutShell.tsx` (the close cross), `AssignmentDetailBody.tsx` ("Grades" caret right keeping its `→`, "Open in Blackboard" arrow up right) and
+`SessionPopout.tsx` ("Open" arrow up right, "Open in Classwork" caret right keeping its `→`). The two string labels are drawn through `MarkedLabel`: `STAGED_LABEL` in the link of `SubmissionBlock.tsx`
+(the typed span of the course with no link stays typed, as `SubmissionBlock.test.tsx:265` needs) and `SYNC_COPY.openInbox` in `SyncButton.tsx`.
+Mark characters before my files `41 20`, after `36 17` (5 characters in 3 files, as the row says). `grep -c "<MarkedLabel"`: `SubmissionBlock.tsx` 1, `SyncButton.tsx` 1; `grep -c "{STAGED_LABEL}</span>" web/src/components/popout/SubmissionBlock.tsx` 1.
+`npx vitest run test/marks.test.tsx test/TopNav.search.test.tsx test/SyncButton.test.tsx test/Bell.test.tsx test/ItemPopout.test.tsx test/SubmissionBlock.test.tsx test/AssignmentPopout.test.tsx test/SessionPopout.test.tsx`: 8 files, 128 passed, the six old files unedited.
+`cd web && npm test`: 172 files, 3340 passed; typecheck 0; eslint 0.
+
+### Findings after the merge of W-67's task 16, and the full run
+
+* The fonts `@import` finding under task 32 is closed by W-67's `fonts-href.test.ts` and the `<link>` in the root layout (merged before the run below); no override was needed for it.
+  The `.tip` doubling of the accessible name (finding 2) is not closed: the `aria-label`s stay.
+* One more regression of mine, found by the full run and fixed in 18523f3: the drawn icon labels (`.tip::after`, opacity 0 but still in the scrollable overflow) widened the nav to 411 px at 390 px with search open.
+  They are not drawn at 720 px and under (`.bar .ic[data-tip]::after { display: none }`, held by a case in `TopNav.fold.test.tsx`).
+* **Full run, `node scripts/walk-box.mjs web/e2e/phone-width.spec.ts`, run 20261009T015506Z, commit 5e699f8, `"dirty": false`: exit 1, `2 failed`, `52 passed`.** The two failures are
+  `route / [dark]` and `route / [light]`: `page scrollWidth=402`. The element is W-69's: the Upcoming work strip on Home (`UpcomingTracker.module.css`, the `.day` buttons reach right=400 and the strip is not held to the pane's width at 390 px).
+  I did not touch it. The earlier full run 20261009T014210Z (before the label fix) was `4 failed, 50 passed`: the same two and `open state 7 search` in both themes.
+* Printed in the same run: `unfolded bar at 721: nav scrollWidth=815` (it was 851 in Inter), `bar at 390 longest label: nav scrollWidth=390`, `bar at 900 longest label: nav scrollWidth=900`.
+
+## Round 2
+
+**R2-8 (HIGH), `useEscapeFocus.ts`.** The hook moved focus to its button on any Escape while its popover was open, so an Escape pressed in the search field (opened with Ctrl+K over an open bell) was stolen before NavSearch's own guard ran.
+It now moves focus only when focus is inside the popover's anchor (its button and its panel) or nowhere (the body); `usePopover` is untouched.
+RED, written first in `web/test/shell-keyboard.test.tsx` (bell, Activity and the account menu open, Ctrl+K, Escape in the field: search folds, focus is on the Search icon and not on the popover's button): `Test Files 1 failed`, `Tests 3 failed | 15 passed (18)`.
+GREEN: see the gates below.
+GREEN: the row's six files (`shell-keyboard`, `TopNav.search`, `Bell`, `TopNav.update`, `TopNav.workspace`, `TopNav.fold`): 6 files, 75 passed, 0 failed, the old files unedited. The existing Escape case for Bell and Activity now focuses each button before its press, as a real press does
+(in jsdom `fireEvent.click` does not move focus, and the second button's Escape would otherwise belong to the first). `cd web && npm test`: 174 files, 3351 passed; typecheck 0; eslint 0; `test/token-audit.test.ts` 89 passed.
+Recorded, no change: `Bell.module.css` `.panel` repeats `dd`'s arrive and leave rules because the brief's own checks pin Bell's copy; declined.

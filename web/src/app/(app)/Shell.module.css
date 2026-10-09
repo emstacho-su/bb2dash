@@ -4,6 +4,34 @@
   flex-direction: column;
 }
 
+/* "Skip to content": clipped away until it has focus, then drawn over the bar's corner. */
+.skip {
+  position: absolute;
+  z-index: 100;
+  top: var(--space-3);
+  left: var(--space-3);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  box-shadow: var(--shadow-lg), 0 0 0 var(--size-underline) var(--color-divider);
+}
+.skip:focus-visible {
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: var(--size-focus-gap);
+}
+
 /* Everything below the top bar: the course rail and the content column.
    --sidebar-side (globals.css) decides which of the two comes first. */
 .body {
@@ -25,6 +53,11 @@
   flex-direction: column;
   gap: var(--space-8);
 }
+/* Focus lands here from the skip link: the ring sits just inside the pane. */
+.main:focus-visible {
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: calc(var(--size-focus-gap) * -1);
+}
 
 .header {
   display: flex;
@@ -40,7 +73,7 @@
 }
 
 .kicker {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-accent);
@@ -50,35 +83,11 @@
   margin: 0;
 }
 
-.stub {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-8);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.stubTitle {
-  font-family: var(--font-heading);
-  font-weight: var(--font-heading-weight);
-  font-size: var(--text-lg);
-  margin: 0;
-}
-
 .stubBody {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-14);
   color: var(--color-muted);
   max-width: 62ch;
-}
-
-.stubMeta {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  margin-top: var(--space-2);
 }
 
 @media (max-width: 720px) {

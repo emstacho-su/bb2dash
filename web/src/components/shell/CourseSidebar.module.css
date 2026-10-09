@@ -21,19 +21,18 @@
   position: sticky;
   top: var(--nav-height);
   height: calc(100dvh - var(--nav-height));
-  background: var(--color-surface);
+  background: var(--color-panel);
   overflow: hidden;
   display: flex;
   flex-direction: var(--sidebar-side);
   /* Pin the content to the content edge so collapsing clips the outer edge —
      it reads as a slide rather than a squash, on either side. */
   justify-content: flex-end;
-  transition: width 180ms ease;
 }
 
 .rail:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: calc(var(--size-focus-gap) * -1);
 }
 
 :global(html[data-sidebar='closed']) .rail {
@@ -61,13 +60,14 @@
 
 .head {
   margin: 0;
-  padding: 6px 14px 8px;
-  font-family: var(--font-heading);
-  font-weight: var(--font-heading-weight);
-  font-size: 10px;
+  padding: var(--size-6) var(--size-14) var(--size-8);
+  font-family: var(--font-body);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--text-2xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-neutral-500);
+  user-select: none;
 }
 
 .list {
@@ -81,28 +81,35 @@
 .row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  padding: 8px 14px;
-  font-size: 13px;
+  gap: var(--size-10);
+  padding: var(--size-8) var(--size-14);
+  font-size: var(--text-13);
   color: var(--color-text);
   text-decoration: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: var(--motion-control);
 }
 .row:hover {
   background: var(--color-hover);
   color: var(--color-text);
 }
+.row:active {
+  background: var(--color-active);
+}
 .row:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: calc(var(--size-focus-gap) * -1);
 }
 
 .rowCurrent {
   composes: row;
-  background: var(--color-hover);
+  background: var(--color-surface);
   color: var(--color-accent);
-  box-shadow: inset 2px 0 0 var(--color-accent);
+  box-shadow: inset var(--size-underline-mark) 0 0 var(--color-accent-500);
 }
 .rowCurrent:hover {
+  background: var(--color-surface);
   color: var(--color-accent);
 }
 
@@ -110,7 +117,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--color-neutral-400);
-  width: 58px;
+  width: var(--size-58);
   flex: none;
 }
 .rowCurrent .code {
@@ -126,7 +133,7 @@
 
 .note {
   margin: 0;
-  padding: 10px 14px 14px;
+  padding: var(--size-10) var(--size-14) var(--size-14);
   font-size: var(--text-sm);
   color: var(--color-neutral-500);
 }
@@ -147,20 +154,32 @@
     position: fixed;
     inset: var(--nav-height) 0 0;
     z-index: 25;
+    /* The closed rail waits outside the wrapper's edge; the wrapper clips it. */
+    overflow: hidden;
   }
 
+  /* The drawer slides by transform, never by width (task 30). */
   .rail {
     position: static;
     height: auto;
     box-shadow: var(--shadow-md);
+    transition: transform var(--motion-enter-lg) var(--ease-out);
+  }
+
+  /* Closed: the rail keeps its width and sits one width off the side --sidebar-side names.
+     The sign is written for today's side (row-reverse, the right); shell-motion.css.test.ts
+     fails when the token moves and this sign does not. */
+  :global(html[data-sidebar='closed']) .rail {
+    width: var(--sidebar-width);
+    transform: translateX(100%);
   }
 
   .scrim {
     display: block;
     flex: 1;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--color-scrim);
     cursor: default;
-    transition: opacity 180ms ease;
+    transition: opacity var(--motion-enter) var(--ease-out);
   }
 
   :global(html[data-sidebar='closed']) .wrap {

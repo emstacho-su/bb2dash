@@ -192,6 +192,7 @@ export function AssignmentPlannerBlock({
             className={styles.control}
             value={status}
             disabled={controlsDisabled}
+            aria-busy={pending}
             onChange={(e) => commit({ status: e.target.value as AssignmentProgress['status'] })}
           >
             <StatusOptions value={status as ProgressStatus} />
@@ -204,6 +205,7 @@ export function AssignmentPlannerBlock({
             className={styles.control}
             value={priority}
             disabled={controlsDisabled}
+            aria-busy={pending}
             onChange={(e) => commit({ priority: e.target.value as AssignmentProgress['priority'] })}
           >
             {PRIORITY_OPTIONS.map((option) => (
@@ -221,6 +223,7 @@ export function AssignmentPlannerBlock({
             type="date"
             value={form.planned_start}
             disabled={controlsDisabled}
+            aria-busy={pending}
             onChange={(e) => editField('planned_start', e.target.value)}
             onBlur={(e) => commitField('planned_start', e.target.value)}
           />
@@ -233,6 +236,7 @@ export function AssignmentPlannerBlock({
             type="date"
             value={form.planned_finish}
             disabled={controlsDisabled}
+            aria-busy={pending}
             onChange={(e) => editField('planned_finish', e.target.value)}
             onBlur={(e) => commitField('planned_finish', e.target.value)}
           />
@@ -248,6 +252,7 @@ export function AssignmentPlannerBlock({
             inputMode="numeric"
             value={form.est_minutes}
             disabled={controlsDisabled}
+            aria-busy={pending}
             onChange={(e) => editField('est_minutes', e.target.value)}
             onBlur={(e) => commitField('est_minutes', e.target.value)}
           />
@@ -259,6 +264,7 @@ export function AssignmentPlannerBlock({
             className={styles.textArea}
             value={form.notes}
             disabled={controlsDisabled}
+            aria-busy={pending}
             onChange={(e) => editField('notes', e.target.value)}
             onBlur={(e) => commitField('notes', e.target.value)}
           />

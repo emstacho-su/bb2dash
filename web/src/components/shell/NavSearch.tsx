@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { SearchIcon } from './icons';
+import tokens from '@/styles/tokens.module.css';
 import { SearchPanel, useMaterialSearch } from './SearchPanel';
+import { useExit } from './useExit';
 import styles from './NavSearch.module.css';
 
 /**
@@ -18,6 +20,9 @@ import styles from './NavSearch.module.css';
  * window event (kept as the "expand search" trigger for any other caller).
  * Collapses — and forgets the query — on Escape, a press outside, a second
  * press of the icon, opening a result, or an empty field losing focus.
+ *
+ * Leaving (task 29): the results popover stays for one exit after search folds, marked
+ * `data-leaving`; the field is gone at once. A fresh expansion is a fresh field (the `generation` key).
  */
 
 /** The window event any code may dispatch to open search. */
@@ -25,6 +30,14 @@ export const SEARCH_EXPAND_EVENT = 'bb2dash:command-palette';
 
 export function NavSearch() {
   const [expanded, setExpanded] = useState(false);
+  const [generation, setGeneration] = useState(0);
+  const [exit, exitRef] = useExit(expanded);
+  // Each expansion is a new field, even when it opens inside the last one's exit.
+  const [wasExpanded, setWasExpanded] = useState(false);
+  if (expanded !== wasExpanded) {
+    setWasExpanded(expanded);
+    if (expanded) setGeneration((count) => count + 1);
+  }
   const rootRef = useRef<HTMLDivElement>(null);
   const iconRef = useRef<HTMLButtonElement>(null);
   const fieldRef = useRef<HTMLInputElement>(null);
@@ -95,8 +108,11 @@ export function NavSearch() {
       {/* Mounted per expansion, so the query, mode and highlight start clean. Rendered before
           the icon so the page order matches what is drawn: the field grows to the icon's left,
           and Tab moves left to right. */}
-      {expanded && (
+      {exit.present && (
         <ExpandedSearch
+          key={generation}
+          leaving={exit.leaving}
+          popoverRef={exitRef}
           fieldRef={fieldRef}
           rootRef={rootRef}
           iconPressedRef={iconPressedRef}
@@ -109,7 +125,7 @@ export function NavSearch() {
       <button
         ref={iconRef}
         type="button"
-        className={styles.icon}
+        className={`${styles.icon} ${tokens.tip}`}
         onMouseDown={() => {
           iconPressedRef.current = true;
         }}
@@ -124,7 +140,7 @@ export function NavSearch() {
         aria-label="Search"
         aria-expanded={expanded}
         aria-controls={expanded ? fieldId : undefined}
-        title="Search materials (⌘K)"
+        data-tip="Search"
       >
         <SearchIcon />
       </button>
@@ -133,6 +149,8 @@ export function NavSearch() {
 }
 
 function ExpandedSearch({
+  leaving,
+  popoverRef,
   fieldRef,
   rootRef,
   iconPressedRef,
@@ -140,6 +158,9 @@ function ExpandedSearch({
   listId,
   onCollapse,
 }: {
+  /** Search has folded and the popover stays for its exit. */
+  leaving: boolean;
+  popoverRef: (node: HTMLElement | null) => void;
   fieldRef: RefObject<HTMLInputElement | null>;
   rootRef: RefObject<HTMLDivElement | null>;
   iconPressedRef: RefObject<boolean>;
@@ -171,6 +192,7 @@ function ExpandedSearch({
         ref={fieldRef}
         id={fieldId}
         className={styles.field}
+        data-leaving={leaving ? '' : undefined}
         type="text"
         value={raw}
         onChange={(e) => setRaw(e.target.value)}
@@ -188,7 +210,7 @@ function ExpandedSearch({
       {search.isFetching && ready && <span className={styles.spinner} aria-hidden="true" />}
 
       {typing && (
-        <div className={styles.popover}>
+        <div ref={popoverRef} className={styles.popover} data-leaving={leaving ? '' : undefined}>
           <SearchPanel state={state} listId={listId} />
         </div>
       )}
