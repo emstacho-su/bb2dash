@@ -95,11 +95,13 @@ workspace_search(p_q text, p_query_embedding extensions.vector,
   returns table (kind text, unit_id bigint, file_id bigint, document_id bigint, course_id text,
                  title text, unit_kind text, unit_no integer, part_no integer,
                  similarity double precision, score double precision, passage text,
-                 has_notes boolean)
+                 has_notes boolean, written_at timestamptz)
   -- search-row.json. unit_id is bb_file_text.id for `material` (file_id set, document_id null) and
   -- workspace_document_text.id for `upload` and `memory` (document_id set, file_id null). title is
   -- the file's name, the upload's title or the remembered item's title. passage is at most 2,000
-  -- characters of the matched part. p_limit is a kind's limit: at most p_limit rows of each kind
+  -- characters of the matched part. written_at is the remembered item's updated_at for `memory`
+  -- (the date the prompt shows beside it) and null for the other two kinds; it was added on
+  -- 2026-10-08 after the freeze, before 192 was applied (109c). p_limit is a kind's limit: at most p_limit rows of each kind
   -- named, best first (by similarity, highest first; a row with no similarity after those, by
   -- score). p_courses null: no course filter. With courses: course materials of those
   -- course ids, uploads tagged with one of them or with none, and every remembered item.

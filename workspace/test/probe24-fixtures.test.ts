@@ -123,7 +123,7 @@ const ROUTINE_IDS = ['quiz', 'study-guide', 'explain-file', 'summarise-reading',
 const ROUTINE_INSTRUCTIONS_MAX = 4000;
 const SEARCH_ROW_KEYS = [
   'kind', 'unit_id', 'file_id', 'document_id', 'course_id', 'title', 'unit_kind', 'unit_no', 'part_no',
-  'similarity', 'score', 'passage', 'has_notes',
+  'similarity', 'score', 'passage', 'has_notes', 'written_at',
 ];
 
 function readContract<T>(name: string): T {
