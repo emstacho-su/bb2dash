@@ -9,6 +9,12 @@
  * `bb_files`: when the file shows the fold did what the answer says, the worker records it too
  * (migration 185 sends the file's link with the row). Of the rest, at most
  * `BATCH_MAX_ITEMS` go to Claude in this run; the close files a follow-up for what is left.
+ *
+ * A held answer (migration 187) is one an earlier run could not apply and Stack has not answered
+ * again. `inbox_apply_prepare()` names those ids under `held`: empty for a request the button
+ * filed (a press tries them again), the held ids for a request a sync or a follow-up filed. The
+ * worker still records a held row it can record itself, and skips only a held row that would
+ * go to Claude.
  */
 
 import { BATCH_MAX_ITEMS } from './config.js';
@@ -43,6 +49,8 @@ export interface QueueRow {
   readonly hasNote: boolean;
   readonly wasApplied: boolean;
   readonly appliedAt: string | null;
+  /** `resolved_at` exactly as `prepare` handed it over (a string, never a Date: microseconds stay), or null. */
+  readonly resolvedAt: string | null;
   /** Null for any row that is not a session answer. */
   readonly sessionLink: SessionLink | null;
 }
@@ -52,6 +60,8 @@ export interface Prepared {
   readonly runsToday: number;
   /** `params.skip` of the request: the items an earlier run of this chain could not apply. */
   readonly skip: readonly number[];
+  /** `held` of the answer: the held item ids; null when the key is absent (a function older than 187). */
+  readonly held?: readonly number[] | null;
   readonly trigger: string | null;
 }
 
@@ -68,7 +78,7 @@ export interface BatchPlan {
   readonly forClaude: readonly QueueRow[];
   /** Items that wait for the follow-up because the batch is full. */
   readonly deferred: readonly number[];
-  /** Items left out because an earlier run of this chain could not apply them. */
+  /** Items left out of Claude's batch because they are held (or, for an old function, skipped by an earlier run). */
   readonly skipped: readonly number[];
 }
 
@@ -119,6 +129,7 @@ export function parsePrepared(value: unknown): Prepared {
       hasNote: entry.has_note === true,
       wasApplied: entry.was_applied === true,
       appliedAt: textOrNull(entry.applied_at),
+      resolvedAt: textOrNull(entry.resolved_at),
       sessionLink: sessionLink(entry.session_link),
     };
   });
@@ -127,8 +138,14 @@ export function parsePrepared(value: unknown): Prepared {
     queue,
     runsToday: Number.isFinite(runs) && runs > 0 ? Math.trunc(runs) : 0,
     skip: itemIds(params.skip),
+    held: Array.isArray(value.held) ? itemIds(value.held) : null,
     trigger: textOrNull(params.trigger),
   };
+}
+
+/** The ids this run leaves out of Claude's reach: `held` when the answer carries it, `params.skip` only for an old function. */
+export function skipSet(prepared: Prepared): readonly number[] {
+  return prepared.held ?? prepared.skip;
 }
 
 /** `resolution.accept` of a session answer that picks no session. */
@@ -160,9 +177,15 @@ function sessionLinkRule(row: QueueRow): string | null {
 export function templatedRecord(row: QueueRow): Templated | null {
   const as = (bucket: TemplatedBucket, rule: string): Templated => ({ row, bucket, rule });
   if (row.hasNote) return null;
-  if (row.wasApplied) return as('applied_by_transform', `Applied by apply_resolutions()${row.appliedAt === null ? '' : ` at ${row.appliedAt}`}.`);
+  // The session rule is read before the general one: a session answer the fold stamped (188) reads
+  // `was_applied` too, and the function that applied it is link_file_sessions, not apply_resolutions.
   const sessionRule = sessionLinkRule(row);
   if (sessionRule !== null) return as('applied_by_transform', sessionRule);
+  const at = row.appliedAt === null ? '' : ` at ${row.appliedAt}`;
+  if (row.wasApplied && row.sessionLink !== null) {
+    return as('applied_by_transform', `Applied by link_file_sessions()${at}; the stamp was set when the fold wrote his pick (migration 188).`);
+  }
+  if (row.wasApplied) return as('applied_by_transform', `Applied by apply_resolutions()${at}.`);
   if (row.kind === 'conflict' && row.accept === 'keep') return as('kept', 'Keep mine stands until Blackboard changes the value (attention_keep_stands).');
   if (row.state === 'dismissed') return as('dismissed', 'Dismissed without a note.');
   // A confirmed notice ("the apply run failed", "log in again") asks for no row change: a full
@@ -197,18 +220,17 @@ export function templatedDecision({ row, bucket, rule }: Templated, requestId: n
 
 /** Split the queue into what the worker records itself, what Claude gets, and what waits. */
 export function planBatch(prepared: Prepared, max: number = BATCH_MAX_ITEMS): BatchPlan {
-  const skip = new Set(prepared.skip);
+  const skip = new Set(skipSet(prepared));
   const templated: Templated[] = [];
   const rest: QueueRow[] = [];
   const skipped: number[] = [];
   for (const row of prepared.queue) {
-    if (skip.has(row.id)) {
-      skipped.push(row.id);
-      continue;
-    }
+    // The worker's own free record comes first: a held row it can record needs no run, and 188 makes
+    // that likely for a session answer. Only a held row that would go to Claude is skipped.
     const record = templatedRecord(row);
-    if (record === null) rest.push(row);
-    else templated.push(record);
+    if (record !== null) templated.push(record);
+    else if (skip.has(row.id)) skipped.push(row.id);
+    else rest.push(row);
   }
   return {
     templated,
