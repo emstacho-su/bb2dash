@@ -787,3 +787,28 @@ words `--color-neutral-600`, `cursor: not-allowed`) and its busy look on `:disab
 together while the request is in flight, each disabled. `git grep -c -E "aria-busy=\{(pending|busy)\}" -- web/src/app/login`
 prints `web/src/app/login/LoginForm.tsx:3`. `npm test` 168 files, 3296 passed; `git grep -c -E ":disabled:not\(\[aria-busy=.true.\]\)" -- web/src`
 prints `web/src/styles/tokens.module.css:1` (the other four rules are the other workers').
+
+## Task 16: the owed theme-walk run
+
+W-68's mount was on `origin/feat/styling-22` (`git grep -c "<ThemeMenu" origin/feat/styling-22 -- web/src/components/shell/TopNav.tsx`
+printed `:1`); the branch was merged at ca52b96. Command, from the worktree root, on a committed tree, in the background, no
+`WALK_SHOTS`: `node scripts/walk-box.mjs web/e2e/theme-walk.spec.ts -- --grep-invert "31 frame-scrolled|planner targets"`.
+Before each run: no `bb2dash-walk22-` or `bb2dash-accept-` container, no `accept.lock`.
+
+| Run | Commit | Result |
+|---|---|---|
+| `20261009T012143Z` (first) | `934fe25` | `exit_code` 1: 58 passed, 3 failed |
+| `20261009T013028Z` | `9d4d95f`, `dirty` false | `exit_code` 0, `result` `passed`: **61 passed, 0 failed** (4.1 m) |
+
+Selector fixes, all in `web/e2e/theme-walk.spec.ts`:
+
+1. **The bar's icon buttons by role and name** (`fix(22-T16)`, before the first run): Activity and Announcements are
+   `getByRole('button', { name: ... })`, non-exact because a count joins the name; no `title` selector is left, because task 32
+   takes the title off the five icon buttons.
+2. **Row 16, `16 not-found [dark]` and `[light]`**: the case opened `/no-such-page` signed out, which the proxy sends to `/login`,
+   so the "Not found" heading never showed. It opens signed in under a quiet Sync label, as `phone-width.spec.ts` does.
+3. **`motion off under reduced motion`**: it read `--motion-exit` as `0s`; the build's minifier writes a zero time that way.
+   The case accepts `0ms` or `0s`.
+
+No case failed because of an element in another worker's file. Nothing was written to the database in either run
+(`guardWrites22` is on every case). The two cases left out, `31 frame-scrolled` and `planner targets`, stay owed to tasks 26 and 36.
