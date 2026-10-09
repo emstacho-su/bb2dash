@@ -99,6 +99,11 @@ describe('the fixed sentences', () => {
     expect(Object.fromEntries(rows)).toEqual({ ...LINES });
   });
 
+  it('hold no bracket label, so a plain answer that opens with one shows no stray mark', () => {
+    const sentences = [...Object.values(LINES), attachmentLine('attachment_cut', { title: 'Week 5 slides.pptx', read: 2, total: 4, units: 'slides' })];
+    for (const sentence of sentences) expect(sentence).not.toMatch(/\[(?:[MUR][0-9]+|P)\]/);
+  });
+
   it('fill their places and say the unit', () => {
     expect(attachmentLine('attachment_cut', { title: 'Week 5 slides.pptx', read: 2, total: 4, units: 'slides' })).toBe(
       'The attached file "Week 5 slides.pptx" was read in part: 2 of 4 slides.',
