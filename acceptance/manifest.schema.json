@@ -64,6 +64,11 @@
         "workspace.doctorRow",
         "workspace.noApiKey",
         "workspace.credentialSource",
+        "apply.doctorRow",
+        "apply.stop",
+        "apply.startNoBuild",
+        "exports.doctorRow",
+        "exports.runNow",
         "db.proof"
       ]
     },

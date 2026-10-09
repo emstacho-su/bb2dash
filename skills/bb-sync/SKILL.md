@@ -404,12 +404,14 @@ The container's runner does this by itself (migration 180). This skill is the fa
 container did not run, so it files the same request by hand. Skip the step when the sync failed.
 
 ```sql
-select (select count(*) from v_inbox_queue) as answered,
+select (select count(*) from v_inbox_queue where id not in (select inbox_apply_held_items())) as answered,
        (select id from agent_requests where kind = 'inbox_feedback' and state in ('queued', 'claimed')
          order by created_at limit 1) as open_request;
 ```
 
-- `answered = 0`: nothing to apply. Say so and go to step 6.
+- `answered = 0`: nothing to apply. Say so and go to step 6. The count leaves out held answers
+  (ones an earlier run could not apply and Stack has not answered again): a sync does not try them
+  again, so a queue of held answers alone files nothing. Name the held ones in step 6 when there are any.
 - `open_request` is not null: one is already open (one at a time, migration 183). Use that id.
 - Otherwise file one:
 
