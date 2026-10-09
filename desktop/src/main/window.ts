@@ -15,12 +15,15 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BrowserWindow, screen } from 'electron';
+import { BrowserWindow, Menu, screen } from 'electron';
 import { app } from 'electron';
 
+import { contextMenuTemplate } from './context-menu';
+import { failedLoadDataUrl, showsLoadFailed } from './load-failed';
 import { log, logError } from './log';
 import { resourcePath } from './resources';
-import { recordEvent } from './test-hook';
+import { IS_TEST_MODE, recordEvent } from './test-hook';
+import { MIN_WIDTH, overlayFor, themeOfColour, DARK_OVERLAY, widenToMinimum } from './title-bar';
 import { windowBackground } from './window-background';
 
 const STATE_FILE = 'window-state.json';
@@ -137,6 +140,9 @@ function trackWindowState(window: BrowserWindow): void {
   });
 }
 
+/** Windows that are showing the failed-load page (task 27): they have no app in them. */
+const failedPages = new WeakSet<BrowserWindow>();
+
 /**
  * R2-7 — is this window showing the app, or is it blank?
  *
@@ -147,7 +153,8 @@ function trackWindowState(window: BrowserWindow): void {
 export function needsReload(window: BrowserWindow): boolean {
   if (window.isDestroyed()) return false;
   try {
-    return window.webContents.isCrashed() || window.webContents.getURL() === '';
+    // The failed-load page is a page, so its URL is not empty; the window still has no app in it.
+    return failedPages.has(window) || window.webContents.isCrashed() || window.webContents.getURL() === '';
   } catch {
     return false;
   }
@@ -202,6 +209,7 @@ function attachLoader(window: BrowserWindow, appUrl: string, initialUrl: string 
         loading = false;
         attempt = 0;
         target = appUrl;
+        failedPages.delete(window);
         log(`loaded ${new URL(url).origin}`);
       },
       (error: unknown) => {
@@ -241,6 +249,56 @@ function attachLoader(window: BrowserWindow, appUrl: string, initialUrl: string 
 }
 
 /**
+ * The shell's own chrome (task 27), all of it inside listeners: the title-bar overlay follows the
+ * page's theme, the right-click menu, and the page shown when the app cannot be loaded.
+ */
+function wireChrome(window: BrowserWindow, appUrl: string): void {
+  const contents = window.webContents;
+
+  // The page rewrites its theme-color meta at boot, on a pick and on a system change; Electron
+  // reports it here. There is no IPC for this: the page never talks to main.
+  contents.on('did-change-theme-color', (_event, color) => {
+    const overlay = overlayFor(color);
+    recordEvent('title-bar-overlay', { color: color ?? null, theme: themeOfColour(color), overlay: { ...overlay } });
+    try {
+      if (!window.isDestroyed()) window.setTitleBarOverlay({ ...overlay });
+    } catch (error) {
+      logError('the title bar overlay could not be set', error);
+    }
+  });
+
+  contents.on('context-menu', (_event, params) => {
+    const template = contextMenuTemplate(params);
+    if (template.length === 0) return;
+    recordEvent('context-menu', { roles: template.map((item) => item.role ?? null) });
+    // Under the test variable the roles are recorded and no native menu is popped.
+    if (IS_TEST_MODE) return;
+    Menu.buildFromTemplate(template).popup({ window });
+  });
+
+  // Only a real failure of the main frame: never an aborted load (code -3), never a subframe.
+  contents.on('did-fail-load', (_event, errorCode, _description, _url, isMainFrame) => {
+    if (!showsLoadFailed(errorCode, isMainFrame)) return;
+    // Already showing it: a retry that fails again leaves the page as it is.
+    if (failedPages.has(window) && contents.getURL().startsWith('data:')) return;
+    failedPages.add(window);
+    recordEvent('load-failed', { errorCode });
+    contents.loadURL(failedLoadDataUrl(appUrl)).catch((error: unknown) => {
+      logError('the failed-load page could not be shown', error);
+    });
+  });
+
+  // The app loaded over the page (the Retry link, or the backoff): the window has an app in it again.
+  contents.on('did-finish-load', () => {
+    try {
+      if (!contents.getURL().startsWith('data:')) failedPages.delete(window);
+    } catch {
+      // A destroyed window has nothing to clear.
+    }
+  });
+}
+
+/**
  * Create the window. Closing it destroys it (2026-09-30), and `window-controller.ts`
  * builds a new one on the next open; `initialUrl` is that window's first load when a
  * toast click is what opened it.
@@ -250,8 +308,10 @@ export function createWindow(appUrl: string, initialUrl?: string): BrowserWindow
   const icon = resourcePath('build', 'icon.ico');
 
   const window = new BrowserWindow({
-    ...(saved ? saved.bounds : { ...DEFAULT_SIZE }),
-    minWidth: 900,
+    // A width saved under the new minimum is widened to it before it is used (task 27).
+    ...(saved ? { ...saved.bounds, width: widenToMinimum(saved.bounds.width) } : { ...DEFAULT_SIZE }),
+    // The idle bar and the three window buttons (title-bar.ts).
+    minWidth: MIN_WIDTH,
     minHeight: 600,
     show: false,
     backgroundColor: windowBackground(),
@@ -260,15 +320,28 @@ export function createWindow(appUrl: string, initialUrl?: string): BrowserWindow
     // accelerators keep working — but it is hidden until Alt is pressed, so the
     // shell reads as an app rather than a browser window (PM, 2026-09-17).
     autoHideMenuBar: true,
+    // The window's title bar is the app's bar: Windows keeps its three buttons and draws them in the
+    // dark bar's colours; the theme listener below re-colours them when the page changes theme.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { ...DARK_OVERLAY },
     ...(icon === null ? {} : { icon }),
     webPreferences: { ...WEB_PREFERENCES, preload: preloadPath() },
   });
 
   recordEvent('window-preferences', { ...WEB_PREFERENCES });
+  // The options the window was built with, under a kind of their own: shell.spec.ts compares the
+  // six keys of 'window-preferences' exactly.
+  recordEvent('window-chrome', {
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { ...DARK_OVERLAY },
+    autoHideMenuBar: true,
+    minWidth: MIN_WIDTH,
+  });
 
   if (saved?.isMaximized) window.maximize();
   window.once('ready-to-show', () => window.show());
   trackWindowState(window);
+  wireChrome(window, appUrl);
 
   // R2-7: owns the initial load, the retry backoff and the crash reload.
   attachLoader(window, appUrl, initialUrl ?? appUrl);

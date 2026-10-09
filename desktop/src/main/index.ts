@@ -20,9 +20,10 @@
  * `runOnce()`.
  */
 
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 
 import { allowedOrigins, usesSyncTerminal } from '../core/config';
+import { appMenuTemplate } from './app-menu';
 import type { DesktopConfig } from '../core/config';
 import type { RestGet } from '../core/types';
 import { loadConfig, reportConfigError } from './config';
@@ -370,6 +371,9 @@ function start(): void {
 function bootstrap(): void {
   app.setAppUserModelId(APP_USER_MODEL_ID);
   app.on('second-instance', onSecondInstance);
+  // The app's own menu (task 27), installed on `ready` and never at import or inside `start()`:
+  // the unit suites that load this file mock `Menu` as nothing at all.
+  app.on('ready', () => Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate())));
   app.on('before-quit', () => {
     isQuitting = true;
     // Detach the interval and the power listener so the process can actually end.
