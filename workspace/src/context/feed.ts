@@ -115,8 +115,9 @@ const NEW_YORK_FORMAT = new Intl.DateTimeFormat('en-CA', {
 });
 
 function newYorkParts(iso: string): Record<string, string> | null {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return null;
+  // Date.parse and a number keep this a reading of the instant it is given, never of the clock.
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return null;
   return Object.fromEntries(NEW_YORK_FORMAT.formatToParts(at).map((part) => [part.type, part.value]));
 }
 

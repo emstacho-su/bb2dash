@@ -27,6 +27,8 @@ export const PLAN_TURNS_BYTES = 6_000;
 export const SHORT_QUESTION_CHARS = 80;
 const MS_PER_DAY = 86_400_000;
 const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
+/** `YYYY-MM-DD` of an instant in UTC (the en-CA date order). */
+const UTC_DATE_FORMAT = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' });
 const FENCED = /^```[A-Za-z]*[ \t]*\r?\n([\s\S]*?)\r?\n?```$/;
 
 export interface PlanQuery {
@@ -97,7 +99,7 @@ function windowDate(value: unknown, today: string): string | null {
   const offset = dayNumber(value) - dayNumber(today);
   if (Math.abs(offset) <= FEED_WINDOW_MAX_DAYS) return value;
   const clamped = dayNumber(today) + Math.sign(offset) * FEED_WINDOW_MAX_DAYS;
-  return new Date(clamped * MS_PER_DAY).toISOString().slice(0, 10);
+  return UTC_DATE_FORMAT.format(clamped * MS_PER_DAY);
 }
 
 function feedOf(value: unknown, today: string): Plan['feed'] {
