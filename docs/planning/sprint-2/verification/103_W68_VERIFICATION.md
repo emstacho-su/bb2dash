@@ -522,3 +522,38 @@ No `title=` is left in the four files (`git grep -c "title=" …` prints nothing
 `cd web && npm test`: 182 files, 3402 passed; typecheck 0; eslint 0; audit 89 passed.
 The case `unfolded bar at 721` (labels are drawn from 721 px) now reads the five buttons' names from the browser's accessibility tree. Printed by the box's Chromium: `- button "Search"`, `- button "Courses sidebar"`, `- button "Activity 44"`, `- button "Announcements"`, `- button "Account"`: each its own text, with the count (44) where there is one, none doubled.
 Harness `-g "reachability|open state|bar at|sidebar toggle|unfolded"` on the committed tree: run **20261009T033814Z**, commit 3c519a5, `"dirty": false`, exit 0, `20 passed`.
+
+## Visual round
+
+Run 20261009T034707Z's shots were opened with the Read tool for `01-home-dark.png` only (the badge); the other items were settled by measurement in the box (no shots from a worker's run).
+
+* **V-1 (6042f66), the unread badge.** `.badge` is now `top: calc(var(--size-underline-mark) * -1)` and `right: calc(var(--size-8) * -1)`: the red pill, its on-accent ink and its chip radius are as before, and it hangs past the button's upper right edge instead of lying over the glyph. Tokens only; audit 89 passed.
+  The case `unfolded bar at 721` measures it in the browser. Printed (run 20261009T040741Z): `activity badge [left,top,right,bottom]: 735.1,8.5,753.1,22.5; icon: 720.1,17.5,738.1,35.5; covers 4.6% of the icon` (a two-digit count, 44; the limit is a third). When the button holds no badge the line says `activity badge: none (no unseen count to measure)`.
+  The bell's badge is the same class (`Bell.module.css` composes `badge` from `TopNav.module.css`), so it moved with it; it holds no count today and was not measured.
+* **V-2 (73b9fb2), the seen time.** The stamp takes the submission line's `.note` class (`font-size: var(--text-xs)`, the body face), as its neighbours do. `web/test/submission-seen.css.test.ts` pins it (RED with the class taken off: 1 failed; GREEN 2 passed); `SubmissionBlock.test.tsx` unedited and green.
+
+### The bar between 721 and 815 px (V-3)
+
+## The bar between 721 and 815 px
+
+Measured by the case `unfolded bar at 721`, after it sets the window to 800 by 900 on `/` (run 20261009T040741Z): `bar at 800: {"documentScrollWidth":815,"innerWidth":800,"navScrollWidth":815,"scrollXAfterScrollTo100":15}`.
+So the document can still scroll sideways, by the 15 px the idle bar overflows by, and `window.scrollTo(100, 0)` moves `scrollX` by 15: the Account button can be brought into view, as on `main` (the frame holds the document's height at the window's, not its width: the bar's overflow still propagates to the viewport).
+The shot of the courses drawer at 800 px simply is not scrolled. **I changed nothing**: the band is as the brief records it. The case now asserts that the page scrolls sideways by exactly the bar's overflow (up to the 100 px asked), so a later change that made the overflow unreachable would fail it.
+Whether the fold moves to 820 px is Stack's call, as the brief says.
+
+### The popout's foot (V-4)
+
+`Popout.module.css` `.backdrop` is `position: fixed; inset: 0; overflow-y: auto` with the panel at its top (`align-items: flex-start`) and a padding under it, exactly as on `main` (`git show origin/main:…` shows the same four declarations). The case `popout assignment` now scrolls the backdrop to its end in a 1440 by 900 window and asserts the panel's bottom is inside the window.
+Printed, both themes: `popout assignment [dark] foot: {"windowHeight":900,"backdropClientHeight":900,"backdropScrollHeight":1022,"backdropScrolledTo":122,"panelBottomAfterScroll":878}`. The content is 122 px taller than the window and is reached by scrolling the backdrop (wheel, or the scrollbar of the themed block); the foot lies 22 px above the window's edge once scrolled. As on `main`. I changed nothing; the shot shows the first windowful, as the walk is not scrolled.
+
+### Which attribute says a button's panel is open
+
+All five already say it, as `aria-expanded`, `"true"` while open and `"false"` otherwise: Search (`NavSearch.tsx:141`, the field open), Courses sidebar (`TopNav.tsx:218`, `sidebarOpen`: the rail or the drawer), Activity (`ActivityMenu.tsx:66`), Announcements (`Bell.tsx:71`) and Account (`TopNav.tsx:242`). None is `aria-pressed`. Nothing was added.
+
+### ui-ux-pro-max (visual round)
+
+Loaded at the start of the round and `MASTER.md` was in hand (read earlier this session). No new search: the items are a position, a class, and two measurements. Advice set aside: none.
+
+### Gates
+
+`cd web && npm test`: 183 files, 3404 passed; typecheck 0; eslint 0; audit 89 passed.

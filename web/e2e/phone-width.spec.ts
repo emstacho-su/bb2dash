@@ -307,6 +307,24 @@ for (const theme of THEMES) {
     console.log(`popout assignment [${theme}]: page scrollWidth=${scrollWidth}`);
     expect(scrollWidth, `popout assignment [${theme}]: page scrollWidth`).toBeLessThanOrEqual(PHONE.width);
 
+    // The popout's foot, in the walk's window (1440 by 900): the backdrop is the scroller, and the
+    // panel's bottom edge must be reachable by scrolling it to its end.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const foot = await page.getByRole('dialog').evaluate((panel) => {
+      const backdrop = panel.parentElement as HTMLElement;
+      backdrop.scrollTop = backdrop.scrollHeight;
+      return {
+        windowHeight: window.innerHeight,
+        backdropClientHeight: backdrop.clientHeight,
+        backdropScrollHeight: backdrop.scrollHeight,
+        backdropScrolledTo: Math.round(backdrop.scrollTop),
+        panelBottomAfterScroll: Math.round(panel.getBoundingClientRect().bottom),
+      };
+    });
+    console.log(`popout assignment [${theme}] foot: ${JSON.stringify(foot)}`);
+    expect(foot.panelBottomAfterScroll, `popout assignment [${theme}]: the panel's bottom edge is reachable`).toBeLessThanOrEqual(
+      foot.windowHeight,
+    );
   });
 }
 
@@ -550,6 +568,27 @@ test('unfolded bar at 721', async ({ page, context }) => {
   // Recorded, not asserted: open item 3 of the brief wants the number.
   console.log(`unfolded bar at 721: nav scrollWidth=${scrollWidth}`);
 
+  // The band between 721 px and the idle bar's width (815 px since direction D's fonts): the frame holds
+  // the document at the window's size, so can the page still scroll sideways to the Account button?
+  await page.setViewportSize({ width: 800, height: 900 });
+  const band = await navOf(page).evaluate((nav) => {
+    const before = window.scrollX;
+    window.scrollTo(100, 0);
+    const moved = window.scrollX - before;
+    window.scrollTo(before, 0);
+    return {
+      documentScrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+      navScrollWidth: nav.scrollWidth,
+      scrollXAfterScrollTo100: moved,
+    };
+  });
+  console.log(`bar at 800: ${JSON.stringify(band)}`);
+  // Whatever the bar overflows the window by can be scrolled into view (the Account button is reachable).
+  const overflow = band.documentScrollWidth - band.innerWidth;
+  expect(band.scrollXAfterScrollTo100, 'the page scrolls sideways by the overflow of the bar, up to the 100 px asked').toBe(
+    Math.min(100, Math.max(0, overflow)),
+  );
 });
 
 test('bar at 390 longest label', async ({ page, context }) => {
