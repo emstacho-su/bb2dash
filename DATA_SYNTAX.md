@@ -73,6 +73,8 @@ Views: `v_upcoming` (not-yet-due, not finished), `v_overdue` (past due, still op
 `v_gradebook_latest.counts_toward_grade` (047; follows the picker since 107) is false when a
 `grade_column_links` row marks the column "Not graded" (`excluded`), true when a non-excluded link
 places it on a component, and otherwise true when any linked assignment has a `component_id`.
+Because the view is `security_invoker`, 107 also gave `inbox_apply_runner` (which reads it, 181) a
+select-only read of `grade_column_links` (policy `grade_column_links_inbox_apply_read`); it still writes nothing there.
 
 ## Search layer (migrations 010–013, 021, 024–025, 121)
 

@@ -23,11 +23,21 @@
 --   `create or replace view` with the same 36 columns in the same order, names and types, the same
 --   rows, security_invoker, and the grants (create or replace keeps them). The five views that read
 --   this one (v_assignment_grade, v_course_grade, v_grade_model_items, v_grade_model_total,
---   v_assignment_attempts) are not re-created. No table, no data, no grant is touched; this
---   migration writes nothing. The live text of the view is 047's: no later migration re-created it
+--   v_assignment_attempts) are not re-created. No table and no data is touched, and the one grant
+--   107 makes is the apply role's read below. The live text of the view is 047's: no later migration re-created it
 --   (grep v_gradebook_latest db/migrations: 046 and 047 define it, the rest only read it).
 --   On prod, in a rolled-back transaction, exactly three rows change: exam-1 to true, the two
 --   attendance columns to false.
+--
+-- THE ONE GRANT (round 2)
+--   v_gradebook_latest is security_invoker, so whoever reads it needs select on grade_column_links
+--   too. inbox_apply_runner (181) reads the view (the apply worker's context step reads Blackboard's
+--   gradebook through it) and had no access to that table: without a grant 107 would take a read
+--   away from a role that holds it. 107 grants it select on public.grade_column_links and a
+--   select-only policy, grade_column_links_inbox_apply_read, in the manner of 185. Never a write:
+--   the guard checks insert, update, delete, truncate, references and trigger are all false for it,
+--   and that anon, sync_runner, workspace_runner and workspace_ingest_runner (each only if it
+--   exists) still hold nothing on the table.
 --
 -- Unit: db/tests/phase16_107_counts_toward_links.sql. No top-level transaction statement.
 
@@ -105,7 +115,33 @@ comment on view public.v_gradebook_latest is
   'group.';
 
 -- =============================================================================================
--- Guard: the view is what 107 says it is
+-- The apply role's read of grade_column_links (the one grant 107 makes)
+-- =============================================================================================
+-- v_gradebook_latest is security_invoker, so its reader needs select on every table it reads, and
+-- since 107 that includes grade_column_links. inbox_apply_runner (181) holds select on the view,
+-- and the apply worker's context step reads Blackboard's gradebook through it; without this grant
+-- 107 would take a read away from a role that has it. Whole-table select (five columns, none
+-- sensitive), a select-only policy named as 185 names its two, and no write for that role, ever.
+-- The role is looked up first: a database that has not run 181 has no such role, and 181 itself
+-- cannot be edited (a replay in numeric order reaches 107 before 181; that is the replay's to settle).
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'inbox_apply_runner') then
+    grant select on public.grade_column_links to inbox_apply_runner;
+    -- The owner's policy is `to authenticated`, so this role sees no row without its own.
+    if not exists (select 1 from pg_policies
+                    where schemaname = 'public' and tablename = 'grade_column_links'
+                      and policyname = 'grade_column_links_inbox_apply_read') then
+      create policy grade_column_links_inbox_apply_read on public.grade_column_links
+        for select to inbox_apply_runner using (true);
+    end if;
+  else
+    raise notice '107: role inbox_apply_runner does not exist here; its read of grade_column_links is not granted';
+  end if;
+end $$;
+
+-- =============================================================================================
+-- Guard: the view and the table's grants are what 107 says they are
 -- =============================================================================================
 do $$
 declare
@@ -120,6 +156,7 @@ declare
     'last_attempt_submitted', 'last_attempt_score', 'seen_at', 'assignment_id',
     'linked_assignments', 'counts_toward_grade'];
   actual_columns text[];
+  r              text;
 begin
   if not exists (select 1 from pg_class c
                   where c.oid = 'public.v_gradebook_latest'::regclass
@@ -143,4 +180,36 @@ begin
   if position('grade_column_links' in pg_get_viewdef('public.v_gradebook_latest'::regclass)) = 0 then
     raise exception '107: v_gradebook_latest does not read grade_column_links';
   end if;
+
+  -- grade_column_links: the apply role holds select and nothing else, with a select policy; every
+  -- other role that must not read it holds nothing. (No set role here: the unit proves the reads.)
+  if exists (select 1 from pg_roles where rolname = 'inbox_apply_runner') then
+    if not has_table_privilege('inbox_apply_runner', 'public.grade_column_links', 'select') then
+      raise exception '107: inbox_apply_runner cannot select grade_column_links';
+    end if;
+    if has_table_privilege('inbox_apply_runner', 'public.grade_column_links',
+                           'insert, update, delete, truncate, references, trigger')
+       or has_any_column_privilege('inbox_apply_runner', 'public.grade_column_links', 'insert, update') then
+      raise exception '107: inbox_apply_runner holds more than select on grade_column_links';
+    end if;
+    if not exists (select 1 from pg_policies p
+                    where p.schemaname = 'public' and p.tablename = 'grade_column_links'
+                      and p.policyname = 'grade_column_links_inbox_apply_read'
+                      and p.cmd = 'SELECT' and p.roles = array['inbox_apply_runner']::name[]) then
+      raise exception '107: grade_column_links has no select policy for inbox_apply_runner alone';
+    end if;
+    if exists (select 1 from pg_policies p
+                where p.schemaname = 'public' and p.tablename = 'grade_column_links'
+                  and 'inbox_apply_runner' = any (p.roles) and p.cmd <> 'SELECT') then
+      raise exception '107: grade_column_links has a write policy for inbox_apply_runner';
+    end if;
+  end if;
+  foreach r in array array['anon', 'sync_runner', 'workspace_runner', 'workspace_ingest_runner'] loop
+    if exists (select 1 from pg_roles where rolname = r)
+       and (has_table_privilege(r, 'public.grade_column_links',
+                                'select, insert, update, delete, truncate, references, trigger')
+            or has_any_column_privilege(r, 'public.grade_column_links', 'select, insert, update, references')) then
+      raise exception '107: % holds a privilege on grade_column_links', r;
+    end if;
+  end loop;
 end $$;

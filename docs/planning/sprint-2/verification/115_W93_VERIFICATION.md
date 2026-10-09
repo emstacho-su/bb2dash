@@ -87,3 +87,39 @@ any of this.
   sub-selects reference only outer columns), the `for c in select * from (values ...)` loop, and
   section 6's `set local role` inside a DO block (phase23_181 does the same).
 * Whether prod's live view text equals 047's (read from the repo, not pg_get_viewdef).
+
+## Round 2 (the PM's ruling on the finding above)
+
+The PM confirmed the finding on prod and ruled: the role keeps its read of the view, so 107 gives it the
+one read the view now needs.
+
+* **Unit first** (commit 933a773, red: `FAIL ... migration 107 is not applied`). Section 6 now expects
+  that, under `set local role inbox_apply_runner`, `select count(*)` on `v_gradebook_latest` succeeds and
+  equals the test login's count, `select count(*)` on `grade_column_links` succeeds and equals the login's
+  (so a missing policy shows), and an insert, an update (`where false`) and a delete are each refused with
+  `insufficient_privilege` (42501). `reset role` follows, before any assertion raises.
+* **Migration 107**: a section before the guard grants `select on public.grade_column_links` to
+  `inbox_apply_runner` and creates `grade_column_links_inbox_apply_read` (`for select ... using (true)`).
+  Copied from 185: policy name `<table>_inbox_apply_read`, created behind an `if not exists` on
+  `pg_policies`, so a second run is a no-op (the grant is idempotent anyway). 185 grants `bb_files` by
+  column and `sessions` whole; `grade_column_links` has five harmless columns, so whole-table select.
+  Unlike 185 the block first checks the role exists. Consequence for a replay of the migrations in numeric
+  order: 107 runs before 181 creates the role, so 107 only raises a notice and 181 then leaves the role
+  without the table read; a replay from scratch needs the grant and policy re-run after 181. Prod is
+  unaffected (the role exists). I cannot edit 181.
+* **Guard** extended: the role holds select; it holds none of insert, update, delete, truncate, references,
+  trigger (table level) and no insert or update column privilege; the select policy exists for the role
+  alone; no non-select policy names the role; and `anon`, `sync_runner`, `workspace_runner`,
+  `workspace_ingest_runner` (each only if it exists) hold no privilege on the table. No `set role` in the
+  migration.
+* **`phase23_181_inbox_apply_runner.sql` does pin the read list** (the sorted `relname:privilege` string,
+  exact equality). One added statement: before the comparison, `v_got := replace(v_got,
+  'grade_column_links:select,', '')`, with a comment naming 107. It therefore passes both before 107 (the
+  entry is absent) and after (the entry is removed), and any other privilege on the table still fails it.
+  The first draft built the expected string with a `case` on the view's definition inside the literal
+  concatenation; the server answered "syntax error at end of input", so it was replaced by the `replace`.
+  Today: `PASS  phase23_181_inbox_apply_runner.sql`.
+* `DATA_SYNTAX.md`: two lines in the 107 paragraph (no other place describes the role's reads except one
+  mention of `v_inbox_queue` in the 187/188 section).
+* Not checked: everything that needs 107 applied. The two checks that the policy blocks every other role
+  (`using (true)` applies to `inbox_apply_runner` only, `to inbox_apply_runner`) rest on reading 185.
