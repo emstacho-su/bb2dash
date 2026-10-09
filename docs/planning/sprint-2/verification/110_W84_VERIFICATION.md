@@ -290,3 +290,78 @@ missing". The one rule that matters is the ten minute limit, below.
 * Whether the exporter marks the four test decisions skipped in both modes (W-82's code): the proof
   `test-decisions-skipped` reads the database, and was tested on rows made for it.
 * `docs/` and `DATA_SYNTAX.md` are not mine and I did not touch them.
+
+## Round 2 (the PM's rulings after the PR-level review)
+
+Merged `origin/fix/phase23-followups` first (head `2b4edd7`, "Round 3" of the brief read).
+
+### 1. The lost backslash in the spec
+
+`web/e2e/accept23.spec.ts` had `/inbox-apply d+/` in step 3's early-close branch (it looked for the letter
+d and could never fail). It came from my own edit script, which wrote `\d` inside a template literal and
+lost one backslash. Fixed: one named constant, `PASTE_COMMAND = /inbox-apply \d+/`, used by both places
+("nothing was pasted" in `expectClosedClean` and in the early-close branch). Counted by bytes with a fixed
+string, because `grep -c 'inbox-apply \d+'` in this shell's basic regex does not match even the correct
+text (it printed 0 before and after the fix; `od -c` shows the backslash is in the file):
+
+    grep -cF 'inbox-apply \d+' web/e2e/accept23.spec.ts   ->  2   (the constant, and the 7a command regex)
+    grep -cF 'inbox-apply d+'  web/e2e/accept23.spec.ts   ->  0
+
+I read every regex and escape of the spec (`/^\d+ answered$/`, `/^Answer for item \d+$/`,
+`/^Why for item \d+$/`, `/^claude "\/inbox-apply \d+"$/`), of `accept-proofs-db23.test.mjs` (`\s\S`, `\.`,
+`\(`, `\$\$`, `'\n'`), and of `accept-proofs-kit.mjs` (`\b`, `\s`, `\.`, `\(`, `\r?\n`): all intact. The
+playbook, the manifest and `proofs.json` hold no regex (the proofs' lint forbids a backslash, and the one
+`'^session_link/[0-9]'` style pattern has none). My other edit scripts wrote no escape into a regex.
+
+### 2. R7: step 6 waits no longer than the operator can
+
+* Spec: step 6 watches `APPLY_WATCH_MS` = **9 minutes** from the press (the ruling says at most 9.5; the
+  test spends about half a minute opening, saving and pressing first, so 9 keeps the whole command inside
+  the operator's ten), test limit 9.75 minutes. A wait that ends with the request open throws
+  `inconclusive: the apply request was still open after nine minutes`, after noting `labels_seen`.
+* Playbook: the 15 minute paragraph is gone. On `inconclusive: the apply request was still open` the
+  operator looks at `6-fail.png` and `labels_seen`, says what the page showed, gives `unsure`, never
+  `fail`, and does not run the title again.
+* **What the host does with that verdict, which the ruling may not have seen:** in
+  `bb2dash-stack/scripts/lib/accept-stages.mjs` (`judgeOne`) the host reads an auto step's proofs only when
+  the operator's verdict, the browser test and the evidence all stand. A step the operator gives `unsure`
+  is red and its proofs are never read, so the blocked state of `applied-from-button` cannot take effect
+  on that path; the run would be red, not repeated. The proof's blocked answer does take effect if the
+  operator's verdict is `pass` or `blocked`. If the PM wants "repeat the run" for a slow Claude run, the
+  playbook's one word `unsure` should be `blocked`. I built what was ruled; the change is one word in
+  `acceptance/23/playbook.md`, step 6.
+* Proofs (a request still open when read), each with a case:
+  * `applied-from-button`: **blocked** when the checks did not pass and the request is `queued` or
+    `claimed` (new), beside `daily_cap` and `usage_limit`.
+  * `recorded-after-sync`: **blocked** when the checks did not pass and the apply request, or the sync
+    itself, is `queued` or `claimed` (new; the sync still running after step 3's watch is the brief's
+    "blocked" case).
+  * `request-taken-after`: **blocked** when the request is `claimed` (the worker has it and has not closed
+    it: a slow run) or capped; a request still `queued` after the worker was started is **failed**, because
+    that is exactly what step 7b tests. This is my default; it is one clause if the PM wants `queued`
+    blocked too.
+
+### 3. The view and `filed_by`
+
+The columns are the twelve the proofs were built against (`id`, `state`, `filed_by`, `after_request`,
+`claimed_by`, `created_at`, `claimed_at`, `finished_at`, `claude_started`, `error_code`, `archived_count`,
+`skip_ids`); the structural test holds them against the migration text. No proof needs changing for
+`retry_held`: no proof names `params`, and `filed_by` stays `followup`. `applied-from-button` requires
+`filed_by = 'button'`, so it accepts only the request the button filed itself; a new case shows that a
+follow-up of it, with or without `retry_held` in its params, fails. `recorded-after-sync` requires
+`filed_by = 'sync'` and `after_request` = the sync's id, so a follow-up (whose `after` is the apply
+request's id) cannot be taken for it. `request-waiting` and `request-taken-after` require `button`.
+
+### 4. `test-decisions-skipped` against R5
+
+Read, not changed. The exporter skips a test question's decision only when the database allows it; a
+decision whose item has a logged write is filed with a note instead. `test-decisions-skipped` expects all
+four skipped with no note path, so it can only pass if none of the four has a logged write. The proofs
+agree: `nothing-written` holds that the `confirm` and `dismiss` questions have no row in
+`inbox_apply_writes`, and `applied-from-button` holds the same for the `note` question (the one that goes to
+Claude). The `offline` question is recorded by the worker without Claude (dismissed, no note); no proof
+reads its write log, but if it had one, `test-decisions-skipped` would fail on it, which is the right answer.
+
+### Checks
+
+Final tree: acceptance test 41 pass; the four proof files 86 pass (72 + 14); `--list` shows the seven titles; typecheck exit 0; eslint exit 0.
