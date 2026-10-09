@@ -100,7 +100,8 @@ begin
      'assignment_progress:insert,assignment_progress:select,assignment_progress:update,'
      'assignments:insert,assignments:select,assignments:update,attention_items:select,'
      'bb_gradebook:select,course_staff:insert,course_staff:select,course_staff:update,'
-     'courses:select,grade_components:select,inbox_apply_writes:insert,sessions:select,'
+     -- 107 gives the role select on grade_column_links: v_gradebook_latest, which it reads, is security_invoker.
+     'courses:select,grade_column_links:select,grade_components:select,inbox_apply_writes:insert,sessions:select,'
      'sync_runs:select,v_gradebook_latest:select,v_inbox_queue:select' then
     v_fail := v_fail || format('the role holds table privileges %s', v_got);
   end if;

@@ -271,9 +271,22 @@ Learned in the Phase 23 follow-ups (2026-10-09; each from `verification/110a_PHA
      not apply a superseded-file pick; the acceptance run presses Sync; the verb `file-decisions`; 187 during the
      build and 188 at the cut-over); migration 187 as one file of 940 lines, over your 800 limit (a split would
      have spent 189); and rulings R1 to R7 (DECISIONS 2026-10-08 and 2026-10-09).
-  5. **A fourth SQL unit fails on prod's course data, `phase18_123_file_sessions.sql`** (file 2488's question was
-     answered "none" and archived). It joins the three under the Phase 21 item below: say which session takes
-     them.
+  5. **The failing SQL units are audited and corrected** (2026-10-09, on your word; record
+     `verification/115_SQL_UNITS_AUDIT_2026-10-09.md`; the suite went from 70 of 81 to 79 of 81 with Phase 24a's
+     port merged in, and the two left are true: file 2851 and 188 before the cut-over). That also answers item 7 under Phase 21 below. Two things the audit found
+     are yours:
+     * ~~A number for a small grades fix, and your look at it.~~ **Fixed on your word, 2026-10-09: migration 107
+       is on prod.** The Grades table's "counts toward" flag now follows the picker. **Look at GEO.103's Grades
+       tab once:** the two attendance columns you marked "Not graded" should sit in the collapsed group, not
+       among the items. Say if you want them back.
+     * **File 2851 needs one command from you.** It was a scan; its text is in the database now (OCR, by hand,
+       as file 68 was), but the PM's session was refused the embed step. From the bb2dash checkout:
+       `SB_ANON_JWT=<the legacy anon key> node ingest/embed_corpus.mjs`. Until then the file is found by
+       keyword only and `phase18_post_embed_checks` fails on its nine units.
+     * The search eval's Q7 is replaced (your "Fix phase 18 as well"): it asked for a date in a schedule the
+       course re-posts weekly; it now asks a question answered in two single-version documents. The eval itself
+       (`ingest/eval_search.mjs`) has not been run with the new question; the materials search returns its
+       answer at rank 1 in hybrid and vector mode.
   6. Still yours from Phase 23 itself: the two grading components the writer set (30 and 33), the question in
      archived item 3425's record, and the note on item 3435.
 
@@ -384,7 +397,9 @@ Learned in the Phase 23 follow-ups (2026-10-09; each from `verification/110a_PHA
      PM; the runner keeps no figure of them.
   6. **`npm ci` in `C:/Users/stack/agentic-harness/mcp-server`**, yours to run or to ask for: its installed
      `node_modules` still holds fastembed 2.1.0 under a lock that says 2.1.1.
-  7. **Three SQL units fail on prod's course data** from any checkout (`grading_invariants.sql`,
+  7. ~~**Three SQL units fail on prod's course data**~~ Audited and corrected 2026-10-09 (the Phase 23
+     follow-ups item above, point 5; `verification/115_SQL_UNITS_AUDIT_2026-10-09.md`). As it was asked:
+     from any checkout (`grading_invariants.sql`,
      `phase18_122_supersede_rule.sql`, `phase18_golden_truth.sql`; STATUS, Known issues). They are not Phase 21's;
      say which session takes them.
 

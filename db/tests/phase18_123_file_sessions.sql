@@ -7,7 +7,11 @@
 --   (2) 0 pre-existing week_no / session_id values changed
 --   (3) 0 storage_path / local_path values changed
 --   (4) every unlinked eligible file whose week holds >= 2 sessions (and no settled answer) has
---       exactly 1 open attention row
+--       exactly 1 open attention row. A file is settled the way link_file_sessions settles it
+--       (163, step c): its LATEST answer (resolved, dismissed, or archived and not self-closed;
+--       ordered by coalesce(resolved_at, raised_at) desc, id desc) has a to_value equal to the
+--       week's current candidate sessions (non-no_class session ids, ascending, as a jsonb array).
+--       A week that gained a session since the answer is not settled and needs a question again.
 --   (5) a replay writes 0 (weeks_set, sessions_linked, attention_raised all 0)
 --   (6) the synthetic files: IST.352 -> week 5, the week's one session, confidence 0.8; GEO -> week
 --       4, unlinked, one open question
@@ -87,9 +91,17 @@ begin
      and f.bucket <> 'my_submissions' and f.session_id is null and f.week_no is not null
      and (select count(*) from sessions s
            where s.course_id = f.course_id and s.week_no = f.week_no and s.kind <> 'no_class') >= 2
-     and not exists (select 1 from attention_items ai
-                      where ai.kind = 'stack_must_confirm' and ai.ref = 'session_link/' || f.id::text
-                        and ai.state in ('resolved', 'dismissed'))
+     and (select ai.to_value
+            from attention_items ai
+           where ai.kind = 'stack_must_confirm' and ai.entity = 'bb_file'
+             and ai.ref = 'session_link/' || f.id::text and ai.field = 'session_id'
+             and (ai.state in ('resolved', 'dismissed')
+                  or (ai.state = 'archived' and ai.decision->>'closed_itself' is distinct from 'true'))
+           order by coalesce(ai.resolved_at, ai.raised_at) desc, ai.id desc
+           limit 1)
+         is distinct from
+         (select to_jsonb(array_agg(s.id order by s.id)) from sessions s
+           where s.course_id = f.course_id and s.week_no = f.week_no and s.kind <> 'no_class')
      and (select count(*) from attention_items ai
            where ai.kind = 'stack_must_confirm' and ai.ref = 'session_link/' || f.id::text
              and ai.state = 'open') <> 1;
