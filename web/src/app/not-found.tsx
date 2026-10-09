@@ -1,19 +1,12 @@
 import Link from 'next/link';
+import styles from './NotFound.module.css';
 
 export default function NotFound() {
   return (
-    <main
-      style={{
-        minHeight: '100dvh',
-        display: 'grid',
-        placeItems: 'center',
-        padding: 'var(--space-8)',
-        textAlign: 'center',
-      }}
-    >
+    <main className={styles.screen}>
       <div>
-        <h1 style={{ marginBottom: 'var(--space-3)' }}>Not found</h1>
-        <p style={{ color: 'var(--color-muted)' }}>That page does not exist.</p>
+        <h1 className={styles.title}>Not found</h1>
+        <p className={styles.lede}>That page does not exist.</p>
         <Link href="/">Back to Today</Link>
       </div>
     </main>
