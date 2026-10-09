@@ -18,6 +18,10 @@ export const PATHS = Object.freeze({
   runDir: '/run/workspace',
   /** The MCP config the runner writes at start, mode 0600. */
   mcpConfig: '/run/workspace/mcp.json',
+  /** An MCP config with no server: the planning, summary and rolling turns start with this one. */
+  mcpNone: '/run/workspace/mcp-none.json',
+  /** The materials package's batch entry: the runner's search, one JSON object in and one out. */
+  batchEntry: '/app/mcp-materials/dist/batch.js',
   /** Touched after every successful heartbeat; the healthcheck reads its age. */
   aliveFile: '/run/workspace/alive',
   settings: '/app/workspace/claude/settings.json',
@@ -28,6 +32,12 @@ export const PATHS = Object.freeze({
   oauthTokenSecret: '/run/secrets/claude_oauth_token',
   /** The CA the pooler's certificate is verified against, unless DB_CA_FILE_ENV names another file. */
   dbCaFile: '/app/certs/prod-ca.crt',
+});
+
+/** The two values the materials server and the batch entry are started with; the key is named by file, never held. */
+export const MATERIALS_ENV = Object.freeze({
+  SUPABASE_URL: 'https://goultdzqcavefcgnifdy.supabase.co',
+  SUPABASE_SERVICE_ROLE_FILE: '/run/secrets/bb2dash_mcp_service_key',
 });
 
 /** Names the file that holds the pinned CA (PEM); PATHS.dbCaFile when it is not set. */
