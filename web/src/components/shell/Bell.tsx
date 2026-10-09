@@ -71,7 +71,6 @@ export function Bell() {
         aria-expanded={popover.open}
         aria-haspopup="menu"
         data-tip="Announcements"
-        aria-label={badge > 0 ? `Announcements ${badge}` : 'Announcements'}
       >
         <BellIcon />
         <span className="sr-only">Announcements</span>

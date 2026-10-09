@@ -514,3 +514,11 @@ The skill was loaded at the start; `MASTER.md` was in hand from the earlier task
 
 * The `aria-label` workaround on the five icon buttons stays until W-67 changes `tokens.module.css` `.tip` to `content: attr(data-tip) / ''`.
 * `scroll-padding-top` in `globals.css` (W-67) and `CourseTimeline.module.css:29` (W-70) now wait for their lines of task 26.
+
+### Round 2, P-1: the icon buttons are named by their own text again (3c519a5)
+
+After W-67's 422067c (`content: attr(data-tip) / ''`; `git grep -c` on `tokens.module.css` prints one line) the `aria-label`s this phase added are off the Courses sidebar, Activity, Announcements and Account buttons; Search's `aria-label="Search"` was on `main` and stays.
+No `title=` is left in the four files (`git grep -c "title=" …` prints nothing). The old files are unedited: `shell-keyboard`, `TopNav.search`, `TopNav.update`, `TopNav.workspace`, `TopNav.fold`, `Bell`: 6 files, 75 passed.
+`cd web && npm test`: 182 files, 3402 passed; typecheck 0; eslint 0; audit 89 passed.
+The case `unfolded bar at 721` (labels are drawn from 721 px) now reads the five buttons' names from the browser's accessibility tree. Printed by the box's Chromium: `- button "Search"`, `- button "Courses sidebar"`, `- button "Activity 44"`, `- button "Announcements"`, `- button "Account"`: each its own text, with the count (44) where there is one, none doubled.
+Harness `-g "reachability|open state|bar at|sidebar toggle|unfolded"` on the committed tree: run **20261009T033814Z**, commit 3c519a5, `"dirty": false`, exit 0, `20 passed`.

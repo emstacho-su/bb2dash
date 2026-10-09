@@ -218,7 +218,6 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
           aria-expanded={sidebarOpen}
           aria-controls={SIDEBAR_ID}
           data-tip="Courses sidebar"
-          aria-label="Courses sidebar"
         >
           <HamburgerIcon />
           <span className="sr-only">Courses sidebar</span>
@@ -243,7 +242,6 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
             aria-expanded={user.open}
             aria-haspopup="menu"
             data-tip="Account"
-            aria-label="Account"
           >
             <UserIcon />
             <span className="sr-only">Account</span>

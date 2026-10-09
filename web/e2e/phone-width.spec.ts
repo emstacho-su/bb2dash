@@ -508,6 +508,17 @@ test('unfolded bar at 721', async ({ page, context }) => {
   await openAt(page, FOLD_STEP, '/');
 
   await expect(navOf(page)).toBeVisible();
+
+  // The drawn labels (`data-tip`, drawn from 721 px) are silent: each icon button's accessible name is
+  // its own .sr-only text, with its count where it has one, and never holds the label twice. jsdom
+  // reads no stylesheet and cannot see generated content, so this is read from the browser's tree.
+  for (const tip of ['Search', 'Courses sidebar', 'Activity', 'Announcements', 'Account']) {
+    const snapshot = (await navOf(page).locator(`button[data-tip="${tip}"]`).ariaSnapshot()).trim();
+    console.log(`icon button name [${tip}]: ${snapshot}`);
+    const name = /^- button "([^"]*)"/.exec(snapshot)?.[1] ?? '';
+    expect(name, `the accessible name of the "${tip}" button`).toMatch(new RegExp(`^${tip}( \\d+)?$`));
+  }
+
   const scrollWidth = await navScrollWidth(page);
   // Recorded, not asserted: open item 3 of the brief wants the number.
   console.log(`unfolded bar at 721: nav scrollWidth=${scrollWidth}`);
