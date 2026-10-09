@@ -383,3 +383,7 @@ not its body)". `phase23_180`, `_181`, `_182`, `_183`, `_185`, `_186` PASS. Line
 
 Default: the fold's statement stamps `dismissed` answers too (the brief's wording for it); the one-time
 backfill still reads resolved and archived only, as before.
+
+## Round 5 (comments only)
+
+188: the section heading and the `comment on function` string of `link_file_sessions` reworded for R6; no function body touched (diff is two comment hunks). The comment inside the body that calls the end statement "the one-time backfill's own predicate" was left, because the round forbade touching the bodies; it is still true that the predicate is the backfill's plus `dismissed` (header item 2 says so). 187 untouched (frozen). The 188 unit still reads "not applied" through the runner and passes on the stand-in.
