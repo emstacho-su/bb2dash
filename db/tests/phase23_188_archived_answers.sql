@@ -12,6 +12,9 @@
 --      answer's applied_at; "none" links nothing and stamps nothing; a pick outside the week's
 --      sessions links nothing and stamps nothing; an archived row that closed itself is no answer;
 --      a replay writes nothing and moves no stamp
+--  b2. R6: the fold also stamps a session answer whose pick its file already carried before the fold
+--      (the loop never visits that file): resolved, dismissed, archived; "none", a differing pick and
+--      a self-closed row are not stamped; a stamp already there does not move
 --   c. the backfill (the statement is copied here from the migration, below): it stamps a session
 --      answer whose pick is the session its current file carries, and only that; run twice, it
 --      stamps 0 the second time
@@ -299,6 +302,61 @@ begin
 end $$;
 
 -- =============================================================================================
+-- b2. R6: the fold stamps every session answer whose pick its file carries, however it got there
+-- =============================================================================================
+-- The files below already carry a session before the fold (a direct fixture write, standing for the
+-- reading's date, the week dropping to one session, the lecture number, 123's inheritance), so the
+-- loop never visits them and step c never writes their pick. The statement that ends the fold does.
+do $$
+declare
+  v_s1  bigint := (select id from _t188 where label = 's1');
+  v_s2  bigint := (select id from _t188 where label = 's2');
+  v_ids bigint[] := array[(select id from _t188 where label = 's1'), (select id from _t188 where label = 's2')];
+  v_label text;
+  v_f   bigint;
+  v_t0  constant timestamptz := timestamptz '2026-01-02 03:04:05+00';
+  v_r   jsonb;
+begin
+  for v_label, v_f in
+    select t.label, pg_temp.t188_file('pre ' || t.label, null, null, v_s1)
+      from (values ('resolved'), ('archived'), ('dismissed'), ('differs'), ('none'), ('selfclosed'), ('already')) t(label)
+  loop
+    insert into _t188 values ('pre_' || v_label, v_f);
+  end loop;
+  insert into _t188 values
+    ('pa_resolved',   pg_temp.t188_answer((select id from _t188 where label = 'pre_resolved'),   'resolved',  jsonb_build_object('session_id', v_s1), v_ids)),
+    ('pa_archived',   pg_temp.t188_answer((select id from _t188 where label = 'pre_archived'),   'archived',  jsonb_build_object('session_id', v_s1), v_ids, '{"change":"recorded only"}')),
+    ('pa_dismissed',  pg_temp.t188_answer((select id from _t188 where label = 'pre_dismissed'),  'dismissed', jsonb_build_object('session_id', v_s1), v_ids)),
+    ('pa_differs',    pg_temp.t188_answer((select id from _t188 where label = 'pre_differs'),    'resolved',  jsonb_build_object('session_id', v_s2), v_ids)),
+    ('pa_none',       pg_temp.t188_answer((select id from _t188 where label = 'pre_none'),       'resolved',  '{"accept":"none"}', v_ids)),
+    ('pa_selfclosed', pg_temp.t188_answer((select id from _t188 where label = 'pre_selfclosed'), 'archived',  jsonb_build_object('session_id', v_s1), v_ids, '{"closed_itself": true}')),
+    ('pa_already',    pg_temp.t188_answer((select id from _t188 where label = 'pre_already'),    'resolved',  jsonb_build_object('session_id', v_s1), v_ids, null, v_t0));
+
+  v_r := link_file_sessions(null);
+
+  foreach v_label in array array['resolved', 'archived', 'dismissed'] loop
+    if (select applied_at from attention_items where id = (select id from _t188 where label = 'pa_' || v_label)) is null then
+      raise exception 'FAIL b2: the % answer whose pick its file already carried was not stamped by the fold', v_label;
+    end if;
+  end loop;
+  foreach v_label in array array['differs', 'none', 'selfclosed'] loop
+    if (select applied_at from attention_items where id = (select id from _t188 where label = 'pa_' || v_label)) is not null then
+      raise exception 'FAIL b2: the "%" answer was stamped', v_label;
+    end if;
+  end loop;
+  if (select applied_at from attention_items where id = (select id from _t188 where label = 'pa_already')) is distinct from v_t0 then
+    raise exception 'FAIL b2: the fold moved a stamp that was already there';
+  end if;
+  if (select state from attention_items where id = (select id from _t188 where label = 'pa_archived')) <> 'archived' then
+    raise exception 'FAIL b2: the fold changed a state';
+  end if;
+  -- And it wrote nothing onto those files.
+  if (select count(*) from bb_files where id in (select id from _t188 where label like 'pre\_%') and session_id is distinct from v_s1) <> 0 then
+    raise exception 'FAIL b2: the fold changed a file''s session';
+  end if;
+end $$;
+
+-- =============================================================================================
 -- c. The backfill
 -- =============================================================================================
 do $$
@@ -361,6 +419,22 @@ begin
   v_n := pg_temp.t188_backfill();
   if v_n <> 0 then
     raise exception 'FAIL c: the backfill run a second time stamped % rows, expected 0', v_n;
+  end if;
+
+  -- And still nothing after a fold (R6: the fold ends with the backfill's own predicate), which also
+  -- leaves every answer the backfill refused unstamped.
+  perform link_file_sessions(null);
+  v_n := pg_temp.t188_backfill();
+  if v_n <> 0 then
+    raise exception 'FAIL c: the backfill stamped % rows after a fold, expected 0', v_n;
+  end if;
+  foreach v_label in array array['differs', 'selfclosed', 'none', 'superseded', 'unlinked'] loop
+    if (select applied_at from attention_items where id = (select id from _t188 where label = 'b_' || v_label)) is not null then
+      raise exception 'FAIL c: the fold stamped the "%" answer', v_label;
+    end if;
+  end loop;
+  if (select applied_at from attention_items where id = (select id from _t188 where label = 'b_already')) is distinct from v_t0 then
+    raise exception 'FAIL c: the fold moved a stamp that was already there';
   end if;
 end $$;
 
