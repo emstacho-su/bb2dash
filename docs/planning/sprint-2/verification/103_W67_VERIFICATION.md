@@ -458,6 +458,7 @@ Required by the brief's working rules (amendment 3, H-1). One row per task that 
 | 16 | yes | `design-system/bb2dash/MASTER.md` (Buttons, Cards, Fields, Focus, Chrome), the tile's shared-primitives block, `component-changes.json` entries for W-67's files | none; the tile and MASTER carry every value the sweep writes | the skill's `disabled-states` 0.38 to 0.5 loses to the one strength 0.5 (entry `disabled-one-look`); `touch-target-size` 44 px loses to the 24 px `--size-target` (task 36); the generated `transition: all 200ms` and a hover lift lose to `--motion-control` and no lift (MASTER anti-patterns); `input outline: none` with a glow loses to the one 2 px ring |
 | 33 | yes | `design-system/bb2dash/MASTER.md` (Colour: the ink and the ground), `component-changes.json` entry `app-mark` | none | the skill's icon advice (Phosphor, outline or filled families) does not apply to a launcher icon; the square is two greys from the tokens, no gradient, glow or second hue |
 | 37 | yes | MASTER.md "Busy is not off" and the entries `busy-says-busy` and `disabled-one-look` | none | the skill's `loading-buttons` (disable and show a spinner) is met by the button's own label ("Signing in…"); a spinner would be a new loop, which MASTER's anti-patterns forbid |
+| 27 | yes (loaded for the session; named again at the start of the task) | `design-system/bb2dash/MASTER.md` (its line 263 and line 344 are overtaken by D-1); the tile's account-menu and update fragments | none | the skill's `custom title bar: extend the client area and set a drag region` is met by `titleBarOverlay`, which keeps Windows' own three buttons (winui#55); `modal-vs-navigation` and `escape-routes` are met by the prompt's four answers and the title-bar close; the skill's rounded 8 px buttons lose to the pill (`--radius-control`) of direction D |
 
 ## Task 8: the token set for direction D (P-78, R-53)
 
@@ -894,3 +895,97 @@ before the round: 4 failed, 2 passed; GREEN after.
 (`8a4faf5`), no `WALK_SHOTS`, no `bb2dash-walk22-` or `bb2dash-accept-` container and no `accept.lock` before it: run
 `20261009T031847Z`, `exit_code` 0, `result` `passed`, `dirty` false, **5 passed, 0 failed** (`13 login` in both themes, `25 account-menu`
 in both, `motion off under reduced motion`).
+
+## Resume: P-4, task 26 (W-67's line), the walk's last cases, task 27
+
+The branch was merged with `origin/feat/styling-22` first (`422067c`). The row's two checks: `git grep -c "scrollbar-gutter: stable"` in
+`Shell.module.css` printed `:1`, and `git grep -c "position: sticky"` in `TopNav.module.css` printed nothing.
+
+### P-4: the desktop typecheck (`49dcaf3`)
+
+`cd desktop && npm run typecheck` exited 2 with 21 errors, all in `test/unit/app-mark.test.ts` (`noUncheckedIndexedAccess` is on). My task-33
+report gave the web typecheck; I had not run the desktop one from `desktop/`. Every byte read now goes through one helper, `byte(buffer, index)`,
+which throws a `RangeError` on a missing byte; `darkToken` and `pixelAt` return typed tuples. No `any`, no `!`. RED: exit 2, 21 errors. GREEN:
+`cd desktop && npm run typecheck` exit 0; `cd desktop && npm test` exit 0, 44 files, 836 passed. From now on a typecheck is recorded from the
+command's own exit code, in the folder that changed.
+
+### Task 26, W-67's line
+
+`scroll-padding-top` left `globals.css` (`grep -c "scroll-padding-top" web/src/app/globals.css` prints 0). The theme walk's `growWindowToContent`
+already reads the pane (`document.querySelector('main').scrollHeight`) plus the bar's height, not the document, so nothing in the spec changed.
+
+| Run | Command | Result |
+|---|---|---|
+| `20261009T033742Z` | `-g "31 frame-scrolled"` | exit 0, **2 passed**: `{"documentHeight":900,"windowHeight":900,"paneScrollTop":4074,"barTop":0}` in each theme |
+| `20261009T033900Z` | `-g "planner targets"` | exit 0, **1 passed**: `{"atTitle":"button","atBox":"input[checkbox]"}` |
+| `20261009T034102Z` | the whole spec, `5033edd`, `dirty` false | exit 0, **64 passed** |
+
+No `WALK_SHOTS`. No `bb2dash-walk22-` or `bb2dash-accept-` container and no `accept.lock` before any of the three.
+
+### Task 27: the desktop shell
+
+Skill: `ui-ux-pro-max` was loaded for the session and `design-system/bb2dash/MASTER.md` read (its line 263, "the window ... None of it is in Phase 22",
+and line 344, the title-bar advice kept "for the desktop task that waits", are overtaken by D-1). No search was run: the brief's contract and
+`direction-d.json` carry every value.
+
+Pieces, each pushed by itself:
+
+| Commit | What |
+|---|---|
+| `350cd9c` | `title-bar.ts`, `app-menu.ts`, `context-menu.ts`, `load-failed.ts`, `LIGHT` in `window-background.ts`, `update-prompt.ts` redrawn; the four unit files |
+| `473c777` | `window.ts` (title bar, minimum width, saved width widened, `window-chrome`, overlay listener, right-click menu, failed-load page), `index.ts` (menu on `ready`), `window-chrome.test.ts` |
+| `e51f77f` | the drag strip, `body::before` in `globals.css`, `desktop-drag-strip.test.ts` |
+| next | `chrome.spec.ts`, two small fixes the row's greps found, this record |
+
+**RED, then GREEN.** The four new unit files against no modules: 4 failed to load. Against the modules: 58 passed (with the old `update-prompt` and
+`window-background` files). `window-chrome.test.ts` (10 cases, mine, beyond the row's four) against the old `window.ts`: 7 failed, 3 passed; against the
+new one: 10 passed.
+
+**Numbers as built.** `CONTROLS_WIDTH` 138. `BAR_IDLE_WIDTH` 815, read from `103_W68_VERIFICATION.md` under `## Idle bar width for task 27`
+(run 20261009T031826Z); `title-bar.test.ts` reads that section itself, so the constant cannot drift from the record. `BAR_IDLE_WIDTH + CONTROLS_WIDTH`
+is 953 and **`MIN_WIDTH` is 960**.
+
+**The checks, each by itself**
+
+| Check | Result |
+|---|---|
+| the thirteen unit files named in the row | 0 failures; the eight old ones unedited (`git diff --diff-filter=MD --name-only origin/main...HEAD -- desktop/test` prints nothing) |
+| `cd desktop && npm run typecheck` | exit 0 |
+| `cd desktop && npm test` | exit 0, 49 files, 892 passed |
+| `cd desktop && npm run test:e2e` | exit 0, **31 passed, 0 failed** (8 new in `chrome.spec.ts`, 23 old); the three old specs and `launch.ts`, `harness.ts`, `fixture-server.ts` unedited |
+| `grep -c "4f6bed"`; `grep -c "12131a"` in `update-prompt.ts` | 0; 0 |
+| `git grep -c "titleBarOverlay" -- desktop/src/main/window.ts` | `window.ts:2` (one line) |
+| `grep -c "minWidth: MIN_WIDTH"`; `grep -c "minWidth: 900"` in `window.ts` | 1; 0 |
+| `grep -c "recordEvent('window-chrome'"` in `window.ts` | 1 |
+| `git grep -c "nativeTheme" -- desktop/src` | prints nothing (a comment in `window-background.ts` from task 11 named it; reworded) |
+| `git diff --quiet origin/main...HEAD -- desktop/package.json desktop/package-lock.json desktop/vitest.config.mts desktop/playwright.config.ts desktop/electron-builder.yml desktop/src/preload` | exit 0 |
+| `grep -c "titlebar-area-height" web/src/app/globals.css` | 1 |
+| `cd desktop && npm run pack` | exit 0: `signing with signtool.exe path=dist\win-unpacked\bb2dash.exe`; `test -s desktop/dist/win-unpacked/bb2dash.exe` exit 0 |
+| `web`: `npm test`, `npm run typecheck`, `npx eslint . --max-warnings 0` | exit 0 (183 files, 3406 passed); exit 0; exit 0 |
+| token audit; Direction check | `foundation.json` is `{}`; `125 0 77 0 true` |
+
+**What `chrome.spec.ts` proved** (the live built shell, the fixture, no native dialog): the window records `window-chrome` with `titleBarStyle: 'hidden'`, an
+overlay 52 high in the dark bar's colours, `autoHideMenuBar: true` and `minWidth` 960, while `window-preferences` keeps exactly its six keys; the live
+window's `getMinimumSize()` is `[960, 600]`; the installed menu (read from `Menu.getApplicationMenu()`) holds `reload`, `forceReload` and
+`toggleDevTools` and no zoom and no quit; a `context-menu` event on an editable target records `cut, copy, paste, selectAll` and nothing else, and plain text
+outside a field records nothing; `did-change-theme-color` with the light ground in upper case records theme `light` and the light overlay; a `did-fail-load`
+with code -3 does not put the failed-load page up; and a shell started against an address nothing listens on shows the failed-load page with its Retry
+link, to that address.
+
+**Limits I kept.** I started no process of Stack's desktop app and touched nothing under `%LOCALAPPDATA%\bb2dash-launch`. Playwright started and closed its own
+Electron processes by handle. I ran no `desktop/launch/` script and did not change the Windows theme. To run `e2e` I ran `node node_modules/electron/install.js`
+in `desktop/` (the binary was not there: the earlier `npm ci` used `--ignore-scripts`); no lock file changed.
+
+**Defaults taken**
+
+1. **The app menu has two top-level labels, View and Window.** The brief names the items (Reload, Force reload, the developer tools, Minimise, Close) and only
+   forbids File, Edit and Help.
+2. **The overlay colours are literals in `title-bar.ts`** (`#1d1d1d`/`#f2f2f2` and `#ffffff`/`#111111`), pinned to the two blocks by `title-bar.test.ts`, as
+   `DARK` is. The light block declares only what differs, so the test reads a name from the light block and falls back to the dark one.
+3. **The failed-load page's one sentence** is "bb2dash could not reach the app, so check the connection and try again." The words are mine; the brief asks for one
+   sentence and one Retry link.
+4. **The failed-load page is not shown again while it is already up**, so a retry that fails again leaves it as it is and the page does not flash.
+5. **`body::before` is `position: fixed` with `pointer-events: none`.** In flow it would push the app's bar 52 px down in the desktop shell, which draws the
+   bar under the three buttons; out of flow and first in the body it is still earlier in document order than the bar's `no-drag` controls.
+6. **Not seen, because no test can:** that the three Windows buttons really match a 52 px bar and clear the idle bar at 960 px, and that a menu row and the popout's
+   close button press in the real window. That is acceptance step 5.

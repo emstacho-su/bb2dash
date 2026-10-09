@@ -14,10 +14,14 @@ import { BrowserWindow } from 'electron';
 
 import type { PromptAnswer } from '../core/update/update-flow';
 import { isRemindLaterChoice } from '../core/update/update-check';
+import { DARK } from './window-background';
 
 export const PROMPT_TITLE_PREFIX = 'bb2dash-update:';
 const PROMPT_SIZE = Object.freeze({ width: 460, height: 250 });
-const PROMPT_BACKGROUND = '#12131a';
+// The dark ground, whatever the theme: the prompt is a dark page (D-1). Its other colours are
+// values the dark block of globals.css declares (`test/unit/shell-pages.test.ts`). It keeps the
+// system face: its CSP allows no web font.
+const PROMPT_BACKGROUND = DARK;
 
 /** The answer a page title carries, or `null` for any title that is not one. */
 export function parsePromptTitle(title: string): Exclude<PromptAnswer, 'dismissed'> | null {
@@ -35,17 +39,18 @@ export function promptHtml(): string {
 <title>bb2dash update</title>
 <style>
   :root { color-scheme: dark; }
-  body { margin: 0; padding: 22px 24px; background: ${PROMPT_BACKGROUND}; color: #e8e9f0;
+  body { margin: 0; padding: 22px 24px; background: ${PROMPT_BACKGROUND}; color: #f2f2f2;
          font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
   h1 { font-size: 16px; font-weight: 600; margin: 0 0 6px; }
-  p { margin: 0 0 18px; color: #a9abb8; }
+  p { margin: 0 0 18px; color: #a3a3a3; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .label { color: #a9abb8; margin-right: 4px; }
-  button { font: inherit; padding: 7px 14px; border-radius: 6px; cursor: pointer;
-           border: 1px solid #3a3c4a; background: #1d1f2a; color: #e8e9f0; }
-  button:hover { background: #262836; }
-  button.primary { background: #4f6bed; border-color: #4f6bed; color: #fff; }
-  button.primary:hover { background: #5d78f5; }
+  .label { color: #a3a3a3; margin-right: 4px; }
+  button { font: inherit; padding: 7px 16px; border-radius: 999px; cursor: pointer;
+           border: 1px solid #969696; background: #262626; color: #f2f2f2; }
+  button:hover { background: #3a3a3a; }
+  button:focus-visible { outline: 2px solid #fafafa; outline-offset: 2px; }
+  button.primary { background: #fafafa; border-color: #fafafa; color: #050505; font-weight: 600; }
+  button.primary:hover { background: #e6e6e6; border-color: #e6e6e6; }
   [hidden] { display: none !important; }
 </style></head>
 <body>
