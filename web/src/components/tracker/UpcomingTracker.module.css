@@ -64,22 +64,11 @@
   display: flex;
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  /* R3-1: the scrollbar is the strip's visible slider along its bottom edge. */
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-neutral-600) var(--color-divider);
+  /* R3-1: the scrollbar is the strip's visible slider along its bottom edge. It is
+     never hidden, and it is drawn by the app's one scrollbar block like every other
+     box: this rule keeps no bar of its own (Phase 22, task 38). */
   padding-bottom: var(--space-2);
   align-items: flex-end;
-}
-.tracker::-webkit-scrollbar {
-  height: var(--size-8);
-}
-.tracker::-webkit-scrollbar-track {
-  background: var(--color-divider);
-  border-radius: var(--radius-sm);
-}
-.tracker::-webkit-scrollbar-thumb {
-  background: var(--color-neutral-600);
-  border-radius: var(--radius-sm);
 }
 .day {
   all: unset;

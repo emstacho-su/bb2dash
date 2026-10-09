@@ -337,3 +337,19 @@ Default taken: `PlannerItemPopover.tsx` also gets `aria-busy={save.isPending}` o
 `save.isPending || plannerUnavailable`, so it is not one of the 24 counted sites (the Busy sites command does not match it and
 still prints the same count), but without the attribute the new switched-off look would flash a grey box at every save. A save is
 busy; an unavailable planner is off.
+
+## Task 38: the Upcoming strip's scrollbar
+
+`.tracker` dropped `scrollbar-width`, `scrollbar-color` and its three `::-webkit-scrollbar` rules, so the app's one scrollbar block
+draws it. The strip is never hidden (R3-1). The one pre-existing test edited is `web/test/upcoming-tracker-css.test.ts`, its
+second case only (lines 30-34, now "leaves its bar to the app's one scrollbar block"): the first case is unchanged. The comment
+in the stylesheet avoids the property names, because the row's grep reads comments.
+
+| Step | Command | Result |
+|---|---|---|
+| RED | `cd web && npx vitest run test/upcoming-tracker-css.test.ts` (second case edited first) | exit 1, 1 failed, 1 passed |
+| GREEN | `cd web && npx vitest run test/upcoming-tracker-css.test.ts test/UpcomingTracker.scroll.test.tsx test/UpcomingTracker.test.tsx` | exit 0, 3 files, 51 passed; the last two unedited |
+| | `git grep -c -E "scrollbar-(width\|color)\|::-webkit-scrollbar" -- web/src/components/tracker/UpcomingTracker.module.css` | prints nothing (exit 1) |
+| | `grep -c "does not hide the scrollbar" web/test/upcoming-tracker-css.test.ts` | `1` |
+| Audit | `cd web && npx vitest run test/token-audit.test.ts` | exit 0 |
+| Gates | `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0 (167 files, 3255 tests); exit 0; exit 0 |

@@ -27,9 +27,11 @@ describe('Upcoming strip — a visible scrollbar (R3-1)', () => {
     expect(CSS).not.toMatch(/\.tracker::-webkit-scrollbar\s*\{[^}]*display\s*:\s*none/);
   });
 
-  it('draws a thin scrollbar in token colours', () => {
-    const body = ruleBody('.tracker');
-    expect(body).toMatch(/scrollbar-width\s*:\s*thin/);
-    expect(body).toMatch(/scrollbar-color\s*:\s*var\(--color-[a-z0-9-]+\)\s+var\(--color-[a-z0-9-]+\)/);
+  it("leaves its bar to the app's one scrollbar block", () => {
+    // `scrollbar-width` and `scrollbar-color` make Chromium draw the standard bar with arrow buttons,
+    // which switches off the `::-webkit-scrollbar` rules of `globals.css`. The strip keeps none of its own,
+    // so it is drawn like every other box (Phase 22, task 38; H-5, row 34).
+    expect(ruleBody('.tracker')).not.toMatch(/scrollbar-(width|color)\s*:/);
+    expect(CSS).not.toMatch(/::-webkit-scrollbar/);
   });
 });
