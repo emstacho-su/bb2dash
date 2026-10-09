@@ -22,7 +22,7 @@
 
 .courseCode {
   font-family: var(--font-heading);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   font-size: var(--text-lg);
 }
 
@@ -52,8 +52,8 @@
   background: var(--color-hover);
 }
 .courseToggle:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: calc(var(--size-focus-gap) * -1);
 }
 .courseToggle .courseCount {
   margin-left: auto;
@@ -75,6 +75,9 @@
 .bbLink {
   font-size: var(--text-xs);
   text-decoration: none;
+}
+.bbLink:active {
+  opacity: 0.7;
 }
 
 .buckets {
@@ -105,17 +108,17 @@
   background: var(--color-hover);
 }
 .bucketHead:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: calc(var(--size-focus-gap) * -1);
 }
 .bucketCaret {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--color-neutral-500);
-  width: 9px;
+  width: var(--size-9);
 }
 
 .bucketCount {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--color-neutral-600);
 }
 
@@ -134,7 +137,7 @@
 }
 .readingGroupLabel {
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--color-neutral-300);
 }
 
@@ -165,15 +168,15 @@
 
 .chip {
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: var(--size-28);
+  height: var(--size-28);
   border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
   background: var(--color-neutral-900);
   color: var(--color-neutral-400);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-3xs);
   letter-spacing: 0.02em;
 }
 
@@ -193,7 +196,7 @@
 
 .noteMark {
   margin-left: var(--space-2);
-  font-size: 9px;
+  font-size: var(--text-3xs);
   letter-spacing: 0.04em;
   color: var(--color-accent-2);
   cursor: help;
@@ -228,10 +231,9 @@
 
 /* — states ——————————————————————————————————————————————————————————— */
 .problem {
+  composes: errorNotice from '@/styles/tokens.module.css';
   padding: var(--space-4) var(--space-6);
   border-radius: var(--radius-md);
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
   font-size: var(--text-sm);
 }
 
@@ -250,6 +252,6 @@
   }
   .rowMain {
     order: -1;
-    flex-basis: calc(100% - 28px - var(--space-4));
+    flex-basis: calc(100% - var(--size-28) - var(--space-4));
   }
 }
