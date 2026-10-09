@@ -45,7 +45,6 @@ const init: Line = {
   tools: [...ALLOWED_TOOLS],
   mcp_servers: [
     { name: 'bb2dash', status: 'connected' },
-    { name: 'rag', status: 'connected' },
   ],
   model: 'claude-haiku-4-5-20251001',
   permissionMode: 'dontAsk',
@@ -63,12 +62,12 @@ const ANSWERED = [init, answer, success];
 
 const input = (overrides: Partial<TurnInput> = {}): TurnInput => ({
   requestId: '41',
-  conversationId: CONVERSATION_ID,
+  kind: 'answer',
   model: 'haiku',
   prompt: QUESTION,
-  history: [],
-  claudeSessionId: null,
+  systemPrompt: 'You are read-only.',
   budgetUsd: 1,
+  mcpConfig: '/run/workspace/mcp-41.json',
   ...overrides,
 });
 
@@ -77,7 +76,6 @@ function harness(scripts: FakeProcessOptions[], overrides: Partial<CliTurnDeps> 
   const spawn = fakeSpawn(...scripts);
   const turn = createCliTurn({
     spawn: spawn.spawn,
-    readSystemPrompt: () => 'You are read-only.',
     readOauthToken: () => TOKEN,
     baseEnv: { PATH: '/usr/bin' },
     log: (line) => logs.push(line),
@@ -162,7 +160,9 @@ describe('the time a CLI gets to exit after its result line', () => {
     const said = h.logs.filter((line) => /the CLI exited/.test(line));
     expect(said).toHaveLength(1);
     expect(said[0]).toMatch(/request=41/);
-    expect(said[0]).toMatch(/the CLI exited 1: the budget is used up/);
+    // No stderr text is logged: its length and a class, never the words.
+    expect(said[0]).toMatch(/the CLI exited 1: stderr_chars=21 class=other/);
+    expect(said[0]).not.toMatch(/budget is used up/);
     expect(h.logs.some((line) => /did not exit/.test(line))).toBe(false);
   });
 
@@ -196,18 +196,6 @@ describe('the time a CLI gets to exit after its result line', () => {
     const events = await collect(h.turn(input(), new AbortController().signal));
     expect(h.spawn.processes[0]!.kills[0]?.signal).toBe('SIGTERM');
     expect(resultOf(events)).toMatchObject({ ok: false, errorCode: 'budget_exceeded', costUsd: 0.021355, reported: true });
-  });
-
-  it('still makes the one recovery: a resume that found no session and then stayed is started again as fresh', { timeout: 3000 }, async () => {
-    const h = harness([
-      { lines: resumeMissing, exit: FAILED, hang: true },
-      { lines: ANSWERED, exit: OK },
-    ]);
-    const events = await collect(h.turn(input({ claudeSessionId: STORED_SESSION_ID }), new AbortController().signal));
-    expect(h.spawn.calls).toHaveLength(2);
-    expect(h.spawn.calls[0]!.argv).toContain('--resume');
-    expect(h.spawn.calls[1]!.argv).toContain('--session-id');
-    expect(resultOf(events)).toMatchObject({ ok: true, errorCode: null });
   });
 
   it("keeps the result when the runner's abort arrives while the CLI is being given its time", { timeout: 3000 }, async () => {

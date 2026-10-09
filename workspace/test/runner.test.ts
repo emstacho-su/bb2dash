@@ -17,7 +17,7 @@ import type { CliTurn } from '../src/providers/claude-cli.js';
 import type { StoredToolCall, TurnEvent } from '../src/providers/types.js';
 import { SHUTDOWN_GRACE_MS, createRunner, main } from '../src/runner.js';
 import { startTurn } from '../src/turn.js';
-import { ABORTED, STORED_SESSION_ID, claimOf, delta, result, scriptedTurn, type FakeRpc, type Step } from './helpers/fakes.js';
+import { ABORTED, claimOf, contextJson, delta, result, scriptedTurn, type FakeRpc, type Step } from './helpers/fakes.js';
 import { loopHarness as loop, turnHarness as harness, useFakeClock } from './helpers/turn-harness.js';
 
 // The rest of the runner's behaviour, in files small enough to read: each registers its own suites.
@@ -29,8 +29,12 @@ import './runner/db-tls.suite.js';
 import './runner/health.suite.js';
 import './runner/monotonic.suite.js';
 import './runner/refused-statement.suite.js';
-import './runner/replay.suite.js';
 import './runner/result-grace.suite.js';
+
+const RUNNER_CALLS = [
+  { tool: 'search', query: 'What does the IST.323 syllabus say about late work?', scope: null, ok: true },
+  { tool: 'planner_feed', query: null, scope: null, ok: false },
+];
 
 const call = (n: number, ok = true): StoredToolCall => ({ tool: 'search_materials', query: `query ${n}`, scope: null, ok });
 const tool = (at: number, id: string, stored: StoredToolCall): Step => ({ at, event: { type: 'tool', id, call: stored } });
@@ -59,33 +63,31 @@ describe('one turn', () => {
       requestId: '41',
       state: 'done',
       content: 'Hello world again',
-      toolCalls: [],
+      toolCalls: RUNNER_CALLS,
       errorCode: null,
       costUsd: 0.038524,
-      claudeSessionId: STORED_SESSION_ID,
+      claudeSessionId: null,
       model: 'claude-haiku-4-5-20251001',
     });
     expect(fake.finishes[0]?.durationMs).toBeGreaterThanOrEqual(600);
   });
 
-  it('hands the provider the claim: the prompt, the history, the stored session id and the budget', async () => {
+  it('hands the provider an answering input: the assembled prompt with the question in it, the system prompt, the budget and its own MCP config', async () => {
     const scripted = scriptedTurn([result(10)]);
     const { deps } = harness(scripted.turn, { budgetUsd: 0.5 });
-    const history = [
-      { role: 'user', content: 'first' },
-      { role: 'assistant', content: 'answer' },
-    ] as const;
-    const handle = startTurn(deps, claimOf({ history: [...history], claudeSessionId: STORED_SESSION_ID }));
+    const handle = startTurn(deps, claimOf());
     await vi.advanceTimersByTimeAsync(100);
     await handle.done;
     expect(scripted.inputs[0]).toMatchObject({
       requestId: '41',
+      kind: 'answer',
       model: 'haiku',
-      prompt: claimOf().prompt,
-      history,
-      claudeSessionId: STORED_SESSION_ID,
       budgetUsd: 0.5,
+      mcpConfig: '/run/workspace/mcp-41.json',
     });
+    expect(scripted.inputs[0]?.prompt.endsWith(`Question:\n\n${claimOf().prompt}`)).toBe(true);
+    expect(scripted.inputs[0]?.systemPrompt).toContain('prompt:system');
+    expect(scripted.inputs[0]?.systemPrompt).toContain('prompt:format-plain');
   });
 
   it.each([
@@ -93,9 +95,10 @@ describe('one turn', () => {
     ["Explain how a systems analyst's role differs from a project manager's, using the IST.352 slides", null, 'mid', 'sonnet'],
     ['Go on', 'high', 'high', 'opus'],
     ['Go on', null, 'mid', 'sonnet'],
-  ] as const)('routes %j (prior tier %s) to %s and begins with the %s alias', async (prompt, priorTier, tier, model) => {
+  ] as const)('routes %j (last auto tier %s) to %s and begins with the %s alias', async (prompt, priorTier, tier, model) => {
     const { fake, deps } = harness(scriptedTurn([result(10)]).turn);
-    const handle = startTurn(deps, claimOf({ prompt, priorTier }));
+    fake.context = contextJson({ last_auto_tier: priorTier });
+    const handle = startTurn(deps, claimOf({ prompt }));
     await vi.advanceTimersByTimeAsync(100);
     await handle.done;
     expect(fake.begins[0]).toMatchObject({ tier, provider: 'claude-cli', model });
@@ -153,8 +156,10 @@ describe('one turn', () => {
     expect(await handle.done).toEqual({ state: 'done', errorCode: null });
     const storedCalls = fake.finishes[0]?.toolCalls ?? [];
     expect(storedCalls).toHaveLength(TOOL_CALLS_MAX);
-    expect(storedCalls.map((c) => c.query)).toEqual(Array.from({ length: TOOL_CALLS_MAX }, (_, i) => `query ${i + 1}`));
-    expect(logs.some((line) => /request=41/.test(line) && /tool calls/.test(line) && /dropped 1\b/.test(line))).toBe(true);
+    // The runner's own two steps come first; the model's calls fill what is left, in call order.
+    expect(storedCalls.slice(0, 2)).toEqual(RUNNER_CALLS);
+    expect(storedCalls.slice(2).map((c) => c.query)).toEqual(Array.from({ length: TOOL_CALLS_MAX - 2 }, (_, i) => `query ${i + 1}`));
+    expect(logs.some((line) => /request=41/.test(line) && /tool calls/.test(line) && /dropped 3\b/.test(line))).toBe(true);
   });
 
   it('keeps a call in its place when its result arrives later, with failed and denied calls stored too', async () => {
@@ -170,7 +175,7 @@ describe('one turn', () => {
     const handle = startTurn(deps, claimOf());
     await vi.advanceTimersByTimeAsync(1000);
     await handle.done;
-    expect(fake.finishes[0]?.toolCalls).toEqual([call(1, true), call(2, true), call(3, false)]);
+    expect(fake.finishes[0]?.toolCalls).toEqual([...RUNNER_CALLS, call(1, true), call(2, true), call(3, false)]);
     for (const stored of fake.finishes[0]?.toolCalls ?? []) expect(Object.keys(stored)).toEqual(['tool', 'query', 'scope', 'ok']);
   });
 
@@ -307,7 +312,7 @@ describe('Stop, the time limit and the no-cap sentence', () => {
     await vi.advanceTimersByTimeAsync(4000);
     expect(await handle.done).toEqual({ state: 'failed', errorCode: 'cancelled' });
     expect((scripted.abortedAt ?? Infinity) - stoppedAt).toBeLessThanOrEqual(4000);
-    expect(fake.finishes[0]).toMatchObject({ errorCode: 'cancelled', content: 'Let me look. ', toolCalls: [call(1, false)] });
+    expect(fake.finishes[0]).toMatchObject({ errorCode: 'cancelled', content: 'Let me look. ', toolCalls: [...RUNNER_CALLS, call(1, false)] });
   });
 
   it('kills a turn at 8 minutes and stores timeout', async () => {
@@ -424,26 +429,18 @@ describe('a turn and the database', () => {
     expect(textSent(fake)).toEqual([[1, 'ab']]);
   });
 
-  it('passes a session id only when the provider reported one', async () => {
+  it('stores no session id, whatever the provider reported: nothing is resumed', async () => {
     const withId = harness(scriptedTurn([result(10)]).turn);
     const without = harness(scriptedTurn([result(10, { ok: false, errorCode: 'cli_error', claudeSessionId: null })]).turn);
     const a = startTurn(withId.deps, claimOf());
     const b = startTurn(without.deps, claimOf());
     await vi.advanceTimersByTimeAsync(100);
     await Promise.all([a.done, b.done]);
-    expect(withId.fake.finishes[0]?.claudeSessionId).toBe(STORED_SESSION_ID);
+    expect(withId.fake.finishes[0]?.claudeSessionId).toBeNull();
     expect(without.fake.finishes[0]?.claudeSessionId).toBeNull();
   });
 
-  it('hands back the stored session id when the provider reported none, so the conversation keeps its session', async () => {
-    const nothingRan = harness(scriptedTurn([result(10, { ok: false, errorCode: 'sign_in_expired', claudeSessionId: null })]).turn);
-    const handle = startTurn(nothingRan.deps, claimOf({ claudeSessionId: STORED_SESSION_ID }));
-    await vi.advanceTimersByTimeAsync(100);
-    await handle.done;
-    expect(nothingRan.fake.finishes[0]).toMatchObject({ errorCode: 'sign_in_expired', claudeSessionId: STORED_SESSION_ID });
-  });
-
-  it('keeps the session id and the model of a turn the runner stopped', async () => {
+  it('keeps the model of a turn the runner stopped, and stores no session', async () => {
     const scripted = scriptedTurn([delta(100, 'part')]);
     const { fake, deps } = harness(scripted.turn);
     const handle = startTurn(deps, claimOf());
@@ -451,7 +448,7 @@ describe('a turn and the database', () => {
     fake.cancel();
     await vi.advanceTimersByTimeAsync(3000);
     await handle.done;
-    expect(fake.finishes[0]).toMatchObject({ errorCode: 'cancelled', claudeSessionId: ABORTED.claudeSessionId, model: ABORTED.model });
+    expect(fake.finishes[0]).toMatchObject({ errorCode: 'cancelled', claudeSessionId: null, model: ABORTED.model });
   });
 });
 

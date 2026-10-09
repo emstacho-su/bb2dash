@@ -1,6 +1,9 @@
 /**
- * The runner's database side: the five `workspace_runner` functions of migration 142, and nothing
- * else. The role holds no table privilege, so every statement below is one of them.
+ * The runner's database side: the `workspace_runner` functions (migration 142's four, and the six of
+ * migration 196: `workspace_claim_v2`, `workspace_turn_context`, `workspace_turn_put`,
+ * `workspace_planner_feed`, `workspace_job_claim` and `workspace_job_finish`), and nothing else. The
+ * role holds no table privilege, so every statement below is one of them. Their shapes are frozen in
+ * `test/fixtures/contract24`.
  *
  * `createRpc` takes a bare query function, so the loop runs on a fake in tests; `createPgQuery` is
  * the real one: one session-pooler connection, reconnected after a failure, with one log line per
@@ -11,8 +14,8 @@
 import pg from 'pg';
 
 import { messageOf, type ErrorCode } from './errors.js';
-import type { HistoryMessage, ProviderId, StoredToolCall } from './providers/types.js';
-import { isTier, type Tier } from './tiers.js';
+import type { ProviderId, StoredToolCall } from './providers/types.js';
+import type { Tier } from './tiers.js';
 
 /** The application name the runner's session carries in pg_stat_activity. */
 export const APPLICATION_NAME = 'bb2dash-workspace-runner';
@@ -20,18 +23,69 @@ export const APPLICATION_NAME = 'bb2dash-workspace-runner';
 export type QueryResult = { rows: Record<string, unknown>[] };
 export type QueryFn = (sql: string, params?: readonly unknown[]) => Promise<QueryResult>;
 
-/** One claimed request, as `workspace_claim()` returns it. */
+/** One claimed request, as `workspace_claim_v2()` returns it (`claim-v2.json`). */
 export interface Claim {
   readonly requestId: string;
   readonly conversationId: string;
   readonly userMessageId: string;
   /** The request's own user message. */
   readonly prompt: string;
-  readonly claudeSessionId: string | null;
-  /** The tier of the conversation's latest assistant message; null for a first question. */
-  readonly priorTier: Tier | null;
-  /** The last 20 messages before the request's user message, oldest first; `[]` for a first question. */
-  readonly history: readonly HistoryMessage[];
+}
+
+/** The facts `workspace_turn_put` stores for an answer (`turn-put.json`, `p_facts`): ids, counts and timings, never text. */
+export interface TurnFacts {
+  readonly depth: string;
+  readonly tier: Tier;
+  readonly planState: 'skipped' | 'planned' | 'fallback';
+  readonly retrievalState: 'found' | 'attached_only' | 'empty' | 'failed';
+  readonly foundN: number;
+  readonly passagesN: number;
+  readonly memoryN: number;
+  readonly feedRows: number;
+  readonly attachments: ReadonlyArray<{ readonly kind: 'file' | 'upload'; readonly id: number; readonly state: string }>;
+  readonly promptBytes: number;
+  readonly planMs: number;
+  readonly retrievalMs: number;
+  readonly planCostUsd: number;
+}
+
+/** One row of `p_sources`, in the keys the function reads. */
+export interface SourceRow {
+  readonly kind: 'material' | 'upload' | 'memory' | 'feed';
+  readonly origin: 'auto' | 'attached' | 'tool';
+  readonly file_id: number | null;
+  readonly text_id: number | null;
+  readonly document_id: number | null;
+  readonly doc_text_id: number | null;
+  readonly course_id: string | null;
+  readonly unit_kind: string | null;
+  readonly unit_no: number | null;
+  readonly similarity: number | null;
+  readonly title: string | null;
+}
+
+export type JobKind = 'rolling' | 'memory';
+
+/** What `workspace_job_claim` hands over (`job-claim.json`); null when there is no job. */
+export interface JobClaim {
+  readonly kind: JobKind;
+  readonly conversationId: string;
+  readonly through: string;
+  readonly previousSummary: string | null;
+  readonly messages: ReadonlyArray<{ readonly role: 'user' | 'assistant'; readonly content: string; readonly createdAt: string }>;
+}
+
+export interface JobFinishArgs {
+  readonly conversationId: string;
+  readonly kind: JobKind;
+  readonly outcome: 'done' | 'failed' | 'released';
+  readonly summary: string | null;
+  readonly through: string | null;
+}
+
+export interface JobFinishResult {
+  readonly stored: boolean;
+  readonly documentId: number | null;
 }
 
 export interface FinishArgs {
@@ -42,12 +96,22 @@ export interface FinishArgs {
   readonly errorCode: ErrorCode | null;
   readonly costUsd: number | null;
   readonly durationMs: number;
+  /** Always null: no turn resumes a session (brief 109, Sessions). */
   readonly claudeSessionId: string | null;
   readonly model: string | null;
 }
 
 export interface WorkspaceRpc {
+  /** `workspace_claim_v2`: the next request, or null. */
   claim(runner: string): Promise<Claim | null>;
+  /** `workspace_turn_context`: the jsonb as the function returned it; `turn-context.ts` reads it. */
+  turnContext(requestId: string, runner: string): Promise<unknown>;
+  /** `workspace_turn_put`: facts (null on the second call) and sources; the number of rows kept. */
+  turnPut(requestId: string, runner: string, facts: TurnFacts | null, sources: readonly SourceRow[]): Promise<number>;
+  /** `workspace_planner_feed`: the jsonb as the function returned it; `context/feed.ts` reads it. */
+  plannerFeed(requestId: string, runner: string, from: string | null, to: string | null): Promise<unknown>;
+  jobClaim(runner: string, kinds: readonly JobKind[]): Promise<JobClaim | null>;
+  jobFinish(runner: string, args: JobFinishArgs): Promise<JobFinishResult>;
   begin(requestId: string, tier: Tier, provider: ProviderId, model: string): Promise<string>;
   /** False when the request is no longer claimed (the owner pressed Stop). An empty delta only asks. */
   stream(requestId: string, seq: number, delta: string): Promise<boolean>;
@@ -63,48 +127,102 @@ function requestIdOf(value: unknown): string {
   return text;
 }
 
-const optionalText = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
-
-function historyOf(value: unknown): HistoryMessage[] {
-  let list: unknown = value;
-  if (typeof value === 'string') {
-    try {
-      list = JSON.parse(value);
-    } catch {
-      return [];
-    }
-  }
-  if (!Array.isArray(list)) return [];
-  return list.flatMap((entry): HistoryMessage[] => {
-    if (typeof entry !== 'object' || entry === null) return [];
-    const { role, content } = entry as { role?: unknown; content?: unknown };
-    return (role === 'user' || role === 'assistant') && typeof content === 'string' ? [{ role, content }] : [];
-  });
-}
-
 function claimOf(row: Record<string, unknown>): Claim {
   return {
     requestId: requestIdOf(row.request_id),
     conversationId: String(row.conversation_id ?? ''),
     userMessageId: String(row.user_message_id ?? ''),
     prompt: typeof row.prompt === 'string' ? row.prompt : '',
-    claudeSessionId: optionalText(row.claude_session_id),
-    priorTier: isTier(row.prior_tier) ? row.prior_tier : null,
-    history: historyOf(row.history),
   };
 }
 
-/** The five functions, as typed calls. */
+const textOrNull = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
+
+type JobMessage = JobClaim['messages'][number];
+
+function jobMessageOf(entry: unknown): JobMessage[] {
+  if (typeof entry !== 'object' || entry === null) return [];
+  const { role, content, created_at: createdAt } = entry as { role?: unknown; content?: unknown; created_at?: unknown };
+  if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string') return [];
+  return [{ role, content, createdAt: typeof createdAt === 'string' ? createdAt : '' }];
+}
+
+function jobOf(value: unknown): JobClaim | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const job = value as Record<string, unknown>;
+  if ((job.kind !== 'rolling' && job.kind !== 'memory') || typeof job.conversation_id !== 'string' || typeof job.through !== 'string') return null;
+  return {
+    kind: job.kind,
+    conversationId: job.conversation_id,
+    through: job.through,
+    previousSummary: textOrNull(job.previous_summary),
+    messages: Array.isArray(job.messages) ? job.messages.flatMap(jobMessageOf) : [],
+  };
+}
+
+/** The facts as the function reads them: snake_case keys, the numbers as numbers. */
+function factsJson(facts: TurnFacts): Record<string, unknown> {
+  return {
+    depth: facts.depth,
+    tier: facts.tier,
+    plan_state: facts.planState,
+    retrieval_state: facts.retrievalState,
+    found_n: facts.foundN,
+    passages_n: facts.passagesN,
+    memory_n: facts.memoryN,
+    feed_rows: facts.feedRows,
+    attachments: facts.attachments,
+    prompt_bytes: facts.promptBytes,
+    plan_ms: Math.round(facts.planMs),
+    retrieval_ms: Math.round(facts.retrievalMs),
+    plan_cost_usd: facts.planCostUsd,
+  };
+}
+
+/** The functions, as typed calls. */
 export function createRpc(query: QueryFn): WorkspaceRpc {
   return {
     async claim(runner) {
       const result = await query(
         'select request_id::text as request_id, conversation_id::text as conversation_id, user_message_id::text as user_message_id, ' +
-          'prompt, claude_session_id, prior_tier, history from public.workspace_claim($1)',
+          'prompt from public.workspace_claim_v2($1)',
         [runner],
       );
       const row = result.rows[0];
       return row ? claimOf(row) : null;
+    },
+    async turnContext(requestId, runner) {
+      const result = await query('select public.workspace_turn_context($1::bigint, $2) as context', [requestId, runner]);
+      return result.rows[0]?.context ?? null;
+    },
+    async turnPut(requestId, runner, facts, sources) {
+      const result = await query('select public.workspace_turn_put($1::bigint, $2, $3::jsonb, $4::jsonb) as kept', [
+        requestId,
+        runner,
+        facts === null ? null : JSON.stringify(factsJson(facts)),
+        JSON.stringify(sources),
+      ]);
+      return Number(result.rows[0]?.kept ?? 0);
+    },
+    async plannerFeed(requestId, runner, from, to) {
+      const result = await query('select public.workspace_planner_feed($1::bigint, $2, $3::date, $4::date) as feed', [requestId, runner, from, to]);
+      return result.rows[0]?.feed ?? null;
+    },
+    async jobClaim(runner, kinds) {
+      const result = await query('select public.workspace_job_claim($1, $2::text[]) as job', [runner, [...kinds]]);
+      return jobOf(result.rows[0]?.job);
+    },
+    async jobFinish(runner, args) {
+      const result = await query('select public.workspace_job_finish($1, $2::uuid, $3, $4, $5, $6::timestamptz) as outcome', [
+        runner,
+        args.conversationId,
+        args.kind,
+        args.outcome,
+        args.summary,
+        args.through,
+      ]);
+      const outcome = (result.rows[0]?.outcome ?? {}) as { stored?: unknown; document_id?: unknown };
+      return { stored: outcome.stored === true, documentId: typeof outcome.document_id === 'number' ? outcome.document_id : null };
     },
     async begin(requestId, tier, provider, model) {
       const result = await query('select public.workspace_begin($1::bigint, $2, $3, $4)::text as id', [requestId, tier, provider, model]);

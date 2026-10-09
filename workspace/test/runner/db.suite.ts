@@ -1,4 +1,4 @@
-/** The runner's database side: five calls, and one connection that reconnects. Part of runner.test.ts. */
+/** The runner's database side: its calls, and one connection that reconnects. Part of runner.test.ts. */
 
 import { describe, expect, it } from 'vitest';
 
@@ -15,6 +15,7 @@ import {
   type QueryResult,
 } from '../../src/db.js';
 import { CONVERSATION_ID, STORED_SESSION_ID } from '../helpers/fakes.js';
+import { readContractJson } from '../helpers/context24.js';
 
 // A made-up DSN in the real one's shape; not a credential.
 const DSN = 'postgresql://workspace_runner.projectref:not-a-password@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require';
@@ -40,39 +41,35 @@ const CLAIM_ROW = {
   conversation_id: CONVERSATION_ID,
   user_message_id: '7a7a7a7a-0000-4000-8000-000000000001',
   prompt: 'What is due on Friday?',
-  claude_session_id: STORED_SESSION_ID,
-  prior_tier: 'mid',
-  history: [
-    { role: 'user', content: 'first' },
-    { role: 'assistant', content: 'answer' },
-  ],
 };
 
-describe('the five runner calls', () => {
-  it('claims under the runner name and reads the row', async () => {
+describe('the runner calls', () => {
+  it('claims under the runner name through workspace_claim_v2 and reads the row', async () => {
     const { query, sent } = fakeQuery([CLAIM_ROW]);
     const claim = await createRpc(query).claim('workspace@test');
-    expect(sent[0]?.sql).toContain('public.workspace_claim($1)');
+    expect(sent[0]?.sql).toContain('public.workspace_claim_v2($1)');
     expect(sent[0]?.params).toEqual(['workspace@test']);
     expect(claim).toEqual({
       requestId: '41',
       conversationId: CONVERSATION_ID,
       userMessageId: CLAIM_ROW.user_message_id,
       prompt: 'What is due on Friday?',
-      claudeSessionId: STORED_SESSION_ID,
-      priorTier: 'mid',
-      history: CLAIM_ROW.history,
+    });
+  });
+
+  it('reads the frozen claim-v2.json row', async () => {
+    const row = readContractJson('claim-v2.json') as Record<string, unknown>;
+    const claim = await createRpc(fakeQuery([row]).query).claim('w');
+    expect(claim).toEqual({
+      requestId: '4812',
+      conversationId: row.conversation_id,
+      userMessageId: row.user_message_id,
+      prompt: 'What does the lab handout say about osmosis?',
     });
   });
 
   it('is null when nothing is queued', async () => {
     expect(await createRpc(fakeQuery([]).query).claim('w')).toBeNull();
-  });
-
-  it('reads a first question: no session id, no prior tier, an empty history', async () => {
-    const row = { ...CLAIM_ROW, claude_session_id: null, prior_tier: null, history: [] };
-    const claim = await createRpc(fakeQuery([row]).query).claim('w');
-    expect(claim).toMatchObject({ claudeSessionId: null, priorTier: null, history: [] });
   });
 
   it('reads a bigint request id whatever type the driver gives it', async () => {
@@ -86,16 +83,90 @@ describe('the five runner calls', () => {
     await expect(createRpc(fakeQuery([{ ...CLAIM_ROW, request_id: 'abc' }]).query).claim('w')).rejects.toThrow(/request id/);
   });
 
-  it('drops what is not a stored message from the history, and a prior tier it does not know', async () => {
-    const history = [{ role: 'user', content: 'kept' }, { role: 'system', content: 'no' }, { role: 'assistant' }, 'text', null];
-    const claim = await createRpc(fakeQuery([{ ...CLAIM_ROW, history, prior_tier: 'ultra' }]).query).claim('w');
-    expect(claim?.history).toEqual([{ role: 'user', content: 'kept' }]);
-    expect(claim?.priorTier).toBeNull();
+  it('reads the turn context as the jsonb the function returns, for the request and the runner', async () => {
+    const context = readContractJson('turn-context.json');
+    const { query, sent } = fakeQuery([{ context }]);
+    expect(await createRpc(query).turnContext('41', 'workspace@test')).toEqual(context);
+    expect(sent[0]?.sql).toContain('public.workspace_turn_context($1::bigint, $2)');
+    expect(sent[0]?.params).toEqual(['41', 'workspace@test']);
+    expect(await createRpc(fakeQuery([]).query).turnContext('41', 'w')).toBeNull();
   });
 
-  it('reads a history that arrives as JSON text', async () => {
-    const claim = await createRpc(fakeQuery([{ ...CLAIM_ROW, history: JSON.stringify(CLAIM_ROW.history) }]).query).claim('w');
-    expect(claim?.history).toEqual(CLAIM_ROW.history);
+  it('puts the facts and the sources as two jsonb arguments, the facts in the keys of turn-put.json', async () => {
+    const frozen = readContractJson('turn-put.json') as { p_facts: Record<string, unknown>; p_sources: unknown[] };
+    const { query, sent } = fakeQuery([{ kept: 7 }]);
+    const kept = await createRpc(query).turnPut('41', 'workspace@test', {
+      depth: 'standard',
+      tier: 'mid',
+      planState: 'planned',
+      retrievalState: 'found',
+      foundN: 3,
+      passagesN: 2,
+      memoryN: 1,
+      feedRows: 5,
+      attachments: [
+        { kind: 'file', id: 412, state: 'cut' },
+        { kind: 'upload', id: 17, state: 'read' },
+      ],
+      promptBytes: 48211,
+      planMs: 1480,
+      retrievalMs: 912,
+      planCostUsd: 0.0016,
+    }, frozen.p_sources as never);
+    expect(kept).toBe(7);
+    expect(sent[0]?.sql).toContain('public.workspace_turn_put($1::bigint, $2, $3::jsonb, $4::jsonb)');
+    expect(JSON.parse(String(sent[0]?.params?.[2]))).toEqual(frozen.p_facts);
+    expect(JSON.parse(String(sent[0]?.params?.[3]))).toEqual(frozen.p_sources);
+  });
+
+  it('puts null facts on the second call', async () => {
+    const { query, sent } = fakeQuery([{ kept: 1 }]);
+    await createRpc(query).turnPut('41', 'w', null, []);
+    expect(sent[0]?.params).toEqual(['41', 'w', null, '[]']);
+  });
+
+  it('reads the planner feed for the window it is given', async () => {
+    const feed = readContractJson('planner-feed.json');
+    const { query, sent } = fakeQuery([{ feed }]);
+    expect(await createRpc(query).plannerFeed('41', 'w', '2026-10-01', null)).toEqual(feed);
+    expect(sent[0]?.sql).toContain('public.workspace_planner_feed($1::bigint, $2, $3::date, $4::date)');
+    expect(sent[0]?.params).toEqual(['41', 'w', '2026-10-01', null]);
+  });
+
+  it('claims a job for the kinds it asks for and reads job-claim.json', async () => {
+    const job = readContractJson('job-claim.json');
+    const { query, sent } = fakeQuery([{ job }]);
+    const claimed = await createRpc(query).jobClaim('w', ['rolling']);
+    expect(sent[0]?.sql).toContain('public.workspace_job_claim($1, $2::text[])');
+    expect(sent[0]?.params).toEqual(['w', ['rolling']]);
+    expect(claimed).toMatchObject({ kind: 'rolling', conversationId: '6f0c1b9e-2a54-4d0b-9c1e-7a3f5d2b8e10', through: '2026-10-08T14:02:15.900000+00:00' });
+    expect(claimed?.messages).toHaveLength(2);
+    expect(claimed?.previousSummary).toContain('earlier in this conversation');
+    expect(await createRpc(fakeQuery([{ job: null }]).query).jobClaim('w', ['rolling'])).toBeNull();
+    expect(await createRpc(fakeQuery([{ job: { kind: 'other' } }]).query).jobClaim('w', ['rolling'])).toBeNull();
+  });
+
+  it('finishes a job with the six arguments of job-finish.json and reads what it returns', async () => {
+    const frozen = readContractJson('job-finish.json') as { args: Record<string, string>; returns: { stored: boolean; document_id: number | null } };
+    const { query, sent } = fakeQuery([{ outcome: frozen.returns }]);
+    const done = await createRpc(query).jobFinish(frozen.args.p_runner ?? '', {
+      conversationId: frozen.args.p_conversation_id ?? '',
+      kind: 'rolling',
+      outcome: 'done',
+      summary: frozen.args.p_summary ?? null,
+      through: frozen.args.p_through ?? null,
+    });
+    expect(sent[0]?.sql).toContain('public.workspace_job_finish($1, $2::uuid, $3, $4, $5, $6::timestamptz)');
+    expect(sent[0]?.params).toEqual(Object.values(frozen.args));
+    expect(done).toEqual({ stored: true, documentId: null });
+    const memory = await createRpc(fakeQuery([{ outcome: { stored: true, document_id: 21 } }]).query).jobFinish('w', {
+      conversationId: CONVERSATION_ID,
+      kind: 'memory',
+      outcome: 'done',
+      summary: 's',
+      through: 't',
+    });
+    expect(memory.documentId).toBe(21);
   });
 
   it('begins with the tier, the provider and the alias, and returns the message id', async () => {
@@ -169,7 +240,7 @@ describe('the five runner calls', () => {
     expect(sent[0]?.params).toEqual(['workspace@test']);
   });
 
-  it('touches no table: every statement is one of the five functions', async () => {
+  it('touches no table: every statement is one of the eleven functions', async () => {
     const { query, sent } = fakeQuery([CLAIM_ROW]);
     const rpc = createRpc(query);
     await rpc.claim('w');
@@ -177,9 +248,14 @@ describe('the five runner calls', () => {
     await rpc.stream('41', 1, 'x');
     await rpc.finish({ requestId: '41', state: 'done', content: '', toolCalls: [], errorCode: null, costUsd: null, durationMs: 1, claudeSessionId: null, model: null });
     await rpc.heartbeat('w');
-    expect(sent).toHaveLength(5);
+    await rpc.turnContext('41', 'w');
+    await rpc.turnPut('41', 'w', null, []);
+    await rpc.plannerFeed('41', 'w', null, null);
+    await rpc.jobClaim('w', ['rolling']);
+    await rpc.jobFinish('w', { conversationId: CONVERSATION_ID, kind: 'rolling', outcome: 'released', summary: null, through: null });
+    expect(sent).toHaveLength(10);
     for (const { sql } of sent) {
-      expect(sql).toMatch(/public\.workspace_(claim|begin|stream|finish|heartbeat)\(/);
+      expect(sql).toMatch(/public\.workspace_(claim_v2|begin|stream|finish|heartbeat|turn_context|turn_put|planner_feed|job_claim|job_finish)\(/);
       expect(sql).not.toMatch(/\b(insert|update|delete)\b/i);
       expect(sql).not.toMatch(/\bfrom\s+(public\.)?(workspace_messages|workspace_requests|assignment_progress|reading_progress)/i);
     }

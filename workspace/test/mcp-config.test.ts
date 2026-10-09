@@ -6,7 +6,17 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { PATHS } from '../src/config.js';
-import { MCP_CONFIG_MODE, buildMcpConfig, mcpConfigText, writeMcpConfig } from '../src/mcp-config.js';
+import {
+  MCP_CONFIG_MODE,
+  buildMcpConfig,
+  buildNoServerConfig,
+  configText,
+  removeRequestConfig,
+  requestConfigPath,
+  turnLimits,
+  writeNoServerConfig,
+  writeRequestConfig,
+} from '../src/mcp-config.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SETTINGS = path.resolve(HERE, '..', 'claude', 'settings.json');
@@ -26,7 +36,10 @@ afterEach(() => {
 describe('the in-image layout (the seam with the image)', () => {
   it('names the runner package paths', () => {
     expect(PATHS.runDir).toBe('/run/workspace');
-    expect(PATHS.mcpConfig).toBe('/run/workspace/mcp.json');
+    expect(PATHS.mcpNone).toBe('/run/workspace/mcp-none.json');
+    expect(PATHS.batchEntry).toBe('/app/mcp-materials/dist/batch.js');
+    expect(PATHS.promptsDir).toBe('/app/workspace/prompts');
+    expect('mcpConfig' in PATHS).toBe(false);
     expect(PATHS.aliveFile).toBe('/run/workspace/alive');
     expect(PATHS.settings).toBe('/app/workspace/claude/settings.json');
     expect(PATHS.systemPrompt).toBe('/app/workspace/prompts/system.md');
@@ -59,32 +72,44 @@ describe('the in-image layout (the seam with the image)', () => {
   });
 });
 
-describe('the MCP config', () => {
-  const config = buildMcpConfig();
+describe('the answering turn MCP config', () => {
+  const limits = turnLimits(true, ['BIO.110', 'BIO.110.lab']);
+  const config = buildMcpConfig(limits);
 
-  it('holds exactly bb2dash and rag', () => {
+  it('holds exactly one server, bb2dash: the notes server is gone', () => {
     expect(Object.keys(config)).toEqual(['mcpServers']);
-    expect(Object.keys(config.mcpServers).sort()).toEqual(['bb2dash', 'rag']);
+    expect(Object.keys(config.mcpServers)).toEqual(['bb2dash']);
+    expect(JSON.stringify(config)).not.toContain('rag');
   });
 
-  it('starts the materials server by path, its key named by file', () => {
+  it('starts the materials server by path, its key named by file, with the turn limits in its env', () => {
     expect(config.mcpServers.bb2dash).toEqual({
       command: 'node',
       args: ['/app/mcp-materials/dist/index.js'],
       env: {
         SUPABASE_URL: 'https://goultdzqcavefcgnifdy.supabase.co',
         SUPABASE_SERVICE_ROLE_FILE: '/run/secrets/bb2dash_mcp_service_key',
+        BB2DASH_MAX_SEARCHES: '3',
+        BB2DASH_MAX_READS: '10',
+        BB2DASH_COURSES: 'BIO.110,BIO.110.lab',
       },
     });
   });
 
-  it('starts the notes server through its launcher, with no env at all', () => {
-    expect(config.mcpServers.rag).toEqual({ command: 'bash', args: ['/app/mcp-rag/mcp-rag.sh'] });
-    expect('env' in config.mcpServers.rag).toBe(false);
+  it('allows 3 searches after a planning turn and 4 without one, and 10 reads either way', () => {
+    expect(turnLimits(true, null)).toEqual({ maxSearches: 3, maxReads: 10, courses: null });
+    expect(turnLimits(false, null)).toEqual({ maxSearches: 4, maxReads: 10, courses: null });
   });
 
-  it('holds paths only: no DSN, no key and no token shape', () => {
-    const text = mcpConfigText();
+  it('names no course when the request has no scope', () => {
+    for (const courses of [null, []]) {
+      const env = buildMcpConfig(turnLimits(true, courses)).mcpServers.bb2dash?.env ?? {};
+      expect('BB2DASH_COURSES' in env).toBe(false);
+    }
+  });
+
+  it('holds paths and numbers only: no DSN, no key and no token shape', () => {
+    const text = configText(config);
     expect(text).not.toMatch(/postgres(ql)?:\/\//);
     expect(text).not.toMatch(/sb_secret_/);
     expect(text).not.toMatch(/eyJ/);
@@ -92,45 +117,58 @@ describe('the MCP config', () => {
     expect(text).not.toMatch(/DATABASE_URL/);
     expect(JSON.parse(text)).toEqual(config);
   });
+});
 
-  it('is the same on every call and cannot be changed by a caller', () => {
-    expect(buildMcpConfig()).toEqual(config);
-    expect(Object.isFrozen(config.mcpServers.bb2dash)).toBe(true);
-    expect(Object.isFrozen(config.mcpServers.bb2dash.env)).toBe(true);
+describe('the config with no server', () => {
+  it('names no server at all', () => {
+    expect(buildNoServerConfig()).toEqual({ mcpServers: {} });
+    expect(configText(buildNoServerConfig())).toBe('{\n  "mcpServers": {}\n}\n');
+  });
+
+  it('is written at start to /run/workspace/mcp-none.json, mode 0600', () => {
+    const calls: Array<{ what: string; file: string; mode: unknown }> = [];
+    writeNoServerConfig(undefined, {
+      writeFileSync: (file, _text, options) => calls.push({ what: 'write', file, mode: options.mode }),
+      chmodSync: (file, mode) => calls.push({ what: 'chmod', file, mode }),
+    });
+    expect(MCP_CONFIG_MODE).toBe(0o600);
+    expect(calls).toEqual([
+      { what: 'write', file: '/run/workspace/mcp-none.json', mode: 0o600 },
+      { what: 'chmod', file: '/run/workspace/mcp-none.json', mode: 0o600 },
+    ]);
   });
 });
 
-describe('writeMcpConfig', () => {
-  it('writes the config as JSON to the path it is given', () => {
-    const file = path.join(tempDir(), 'mcp.json');
-    writeMcpConfig(file);
-    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(buildMcpConfig());
-    expect(fs.readFileSync(file, 'utf8')).toBe(mcpConfigText());
+describe('a request config file', () => {
+  it('is /run/workspace/mcp-<request id>.json', () => {
+    expect(requestConfigPath('4812')).toBe('/run/workspace/mcp-4812.json');
   });
 
-  it('asks for mode 0600', () => {
-    expect(MCP_CONFIG_MODE).toBe(0o600);
+  it.each([['../etc/passwd'], ['41/../x'], ['0'], ['07'], [''], ['4 1'], ['41.json']])('never turns %j into a path', (id) => {
+    expect(() => requestConfigPath(id)).toThrow(/request id/);
+  });
+
+  it('is written with mode 0600, holds the config, and is removed after the turn', () => {
+    const dir = tempDir();
+    const file = writeRequestConfig('77', turnLimits(false, ['MAT.221']), dir);
+    expect(file).toBe(`${dir}/mcp-77.json`);
+    const written = JSON.parse(fs.readFileSync(file, 'utf8')) as ReturnType<typeof buildMcpConfig>;
+    expect(written).toEqual(buildMcpConfig(turnLimits(false, ['MAT.221'])));
+    if (process.platform !== 'win32') expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+    removeRequestConfig(file);
+    expect(fs.existsSync(file)).toBe(false);
+    expect(() => removeRequestConfig(file)).not.toThrow();
+  });
+
+  it('asks for the mode on the write and again on the chmod', () => {
     const calls: Array<{ what: string; file: string; mode: unknown }> = [];
-    writeMcpConfig('/run/workspace/mcp.json', {
+    writeRequestConfig('9', turnLimits(true, null), '/run/workspace', {
       writeFileSync: (file, _text, options) => calls.push({ what: 'write', file, mode: options.mode }),
       chmodSync: (file, mode) => calls.push({ what: 'chmod', file, mode }),
     });
     expect(calls).toEqual([
-      { what: 'write', file: '/run/workspace/mcp.json', mode: 0o600 },
-      { what: 'chmod', file: '/run/workspace/mcp.json', mode: 0o600 },
+      { what: 'write', file: '/run/workspace/mcp-9.json', mode: 0o600 },
+      { what: 'chmod', file: '/run/workspace/mcp-9.json', mode: 0o600 },
     ]);
-  });
-
-  it('writes to the in-image path by default', () => {
-    const files: string[] = [];
-    writeMcpConfig(undefined, { writeFileSync: (file) => files.push(file), chmodSync: () => undefined });
-    expect(files).toEqual([PATHS.mcpConfig]);
-  });
-
-  it('replaces a file that is already there', () => {
-    const file = path.join(tempDir(), 'mcp.json');
-    fs.writeFileSync(file, 'stale');
-    writeMcpConfig(file);
-    expect(fs.readFileSync(file, 'utf8')).toBe(mcpConfigText());
   });
 });

@@ -33,9 +33,11 @@ import {
 } from './config.js';
 import { createPgQuery, createRpc, newPgClient, type Claim } from './db.js';
 import { messageOf } from './errors.js';
-import { writeMcpConfig } from './mcp-config.js';
-import { createCliTurn, readSystemPrompt, spawnClaude } from './providers/claude-cli.js';
+import { writeNoServerConfig } from './mcp-config.js';
+import { createPromptReader } from './prompts.js';
+import { createCliTurn, spawnClaude } from './providers/claude-cli.js';
 import { createProviders } from './providers/index.js';
+import { createRetriever } from './retrieve.js';
 import { startTurn, type TurnDeps, type TurnHandle } from './turn.js';
 
 const EXIT_OK = 0;
@@ -48,8 +50,6 @@ export const SHUTDOWN_GRACE_MS = 20_000;
 const DB_CLOSE_MS = 2000;
 
 export interface RunnerDeps extends TurnDeps {
-  /** The name the runner claims and sends heartbeats under. */
-  readonly runnerName: string;
   /** Called after every successful heartbeat. */
   readonly touchAlive: () => void;
 }
@@ -185,12 +185,12 @@ function stamp(line: string): void {
   process.stdout.write(`${new Date().toISOString()} workspace: ${line}\n`);
 }
 
-/** The real wiring: the two secrets by file, the MCP config, one database connection, the claude CLI. */
+/** The real wiring: the two secrets by file, the no-server MCP config, one database connection, the search, the claude CLI. */
 export async function main(): Promise<number> {
   let config;
   try {
     config = loadConfig({ env: process.env, readFile: readTextOrNull, hostname: os.hostname() });
-    writeMcpConfig();
+    writeNoServerConfig();
   } catch (error) {
     stamp(`cannot start: ${messageOf(error)}`);
     return EXIT_CONFIG;
@@ -198,7 +198,6 @@ export async function main(): Promise<number> {
   const query = createPgQuery({ dsn: config.dbUrl, ca: config.dbCa, log: stamp, newClient: newPgClient });
   const claudeCli = createCliTurn({
     spawn: spawnClaude,
-    readSystemPrompt: () => readSystemPrompt(),
     readOauthToken: () => readOauthToken(readTextOrNull),
     baseEnv: process.env,
     log: stamp,
@@ -211,6 +210,8 @@ export async function main(): Promise<number> {
     budgetCapHolds: BUDGET_CAP_HOLDS,
     now: monotonicNow,
     runnerName: config.runnerName,
+    retrieve: createRetriever({ now: monotonicNow, log: stamp }),
+    readPrompt: createPromptReader(),
     touchAlive: () => touchAlive(PATHS.aliveFile),
   });
   process.once('SIGTERM', () => runner.shutdown('SIGTERM'));

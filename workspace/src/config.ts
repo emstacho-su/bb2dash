@@ -16,9 +16,7 @@ export const CLAUDE_BIN = 'claude';
 export const PATHS = Object.freeze({
   /** The runner's own directory: created by the entrypoint, 0700, owned by `node`. */
   runDir: '/run/workspace',
-  /** The MCP config the runner writes at start, mode 0600. */
-  mcpConfig: '/run/workspace/mcp.json',
-  /** An MCP config with no server: the planning, summary and rolling turns start with this one. */
+  /** An MCP config with no server, written at start (mode 0600): the planning, summary and rolling turns start with it. */
   mcpNone: '/run/workspace/mcp-none.json',
   /** The materials package's batch entry: the runner's search, one JSON object in and one out. */
   batchEntry: '/app/mcp-materials/dist/batch.js',
@@ -26,6 +24,8 @@ export const PATHS = Object.freeze({
   aliveFile: '/run/workspace/alive',
   settings: '/app/workspace/claude/settings.json',
   systemPrompt: '/app/workspace/prompts/system.md',
+  /** The folder of the prompt files: system, the two format rules, plan, summary and rolling. */
+  promptsDir: '/app/workspace/prompts',
   /** The CLI's working directory: empty, so no project settings or memory files load. */
   turnCwd: '/app/turn',
   runnerDbUrlSecret: '/run/secrets/workspace_runner_db_url',
@@ -75,11 +75,7 @@ export const FINISH_BACKOFF_FIRST_MS = 1000;
 /** No wait between two tries is longer than this. */
 export const FINISH_BACKOFF_MAX_MS = 15_000;
 
-/** At most this many stored messages are replayed on a fresh start. */
-export const HISTORY_REPLAY = 20;
-/** The replay with its framing stays within this many bytes of UTF-8 (96 KiB). */
-export const REPLAY_MAX_BYTES = 96 * 1024;
-/** The kernel's limit on one argument; the prompt element stays under it. */
+/** The kernel's limit on one argument; the assembled prompt stays under it (target 128,000 bytes). */
 export const ARG_MAX_BYTES = 131_072;
 
 /** `workspace_stream()` refuses a delta longer than this; the runner splits first. */
@@ -98,6 +94,17 @@ export const TURN_BUDGET_DEFAULT_USD = 1.0;
 export const TURN_BUDGET_MIN_USD = 0.01;
 export const TURN_BUDGET_MAX_USD = 1.0;
 export const TURN_BUDGET_ENV = 'WORKSPACE_TURN_BUDGET_USD';
+
+/** The planning turn: its own cap, its time, and the smallest budget under which it still runs (brief 109, Cost and time). */
+export const PLAN_BUDGET_USD = 0.05;
+export const PLAN_TIMEOUT_MS = 20_000;
+export const PLAN_MIN_TURN_BUDGET_USD = 0.1;
+/** A summary or rolling turn in the background: outside any answer's cap. */
+export const BACKGROUND_TURN_BUDGET_USD = 0.05;
+/** The planning model is the cheap tier's. */
+export const PLAN_MODEL = 'haiku';
+/** `WORKSPACE_MEMORY_JOBS`: `on` asks for memory jobs too; anything else, or unset, is off. */
+export const MEMORY_JOBS_ENV = 'WORKSPACE_MEMORY_JOBS';
 
 /**
  * The O-2 switch. True: the budget recording (`test/fixtures/claude-stream-budget-stop.jsonl`)

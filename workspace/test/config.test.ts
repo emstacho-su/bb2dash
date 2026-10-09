@@ -5,6 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import {
+  ARG_MAX_BYTES,
+  BACKGROUND_TURN_BUDGET_USD,
+  MEMORY_JOBS_ENV,
+  PLAN_BUDGET_USD,
+  PLAN_MIN_TURN_BUDGET_USD,
+  PLAN_MODEL,
+  PLAN_TIMEOUT_MS,
   BUDGET_CAP_HOLDS,
   CANCEL_POLL_MS,
   CLAUDE_CODE_VERSION,
@@ -14,11 +21,9 @@ import {
   DB_WATCHDOG_MS,
   HEALTH_MAX_AGE_MS,
   HEARTBEAT_MS,
-  HISTORY_REPLAY,
   NO_CAP_SENTENCE,
   PATHS,
   POLL_INTERVAL_MS,
-  REPLAY_MAX_BYTES,
   STREAM_DELTA_MAX_CHARS,
   STREAM_FLUSH_MS,
   TOOL_CALLS_MAX,
@@ -68,12 +73,20 @@ describe('the constants the Contract names', () => {
     expect(HEARTBEAT_MS).toBe(30000);
     expect(DB_WATCHDOG_MS).toBe(180000);
     expect(HEALTH_MAX_AGE_MS).toBe(90000);
-    expect(HISTORY_REPLAY).toBe(20);
-    expect(REPLAY_MAX_BYTES).toBe(96 * 1024);
     expect(STREAM_DELTA_MAX_CHARS).toBe(16000);
     expect(CONTENT_MAX_CHARS).toBe(100000);
     expect(TOOL_CALLS_MAX).toBe(20);
     expect(TOOL_QUERY_MAX_CHARS).toBe(200);
+  });
+
+  it('holds the planning turn numbers of Phase 24a', () => {
+    expect(PLAN_BUDGET_USD).toBe(0.05);
+    expect(PLAN_TIMEOUT_MS).toBe(20_000);
+    expect(PLAN_MIN_TURN_BUDGET_USD).toBe(0.1);
+    expect(BACKGROUND_TURN_BUDGET_USD).toBe(0.05);
+    expect(PLAN_MODEL).toBe('haiku');
+    expect(MEMORY_JOBS_ENV).toBe('WORKSPACE_MEMORY_JOBS');
+    expect(ARG_MAX_BYTES).toBe(131_072);
   });
 
   it('kills a turn before the database sweeps its claim at 10 minutes', () => {
@@ -307,7 +320,9 @@ describe('the per-answer budget', () => {
       const written = (cents / 100).toFixed(2);
       const args = buildArgs({
         model: 'haiku',
-        session: { mode: 'fresh', sessionId: '9f1c2d3e-4a5b-4c6d-8e7f-001122334455' },
+        sessionId: '9f1c2d3e-4a5b-4c6d-8e7f-001122334455',
+        kind: 'answer',
+        mcpConfig: '/run/workspace/mcp-1.json',
         systemPrompt: 'x',
         budgetUsd: parseTurnBudget(written),
         prompt: 'q',
@@ -551,12 +566,11 @@ describe('a secret file that holds a NUL character', () => {
     const spawn = fakeSpawn({ lines: [], exit: { code: 0, signal: null } });
     const turn = createCliTurn({
       spawn: spawn.spawn,
-      readSystemPrompt: () => 'You are read-only.',
       readOauthToken: () => readOauthToken(files({ [PATHS.oauthTokenSecret]: savedAsUtf16(ODD_SECRET, 'little-endian') })),
       baseEnv: { PATH: '/usr/bin' },
       log: (line) => logs.push(line),
     });
-    const input = { requestId: '41', conversationId: CONVERSATION_ID, model: 'haiku', prompt: QUESTION, history: [], claudeSessionId: null, budgetUsd: 1 };
+    const input = { requestId: '41', kind: 'answer' as const, model: 'haiku', prompt: QUESTION, systemPrompt: 'You are read-only.', budgetUsd: 1 };
     const events = await collect(turn(input, new AbortController().signal));
     expect(spawn.calls).toHaveLength(0);
     expect(events).toEqual([{ type: 'result', ok: false, errorCode: 'sign_in_expired', costUsd: null, claudeSessionId: null, model: null }]);

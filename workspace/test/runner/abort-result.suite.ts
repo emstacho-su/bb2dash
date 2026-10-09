@@ -36,7 +36,6 @@ const init: Line = {
   tools: [...ALLOWED_TOOLS],
   mcp_servers: [
     { name: 'bb2dash', status: 'connected' },
-    { name: 'rag', status: 'connected' },
   ],
   model: 'claude-haiku-4-5-20251001',
   permissionMode: 'dontAsk',
@@ -58,12 +57,12 @@ const budgetStop: Line = { type: 'result', subtype: 'error_max_budget_usd', is_e
 
 const input = (): TurnInput => ({
   requestId: '41',
-  conversationId: CONVERSATION_ID,
+  kind: 'answer',
   model: 'haiku',
   prompt: QUESTION,
-  history: [],
-  claudeSessionId: null,
+  systemPrompt: 'You are read-only.',
   budgetUsd: 1,
+  mcpConfig: '/run/workspace/mcp-41.json',
 });
 
 function cliTurn(script: FakeProcessOptions, overrides: Partial<CliTurnDeps> = {}) {
@@ -71,7 +70,6 @@ function cliTurn(script: FakeProcessOptions, overrides: Partial<CliTurnDeps> = {
   const spawn = fakeSpawn(script);
   const turn = createCliTurn({
     spawn: spawn.spawn,
-    readSystemPrompt: () => 'You are read-only.',
     readOauthToken: () => TOKEN,
     baseEnv: { PATH: '/usr/bin' },
     log: (line) => logs.push(line),

@@ -7,26 +7,27 @@ import type { ErrorCode } from '../errors.js';
 
 export type ProviderId = 'claude-cli' | 'ollama' | 'frontier-api';
 
-/** One stored message of the conversation, as `workspace_claim()` returns it in `history`. */
-export interface HistoryMessage {
-  readonly role: 'user' | 'assistant';
-  readonly content: string;
-}
+/**
+ * The four kinds of model turn (brief 109): the answer, the planning turn before it, and the two
+ * background turns that write a summary. Only an answer may call a tool or stream its text.
+ */
+export const TURN_KINDS = ['answer', 'plan', 'summary', 'rolling'] as const;
+export type TurnKind = (typeof TURN_KINDS)[number];
 
 export interface TurnInput {
-  /** The request's id, for log lines only. */
+  /** The request's id (or the job's), for log lines only. */
   readonly requestId: string;
-  readonly conversationId: string;
+  readonly kind: TurnKind;
   /** The model alias the tier names. */
   readonly model: string;
-  /** The request's own user message. */
+  /** The whole prompt argument: the assembled context with the question last. */
   readonly prompt: string;
-  /** The messages before it, oldest first; never the request's own user message. */
-  readonly history: readonly HistoryMessage[];
-  /** The session id stored for the conversation, or null before its first answer. */
-  readonly claudeSessionId: string | null;
-  /** The per-answer cost cap, in US dollars. */
+  /** The system prompt of this turn, assembled by the runner. */
+  readonly systemPrompt: string;
+  /** The cost cap of this one turn, in US dollars. */
   readonly budgetUsd: number;
+  /** An answering turn's own MCP config file; the other kinds use the config with no server. */
+  readonly mcpConfig?: string;
 }
 
 /** One element of `workspace_messages.tool_calls`: the stored shape, and nothing more. */
