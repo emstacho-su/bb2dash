@@ -326,6 +326,20 @@ async function contentIsThere(page: Page, label: string): Promise<void> {
   ).toHaveCount(0, { timeout: CONTENT_WAIT_MS });
 }
 
+/** V-15: a dialog container that takes focus by script draws no ring; the first Tab shows one on a control. */
+async function dialogDrawsNoRingUntilTab(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog').first();
+  const outlineStyle = (target: Locator): Promise<string> => target.evaluate((element) => getComputedStyle(element).outlineStyle);
+  const onDialog = await outlineStyle(dialog);
+  await page.keyboard.press('Tab');
+  const onControl = await outlineStyle(page.locator(':focus'));
+  console.log(`17 assignment-popout [dark]: outline-style on the dialog=${onDialog}, on the first focused control=${onControl}`);
+  expect(onDialog, 'the dialog container, focused by script').toBe('none');
+  expect(onControl, 'the control the first Tab reaches').toBe('solid');
+  // Put focus back on the container the way the popout does, so the shot shows no ring on a control.
+  await dialog.evaluate((element) => (element as HTMLElement).focus());
+}
+
 const SURFACES: readonly Surface[] = [
   { nn: '01', slug: 'home', window: 'tall', quiet: true, reach: route('/', barVisible) },
   {
@@ -413,10 +427,11 @@ const SURFACES: readonly Surface[] = [
     slug: 'assignment-popout',
     window: 'config',
     quiet: true,
-    reach: async (page) => {
+    reach: async (page, _context, theme) => {
       await openAt(page, A1_POPOUT);
       await expect(page.getByRole('dialog')).toBeVisible();
       await contentIsThere(page, '17 assignment-popout');
+      if (theme === 'dark') await dialogDrawsNoRingUntilTab(page);
     },
   },
   {

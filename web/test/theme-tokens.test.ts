@@ -597,11 +597,25 @@ describe('globals.css, direction D', () => {
   });
 });
 
-describe('the visual round: radios (V-9)', () => {
+describe('the visual round: radios, and the ring on a dialog (V-9, V-15)', () => {
   const css = GLOBALS.replace(COMMENTS, '');
 
   it('a radio is drawn in the ink: one weightless rule on :where(input[type=radio]) with accent-color', () => {
     const rule = /:where\(input\[type='radio'\]\)\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(rule.replace(/\s+/g, ' ').trim()).toBe('accent-color: var(--color-accent);');
+  });
+
+  it('the one ring rule leaves out a dialog container, and keeps its declarations', () => {
+    const rule =
+      /:focus-visible:not\(:where\(\[role='dialog'\], \[role='alertdialog'\]\)\)\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule.replace(/\s+/g, ' ').trim()).toBe(
+      'outline: var(--size-focus) solid var(--color-accent); outline-offset: var(--size-focus-gap);',
+    );
+    // No bare :focus-visible rule is left beside it.
+    expect(css.match(/(^|[^\w-]):focus-visible\s*\{/g)).toBeNull();
+  });
+
+  it('adds no second `outline: none` line to globals.css', () => {
+    expect(css.match(/outline:\s*none/g)).toHaveLength(1);
   });
 });
