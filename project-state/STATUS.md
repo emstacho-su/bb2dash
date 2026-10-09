@@ -1645,8 +1645,10 @@ Remaining advisor items: ~~7 pre-existing mutable `search_path` functions (`set_
 * **The SQL units that failed on `main` were audited on 2026-10-09**
   (`docs/planning/sprint-2/verification/115_SQL_UNITS_AUDIT_2026-10-09.md`; eleven of 81 failed). Six were the
   units' own and are corrected: `phase18_123_file_sessions` (an archived answer settles a session question, as
-  migration 163 has it), `phase18_122_supersede_rule` and `phase18_golden_truth` (they pinned file ids of a
-  document the course re-posts; they now follow the supersession chain), `phase16_106_v1_recheck` (one recheck
+  migration 163 has it), `phase18_122_supersede_rule` (it pinned file ids of a document the course re-posts; it
+  now follows each file's supersession chain), `phase18_golden_truth` (Q7's two ids refreshed; the unit stays
+  strict and **will fail again at the next re-post of that IST.466 schedule**, now naming the replacement ids
+  to put in the unit and in `ingest/eval/golden_set.json`), `phase16_106_v1_recheck` (one recheck
   counted every 10-point quiz, not the five its verdict names), `grading_invariants` check D (a column placed by
   the "Counts toward…" picker is placed) and `phase15_101_search_path_pin` (187's `inbox_accept_question`).
   **Still failing, each for a stated reason:** `phase18_post_embed_checks` (file 2851, below);
