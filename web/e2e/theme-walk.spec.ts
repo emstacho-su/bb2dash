@@ -52,6 +52,8 @@ const SETTLE_MS = 2500;
 const FONT_WAIT_MS = 30_000;
 /** After a window is resized the layout needs a moment before a shot. */
 const RESIZE_SETTLE_MS = 400;
+/** How long a surface's loading line may stay before its case fails. */
+const CONTENT_WAIT_MS = 20_000;
 /** How far the planner's week navigation may walk looking for a due item. */
 const MAX_WEEKS_FORWARD = 10;
 
@@ -304,8 +306,24 @@ async function themeColorSurvivesNavigation(page: Page): Promise<void> {
   console.log(`25 account-menu: theme-color metas after the navigation: ${JSON.stringify(colours)}`);
   expect(colours.length, 'a theme-color meta exists').toBeGreaterThan(0);
   expect(colours, 'every theme-color meta after a client navigation on Light').toEqual(colours.map(() => THEME_BG.light));
+  // Back to Home, a client navigation again, and settled, so both themes are shot over the same settled page.
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Home' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await contentIsThere(page, '25 account-menu');
   await page.getByRole('button', { name: 'Account', exact: true }).click();
   await expect(page.getByRole('menu')).toBeVisible();
+}
+
+/**
+ * V-5: a shot must never be taken while a loading line is the surface's content. Waits until no
+ * visible element reads "Loading ..." or "Searching ...", and names the line if one stays.
+ */
+const LOADING_LINE = /^(Loading|Searching)\b[^\n]*…\s*$/;
+async function contentIsThere(page: Page, label: string): Promise<void> {
+  await expect(
+    page.getByText(LOADING_LINE).filter({ visible: true }),
+    `${label}: a loading line is still the surface's content`,
+  ).toHaveCount(0, { timeout: CONTENT_WAIT_MS });
 }
 
 const SURFACES: readonly Surface[] = [
@@ -398,6 +416,7 @@ const SURFACES: readonly Surface[] = [
     reach: async (page) => {
       await openAt(page, A1_POPOUT);
       await expect(page.getByRole('dialog')).toBeVisible();
+      await contentIsThere(page, '17 assignment-popout');
     },
   },
   {
@@ -421,7 +440,10 @@ const SURFACES: readonly Surface[] = [
       const dueItem = page.locator('a[aria-haspopup="dialog"]');
       await weekHolding(page, dueItem);
       await dueItem.first().click();
-      await expect(page.getByRole('dialog')).toBeVisible();
+      const popover = page.getByRole('dialog');
+      await expect(popover).toBeVisible();
+      // The item's own content, not the one-line "Loading assignment…" the popover opens with.
+      await expect(popover).not.toContainText('Loading');
     },
   },
   {
@@ -473,7 +495,11 @@ const SURFACES: readonly Surface[] = [
     reach: async (page) => {
       await openAt(page, '/');
       await announcementsButton(page).click();
-      await expect(page.getByRole('menu', { name: 'Announcements' })).toBeVisible();
+      const dropdown = page.getByRole('menu', { name: 'Announcements' });
+      await expect(dropdown).toBeVisible();
+      // The dropdown's rows, or its real empty line: never the "Loading…" it opens with.
+      await expect(dropdown).not.toContainText('Loading');
+      await expect(dropdown.getByRole('menuitem').or(dropdown.getByText(/No announcements have been posted/)).first()).toBeVisible();
     },
   },
   {
@@ -608,6 +634,7 @@ for (const surface of SURFACES) {
       if (surface.quiet === true) await quietSync(context);
 
       await surface.reach(page, context, theme);
+      await contentIsThere(page, `${surface.nn} ${surface.slug} [${theme}]`);
 
       // The theme is the one the case asked for, stamped before paint.
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
