@@ -289,3 +289,33 @@ as outline", reads the other way round; the build follows entry `week-strip-shap
 | GREEN | `cd web && npx vitest run test/today-week-strip.css.test.ts test/TodayLayout.test.tsx test/CourseCard.test.tsx` | exit 0, 3 files, 46 passed; the two old files unedited |
 | Audit | `cd web && npx vitest run test/token-audit.test.ts` | exit 0 |
 | Gates | `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0 (166 files, 3245 tests); exit 0; exit 0 |
+
+## Task 36: the planner's done box and title (larger click targets)
+
+A tick on the done box writes to Stack's planner, so the geometry is the careful part. What was built, and one departure:
+
+* **Where the area is drawn.** The done box sits inside `.blockBody`, which has `overflow: hidden` and is as tall as the block's
+  whole lines, so a `::after` drawn from the box would be clipped to the text area (about 14px) and gain nothing. So `TaskBox`
+  wraps the box in a `<label class="eventDoneArea">` (`display: contents`, so the box is still a flex child of the head row and
+  no box moves); the label is static, and its `::after` is placed in the block (`position: absolute`, which clips to its own
+  edge). A press on the label toggles the box, as a label does, and the label stops the click as the box already did, so it never
+  opens the event. Accessible names are unchanged (the box keeps its `aria-label`; the label has no text).
+* **The done box's area.** It starts at the block's top-left corner and ends at the box's own right edge
+  (`width: calc(var(--size-5) + var(--size-12))`). In a compact block (one row, the title to the right) its height is the block's
+  full height (`100%`). In a taller block the title is on the row below, so the area stops at the box's own bottom edge
+  (`calc(var(--size-3) + var(--size-underline) + var(--size-12))`, 16px) and never lies over the title. That is the one reading of
+  default 5 that keeps "a press on the title's first pixel opens the event and writes nothing" true for both layouts.
+* **The title's area.** `.eventTitle::after` fills the block (`inset: 0`; the title stays static so the block is its box). The
+  done box and its area carry `z-index: 1`, so the box's centre is the box. The Join link (`.eventLink`) is `position: relative`
+  so it stays above the title's area. `.eventChip` is `position: relative` so a band chip is a box the areas fill.
+* **Not met, by default 5.** The area is 17px wide (5px of padding and the 12px box), under the 24px of `--size-target`; the width
+  is the PM's to record in `WALK.md` under T-11. The measured proof is W-67's `planner targets` case of `theme-walk.spec.ts`
+  (not on this branch yet); I did not run it.
+* `.block`'s `overflow`, `padding: 3px 5px` and `line-height: 14px` are untouched.
+
+| Step | Command | Result |
+|---|---|---|
+| RED | `cd web && npx vitest run test/planner-targets.css.test.ts` (new file, written first) | exit 1, 9 failed, 1 passed (the `.block` case) |
+| GREEN | `cd web && npx vitest run test/planner-targets.css.test.ts test/planner-css.test.ts test/PlannerWeek.events.test.tsx` | exit 0, 3 files, 58 passed; `planner-css.test.ts` and `PlannerWeek.hydration.test.tsx` unedited |
+| Audit | `cd web && npx vitest run test/token-audit.test.ts` | exit 0, 89 passed, 0 stale A3 entries |
+| Gates | `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0 (167 files, 3255 tests); exit 0; exit 0 |

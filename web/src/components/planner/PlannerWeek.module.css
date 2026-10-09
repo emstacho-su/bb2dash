@@ -668,6 +668,8 @@
 .eventChip {
   composes: chip;
   cursor: pointer;
+  /* The box the done box's and the title's areas are placed in. */
+  position: relative;
   background: var(--planner-kind-bg);
   color: var(--planner-kind-fg);
   box-shadow: inset 2px 0 0 var(--planner-kind-edge);
@@ -750,6 +752,14 @@
   cursor: pointer;
   transition: var(--motion-control);
 }
+/* The title's hit area is the rest of the block. The title stays static, so the block
+   (position: absolute, clipping to its own edge) is the box this fills; the done box
+   sits above it. No box moves: a ::after takes no room. */
+.eventTitle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
 .eventTitle:active {
   opacity: 0.7;
 }
@@ -769,6 +779,31 @@
   height: var(--size-12);
   margin: 0;
   cursor: pointer;
+  /* Above the title's area, so the box's centre is the box. */
+  z-index: 1;
+}
+/* The done box's hit area. A tick writes to the planner, so the area never lies over the
+   title: it starts at the block's top-left corner and ends at the box's own right edge (the
+   title's side in a compact block), and in a taller block, where the title is the row below,
+   at the box's own bottom edge. The label adds no box of its own, so the box stays a flex
+   child of the head row; it is static so the block is the box the area is placed in (the
+   body clips, and an area drawn from the box would be cut to the text). */
+.eventDoneArea {
+  display: contents;
+}
+.eventDoneArea::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  width: calc(var(--size-5) + var(--size-12));
+  cursor: pointer;
+  height: calc(var(--size-3) + var(--size-underline) + var(--size-12));
+}
+/* One row: nothing is under the box, so the area is the block's full height. */
+.eventBlock[data-compact='true'] .eventDoneArea::after {
+  height: 100%;
 }
 /* Drawn by the app's checkbox rule: the edge is the block's text colour; ticked, a
    tick in the block's own fill scales in. */
@@ -799,6 +834,8 @@
 }
 
 .eventLink {
+  /* Above the title's area. */
+  position: relative;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

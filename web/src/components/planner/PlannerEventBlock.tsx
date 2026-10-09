@@ -64,15 +64,19 @@ export function eventCardProps(event: PlannerEventRow, actions: EventActions) {
 function TaskBox({ event, actions }: { event: PlannerEventRow; actions: EventActions }) {
   if (event.kind !== 'task') return null;
   return (
-    <input
-      type="checkbox"
-      className={styles.eventDone}
-      checked={event.done === true}
-      disabled={isOptimisticEvent(event) || actions.pendingDoneId === event.id}
-      aria-label={`Done: ${event.title}`}
-      onClick={stopClick}
-      onChange={(change) => actions.toggleDone(event, change.target.checked)}
-    />
+    // The label holds the box's larger hit area (a ::after, see .eventDoneArea). A press on it
+    // toggles the box and must not open the event, so it stops the click as the box does.
+    <label className={styles.eventDoneArea} onClick={stopClick}>
+      <input
+        type="checkbox"
+        className={styles.eventDone}
+        checked={event.done === true}
+        disabled={isOptimisticEvent(event) || actions.pendingDoneId === event.id}
+        aria-label={`Done: ${event.title}`}
+        onClick={stopClick}
+        onChange={(change) => actions.toggleDone(event, change.target.checked)}
+      />
+    </label>
   );
 }
 
