@@ -383,3 +383,17 @@ words is the caret right with `char={MARK_CHAR.arrowRight}`, so the character st
 | `grep -c "<MarkedLabel" web/src/components/inbox/InboxCard.tsx`; `... "web/src/app/(app)/inbox/Inbox.tsx"` | 0; 0 | 1; 1 |
 | `npx vitest run test/TodayLayout.test.tsx test/Inbox.test.tsx test/PlannerItemPopover.test.tsx` | | exit 0, 3 files, 137 passed, unedited |
 | `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0`; `npx vitest run test/token-audit.test.ts` | | exit 0 (170 files, 3318 tests); exit 0; exit 0; exit 0 |
+
+## The harness run after the sweep and tasks 28 to 38
+
+`node scripts/walk-box.mjs web/e2e/phone-width.spec.ts -- -g "route / |route /planner |route /inbox |route /announcements "` at commit
+`d29cf61` (clean tree), run `20261009T012205Z`: exit 1, `tests failed`, 8 failed, 0 passed. **Not a layout failure.** Every case failed
+at the same line before it measured anything: the spec's font wait (`phone-width.spec.ts:182`) timed out after 30 s with
+`a face of Source Sans 3 with status "loaded"` (expected true, received false). The page measures no width, so no `page scrollWidth`
+line was printed.
+
+The face comes from the one Google Fonts `@import` that task 8 wrote into `globals.css` (W-67's file). The box could not load it, so
+the cause is either the box's network (W-75's `scripts/walk-box.mjs`, `docker/walk/entry.sh`) or the `@import` URL; it is not an
+element of a W-69 file. I did not edit either, and I ran the harness once, as the rules say. What this leaves unproven: that the four
+routes still fit at 390px after the sweep (the last proof is run `20261008T235442Z`, before the sweep). The sweep moved no box, and
+the unit proofs in this file pass (`planner-phone-width.css.test.ts`, the token audit at 0).
