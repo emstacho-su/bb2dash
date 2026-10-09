@@ -44,3 +44,13 @@ Only that entry's `recheck` changed, to `... and points_possible = 10 and id in 
 `git diff --stat origin/main...HEAD`: the five units, the verdict file, `golden_set.json`, `eval_search.mjs`, `eval_search.test.mjs`, this file, and `115_SQL_UNITS_AUDIT_2026-10-09.md` (already on the branch before W-92 began).
 
 Nothing stopped on; nothing built differently from the brief.
+
+## Round 2: `grading_invariants.sql`, check D
+
+Before: `FAIL D point-bearing assignments with no component, not excluded, not excepted: GEO.103.lecture/exam-1`. After: `PASS grading_invariants.sql`.
+
+D now passes an assignment with `points_possible > 0` and no `component_id` of its own when a `grade_column_links` row for its `(course_id, bb_column_id)` is excluded (as before) OR carries a `component_id` (a non-excluded link that places the column). The `D_EXCEPTIONS` ratchet is unchanged and still empty. The header sentence says why: `v_grade_model_items` (081) takes the component from a non-excluded link first, and migration 106 folded links into `assignments.component_id` only once, so a later link never reaches the assignment. The failure message was reworded to name the new condition.
+
+Check E (read, unchanged) joins both `assignments` and `grade_column_links` to `grade_components` and fails when the component's course is not `coalesce(parent_course_id, id)` of the row's course, so a link to a wrong course's component still fails there.
+
+Same rule elsewhere: `grep` over `scripts/`, `db/tests/` and `web/src` for `points_possible > 0`, `D_EXCEPTIONS`, `grading_invariants` and "no component" finds only this unit; `scripts/validate-grading.mjs` and `scripts/v1_recheck.py` hold no D-like check. No script touched, so no script tests re-run. `v_gradebook_latest.counts_toward_grade` has the same blind spot and was left alone (a migration, the PM's).

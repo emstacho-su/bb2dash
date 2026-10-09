@@ -9,8 +9,11 @@
 --      (points to points, weight_pct to weight_pct).
 --   E  every component_id (assignments and grade_column_links) belongs to the scheme course,
 --      coalesce(courses.parent_course_id, courses.id).
---   D  (ratchet) an assignment with points_possible > 0 and no component sits under an excluded
---      grade_column_links row, or its id is in D_EXCEPTIONS. The list only ever shrinks.
+--   D  (ratchet) an assignment with points_possible > 0 and no component of its own is placed by its
+--      column's grade_column_links row (excluded, or not excluded and carrying a component_id),
+--      or its id is in D_EXCEPTIONS. The list only ever shrinks. A link counts as placing because
+--      v_grade_model_items takes the component from a non-excluded link first (081) and migration
+--      106 folded links into assignments.component_id only once, so a link made later never lands there.
 --   F  (ratchet) confirmed rows that carry no citation (bb_file:<id>#unit:<n> or STACK_OVERRIDE):
 --      schemes and components by notes, linked point-bearing assignments by source_ref (an
 --      assignment whose column is "Not graded", an excluded grade_column_links row, counts toward
@@ -113,9 +116,9 @@ begin
      and a.id <> all (D_EXCEPTIONS)
      and not exists (select 1 from grade_column_links l
                       where l.course_id = a.course_id and l.column_id = a.bb_column_id
-                        and l.excluded);
+                        and (l.excluded or l.component_id is not null));
   if bad is not null then
-    raise exception 'FAIL D point-bearing assignments with no component, not excluded, not excepted: %', bad;
+    raise exception 'FAIL D point-bearing assignments with no component, not excluded, not placed by a link, not excepted: %', bad;
   end if;
 
   -- F (ratchet) --------------------------------------------------------------------------------
