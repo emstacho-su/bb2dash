@@ -169,6 +169,12 @@
 }
 
 @media (max-width: 720px) {
+  /* The toast's box is .stack. Anchored to the button it would start left of the viewport, so the
+     button stops being its containing block and the bar's right-hand group (TopNav .right) takes
+     over: .stack ends at the bar's right edge. */
+  .wrap {
+    position: static;
+  }
   .stack {
     width: min(320px, calc(100vw - 28px));
   }

@@ -36,6 +36,11 @@
   box-shadow: 0 0 10px var(--color-accent);
 }
 
+/* A popover's anchor: wraps a button and its panel, draws no box. */
+.anchor {
+  display: contents;
+}
+
 .links {
   display: flex;
   align-items: center;
@@ -310,6 +315,11 @@
   }
   .navMenu {
     display: flex;
+  }
+  /* Activity: capped to the viewport and anchored to the bar's right edge. */
+  .ddActivity {
+    width: min(360px, calc(100vw - 28px));
+    right: 0;
   }
 }
 

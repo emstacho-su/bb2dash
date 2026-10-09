@@ -47,6 +47,10 @@ const THEME_KEY = 'bb2dash.theme';
 const THEMES = ['dark', 'light'] as const;
 type Theme = (typeof THEMES)[number];
 
+/** These two buttons carry a count badge when something is unseen, and the badge is part of their accessible name, so they are found by their title. */
+const ACTIVITY_BUTTON = 'nav button[title^="Activity"]';
+const ANNOUNCEMENTS_BUTTON = 'nav button[title="Announcements"]';
+
 const NAV_LINK_LABELS = ['Home', 'Planner', 'Inbox', 'Grades', 'Materials', 'Workspace'] as const;
 
 /** Row 01 to 16 of the brief's inventory, in order: the path of each. */
@@ -304,7 +308,7 @@ const OPEN_STATES: readonly OpenState[] = [
     n: 1,
     name: 'bell',
     open: async (page) => {
-      await page.getByRole('button', { name: 'Announcements', exact: true }).click();
+      await page.locator(ANNOUNCEMENTS_BUTTON).click();
       return { panel: page.getByRole('menu', { name: 'Announcements' }) };
     },
   },
@@ -312,7 +316,7 @@ const OPEN_STATES: readonly OpenState[] = [
     n: 2,
     name: 'activity',
     open: async (page) => {
-      await page.getByRole('button', { name: 'Activity', exact: true }).click();
+      await page.locator(ACTIVITY_BUTTON).click();
       return { panel: page.getByRole('menu').filter({ hasText: 'Activity' }) };
     },
   },
@@ -394,8 +398,8 @@ function barControls(page: Page): Record<string, Locator> {
     Sync: page.getByTestId('sync-button'),
     Search: page.getByRole('button', { name: 'Search', exact: true }),
     'Courses sidebar': page.getByRole('button', { name: 'Courses sidebar', exact: true }),
-    Activity: page.getByRole('button', { name: 'Activity', exact: true }),
-    Announcements: page.getByRole('button', { name: 'Announcements', exact: true }),
+    Activity: page.locator(ACTIVITY_BUTTON),
+    Announcements: page.locator(ANNOUNCEMENTS_BUTTON),
     Account: page.getByRole('button', { name: 'Account', exact: true }),
   };
 }
