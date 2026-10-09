@@ -245,9 +245,14 @@ describe('the merge', () => {
     expect(merged.map((h) => h.unitId)).toEqual([1, 3, 2, 4]);
   });
 
-  it('applies the 0.78 floor and puts keyword-only hits after the ones with a similarity', () => {
-    const merged = mergeHits([query(hit('material', 1, null), hit('material', 2, 0.9), hit('material', 3, 0.7), hit('material', 4, 0.8))]);
-    expect(merged.map((h) => h.unitId)).toEqual([2, 4, 1]);
+  it('drops nothing by similarity: hits at or above 0.78 first, then the others by rank, nulls last', () => {
+    const merged = mergeHits([query(hit('material', 1, null), hit('material', 2, 0.9), hit('material', 3, 0.74), hit('material', 4, 0.8))]);
+    expect(merged.map((h) => h.unitId)).toEqual([2, 4, 3, 1]);
+  });
+
+  it('keeps a keyword hit under the floor that follows a hit of 0.80, and stores it as found', () => {
+    const merged = mergeHits([query(hit('material', 1, 0.8), hit('material', 2, 0.74))]);
+    expect(merged.map((h) => h.unitId)).toEqual([1, 2]);
   });
 
   it('gives 14 passages for 15 hits, and 3 remembered items', () => {
