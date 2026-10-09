@@ -85,7 +85,8 @@ describe('planner targets (D-5, row 31, default 5)', () => {
   });
 
   it("puts the done box and its area above the title's area, so the box's centre is the box", () => {
-    expect(declaration(ruleBody('.eventDone'), 'z-index')).toBe('1');
+    // The box (2) is above its own area (1), which is above the title's area (auto).
+    expect(declaration(ruleBody('.eventDone'), 'z-index')).toBe('2');
     expect(declaration(ruleBody(AREA), 'z-index')).toBe('1');
   });
 

@@ -779,8 +779,8 @@
   height: var(--size-12);
   margin: 0;
   cursor: pointer;
-  /* Above the title's area, so the box's centre is the box. */
-  z-index: 1;
+  /* Above its own area (z-index 1), which is above the title's: the box's centre is the box. */
+  z-index: 2;
 }
 /* The done box's hit area. A tick writes to the planner, so the area never lies over the
    title: it starts at the block's top-left corner and ends at the box's own right edge (the
