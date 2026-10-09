@@ -139,7 +139,7 @@ begin
   if pg_get_function_result(v_fns[2]::regprocedure) is distinct from
      'TABLE(kind text, unit_id bigint, file_id bigint, document_id bigint, course_id text, title text, '
      'unit_kind text, unit_no integer, part_no integer, similarity double precision, '
-     'score double precision, passage text, has_notes boolean)' then
+     'score double precision, passage text, has_notes boolean, written_at timestamp with time zone)' then
     v_fail := v_fail || format('workspace_search returns [%s]', pg_get_function_result(v_fns[2]::regprocedure));
   end if;
   if pg_get_function_identity_arguments(v_fns[2]::regprocedure) is distinct from
@@ -277,6 +277,13 @@ begin
       raise exception 'FAIL 1: a row has a null kind, passage, title or has_notes: %', row_to_json(v_row);
     end if;
   end loop;
+  -- written_at: the remembered item's updated_at for memory, null for material and upload.
+  if exists (select 1 from workspace_search('qzxwvalpha', v_e9, null, null, 10, c_floor) s
+              where (s.kind = 'memory' and s.written_at is distinct from (select d.updated_at from workspace_documents d where d.id = v_x1))
+                 or (s.kind <> 'memory' and s.written_at is not null))
+     or (select count(*) from workspace_search('qzxwvalpha', v_e9, null, null, 10, c_floor) s where s.written_at is not null) <> 1 then
+    raise exception 'FAIL 1: written_at is not the memory item''s updated_at alone';
+  end if;
   -- The unit ids resolve to the right documents.
   if (select s.document_id from workspace_search('qzxwvalpha', v_e9, array['memory'], null, 10, c_floor) s) is distinct from v_x1 then
     raise exception 'FAIL 1: the remembered row names another document';
