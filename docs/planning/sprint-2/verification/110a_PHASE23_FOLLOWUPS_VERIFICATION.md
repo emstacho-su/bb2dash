@@ -326,3 +326,62 @@ SHA-256 with the local file before it ran.
   row for 187 or 188, no request open (the last is 2519), no answer waiting.
 
 **187 is ready to apply and waits for Stack's word.**
+
+## Task 16, the gates on the integrated branch (2026-10-09, at 87b22e4, before the PR review round)
+
+Run in `bb2dash-wt-23f` after `npm ci` in `apply/`, `workspace/`, `sync/`, `web/` and `scripts/`.
+Every step exited 0, and `git status --porcelain` printed nothing afterwards (no lock file moved).
+
+| gate | result |
+|---|---|
+| `apply/`: `npm run typecheck`; `npx vitest run --coverage` | 0; all tests pass; lines of `src/` 94.87 % (630 of 664) |
+| `scripts/`: `npm test` (the line now holds `exports-run.test.mjs` and `accept-proofs-db23.test.mjs`) | 222 pass, 0 fail |
+| `sync/`: `npx vitest run` | 159 pass in 7 files; no file under `sync/` is in the diff |
+| `node --test acceptance/acceptance.test.mjs` | pass (41) |
+| `node --test docker/apply/image.test.mjs docker/grep-clean.test.mjs`; `node --test scripts/install-skills.test.mjs` | pass |
+| `node docker/apply/fork-firewall.mjs --write`, then `git diff --exit-code docker/apply` | exits 0, nothing printed |
+| `web/`: `npm run typecheck`; `npx eslint . --max-warnings 0`; `npx vitest run` | 0; 0; 2913 pass (`main`'s recorded count is 2913) |
+| `cd web && npx playwright test -c e2e/accept.config.ts --list` | 18 tests in one file; the seven new titles are `1 raise questions`, `2 press sync`, `3 watch apply`, `4 archived`, `6 note and apply`, `7a offline press`, `7b taken after` |
+| bb2dash-stack, `BB2DASH_DIR` set to this worktree: `node --test doctor/*.test.mjs` | 88 pass |
+
+The types file is regenerated after 187 is on prod, and the gates are run again after the review
+round; both are recorded below when done.
+
+## Task 18: `/code-review main high` on both branches (2026-10-09)
+
+Each run from inside its branch's worktree, against `main`. Both read code; the bb2dash one
+confirmed its findings 1, 3 and 7 by bytes or by running a snippet.
+
+**bb2dash (`fix/phase23-followups` at 2b4edd7's code): ten findings.**
+
+| # | where | finding | ruling |
+|---|---|---|---|
+| P-1 (CRITICAL) | `scripts/register-exports.ps1:102` | the PowerShell path literal lost its backslashes and holds a vertical-tab byte (`System32WindowsPowerShell<VT>1.0powershell.exe`), so the script always exits 2 and the task can never be registered. The PM confirmed the byte with `cat -A` | **fix (W-82)**, with a test that reads the script's bytes. The script was parse-checked, and a parse does not see a wrong string |
+| P-2 | exporter, `logRows` | a test-shaped row whose skip was refused (R5) is filed with a note by the scheduled run, and the unlogged pass then skips every test-shaped row, so its day-file entry is never written | **fix (W-82)**: every unlogged row gets its entry |
+| P-3 | `web/e2e/accept23.spec.ts:394` | the regex is `/inbox-apply d+/` (backslash missing), so "nothing was pasted" can never fail in step 3's early branch | **fix (W-84)**, and the pack's files are read for other lost escapes |
+| P-4 | `188`, `link_file_sessions` | the stamp is written only where step c writes the pick; a file linked to the same session by another path leaves the answer unstamped for good, and step 9's proof would fail on it at every run | **fix (W-80), R6**: the fold ends with the backfill's own statement. This also closes C-6 of the first review |
+| P-5 | exporter, `skipTestQuestions` | a false from `inbox_decision_skipped` is read as "has a logged write", but it is also the answer for a row another run already took; the exporter would then write a note for a test question and exit 1 | **fix (W-82)**: on a false the unfiled list is read again |
+| P-6 | `187`, the `not_applied` notice | the new sentence is used whenever `skip_seen` is sent, though a hold is not always written | **fix (W-80)**: only when a hold stands for an id of that close's skip |
+| P-7 | `scripts/exports-run.mjs:125` | a timed-out exporter logs a bare "exit 1": `spawnSync` gives `''`, not null, for stderr | **fix (W-82)**, in both copies |
+| P-8 | STATUS, `CLAUDE.md` | not updated | task 19 |
+| P-9 | pack 23, the exporter, 187 | a test question is told by its shape in several places, and item 3782 is written into 187 and into the `decisions-filed` proof | **not changed**. The shape is the brief's design, and R5 closes what it could cost. The proofs run against prod alone, where 3782 exists; the proof says so |
+| P-10 | `exports-run.mjs` | it has its own copies of `runCommand`, the line printer and the atomic write | **fix (W-82)**: one copy of each |
+
+**bb2dash-stack (`fix/phase23-followups` at 527ecd5): ten findings.**
+
+| # | where | finding | ruling |
+|---|---|---|---|
+| K-1 | `accept-actions.mjs`, `apply.stop` | it owes a start without checking that it stopped a running container, so cleanup could start a worker that was not running before the run | **fix (W-83)** |
+| K-2 | doctor, the apply row | a stopped leftover container is a problem, and the only remedy named is turning the profile on | **fix**: only a running one is a problem; both remedies named |
+| K-3 | `exports.runNow` | it passes on any later `ended_at`, not on the run it started | **fix**: `started_at` at or after the ask |
+| K-4 | doctor, the exports row | shown as a problem on every platform, though only Windows can schedule it | **fix**: no problem off Windows |
+| K-5 | doctor, the Workspace row's hint | a fixed `COMPOSE_PROFILES=workspace` line would now turn apply off | **fix where the unedited Workspace test allows**; apply's own hint is fixed either way |
+| K-6 | `accept-cleanup.mjs` | the command it prints lost its leading `docker` | **fix** |
+| K-7 | `accept-report.mjs`, the swept-run line | an empty clause and "started again" twice | **fix** |
+| K-8 | `accept-report.mjs` | a normal run's record never says cleanup started apply again | **fix**: a `services` key of its own |
+| K-9 | `accept-docker.mjs` | apply in the run's own services lets `exec`, `run`, `rm`, `build`, `restart` through, on a container that holds two secrets | **fix**: stop, start without a build, and list; nothing else |
+| K-10 | `accept-exports.mjs` | `HARNESS_DIR` is resolved a second time, from `.env` alone | **fix**: carried from preflight |
+
+Rulings that change the Contract are brief 110's "Round 3" (R6, R7, the notice, the refused skip,
+the bb2dash-stack rules). W-84's own open point, step 6's fourteen minutes against the operator's
+ten-minute limit, is R7.
