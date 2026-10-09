@@ -274,6 +274,12 @@
   .detailRow .timeCell {
     display: none;
   }
+  /* The effort cell has a fixed track here, and its mono text ("4h · start Sun 9/28 ·
+     override") is wider than the track in the Source Code Pro face, so it wraps. */
+  .effortCell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 
 /* Phone width (R-46, Phase 22 task 15): the tracker's captions wrap rather
