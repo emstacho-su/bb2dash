@@ -584,3 +584,26 @@ Read again by their words, with the diff of briefs 109 and 111 since the freeze:
   second to merge keeps both. Phase 22 touches the test line of `scripts/package.json` (the seam
   found at the freeze) and its own `web/test/walk22-lib.test.ts`, which must learn
   `web/e2e/accept23.spec.ts` in Phase 22's merge of `main`.
+
+## Task 19: both PRs open (2026-10-09, about 02:20Z)
+
+* **W-83's round 3** (bb2dash-stack `fix/phase23-followups` at c1f1ea4): D-1 to D-6 fixed, tests
+  first. For `apply` the whole command must equal one of three forms built from the same definition
+  the actions use; `cp apply:...`, `--scale=apply=3`, `-p`, `-f` and a second `--profile` are
+  refused. The full suite, by the worker: **346 pass, 0 fail, 0 skipped**.
+* **`accept 23 --check` against the two branches** (the pack is not on `main` yet, so
+  `ACCEPT_BB2DASH_DIR` named this worktree and `--ref` its head, 9f51164; run from
+  `bb2dash-stack-wt-23f`, with no walk box and no acceptance run open): **exit 0**, "nothing was
+  started, stopped or written". It printed the nine stages in order (`prepare`, `ready`, `walk`,
+  `walk-proofs`, `stop`, `offline`, `start`, `back`, `file`), `apply-idle` before `apply.stop`, and
+  the five rows a run does not do (three his, two waived). It says itself that such a run would not
+  count: the commit is not `origin/main`'s. The counting check and run come after the merge and the
+  cut-over (task 21).
+* **PRs:** bb2dash [#85](https://github.com/emstacho-su/bb2dash/pull/85) (Vercel's preview check
+  passes; `MERGEABLE`) and bb2dash-stack #6.
+* **Seen and not this phase's:** the first try of the check was refused by a failed `git fetch`
+  ("Repository 'stack-dev-personal/bb2dash-stack' is disabled"); a minute later the fetch worked.
+  GitHub now reports both repositories under the organization `stack-dev-personal`
+  (`gh api repos/emstacho-su/bb2dash` answers `stack-dev-personal/bb2dash`, public;
+  `bb2dash-stack` private). The old `emstacho-su` addresses still resolve for git, for raw files and
+  for the pull requests, and no remote was changed by this session. Told to Stack.

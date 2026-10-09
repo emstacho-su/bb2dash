@@ -1460,7 +1460,8 @@ Stack chose all four open follow-ups of Phase 23 on 2026-10-08, and an automated
 phase. The plan is brief `docs/planning/sprint-2/briefs/110_PHASE23_followups.md` (frozen 2026-10-08, with
 three numbered rounds appended); the record is `verification/110a_PHASE23_FOLLOWUPS_VERIFICATION.md`, and
 each worker's own beside it (`110_W80` to `110_W84`). Branch `fix/phase23-followups` in both repositories,
-one PR each, **on Stack's merge word of 2026-10-09** ("apply/merge", given with the word for 187). Built by
+one PR each, bb2dash [#85](https://github.com/emstacho-su/bb2dash/pull/85) and bb2dash-stack #6, **on
+Stack's merge word of 2026-10-09** ("apply/merge", given with the word for 187). Built by
 five Sonnet workers (W-80 to W-84, his word) in their own worktrees.
 
 **What is built**
