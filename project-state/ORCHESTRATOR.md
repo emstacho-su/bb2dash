@@ -278,13 +278,13 @@ Learned in the Phase 23 follow-ups (2026-10-09; each from `verification/110a_PHA
      port merged in, and the two left are true: file 2851 and 188 before the cut-over). That also answers item 7 under Phase 21 below. Two things the audit found
      are yours:
      * ~~A number for a small grades fix, and your look at it.~~ **Fixed on your word, 2026-10-09: migration 107
-       is on prod.** The Grades table's "counts toward" flag now follows the picker. **Look at GEO.103's Grades
-       tab once:** the two attendance columns you marked "Not graded" should sit in the collapsed group, not
-       among the items. Say if you want them back.
-     * **File 2851 needs one command from you.** It was a scan; its text is in the database now (OCR, by hand,
-       as file 68 was), but the PM's session was refused the embed step. From the bb2dash checkout:
-       `SB_ANON_JWT=<the legacy anon key> node ingest/embed_corpus.mjs`. Until then the file is found by
-       keyword only and `phase18_post_embed_checks` fails on its nine units.
+       is on prod.** The Grades table's "counts toward" flag now follows the picker. ~~Look at GEO.103's Grades tab once.~~ **Checked by the PM on your word, 2026-10-09, without the
+       browser** (the PM's Chrome is not signed in to the hub): prod's view gives Exam 1 `true` and both
+       attendance columns `false`, and the Grades table drawn from those three rows puts Exam 1 among the items
+       and both attendance columns in the collapsed group "Attendance and bookkeeping columns (2)". Your own
+       eyes on the page are still worth one look. Say if you want them back.
+     * ~~File 2851 needs one command from you.~~ **Done on your word, 2026-10-09:** the embed ran (19 parts),
+       the check reads 0 missing, and the SQL suite is 82 of 82.
      * The search eval's Q7 is replaced (your "Fix phase 18 as well"): it asked for a date in a schedule the
        course re-posts weekly; it now asks a question answered in two single-version documents. The eval itself
        (`ingest/eval_search.mjs`) has not been run with the new question; the materials search returns its
