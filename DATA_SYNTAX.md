@@ -406,6 +406,75 @@ its five functions. Its password is set out of band and is in no file. `db_test_
 `insert, update, delete` on the four tables and the role `workspace_runner` with inherit false, for
 the `phase21_*` units.
 
+## Inbox apply: holds, two-step filing, acceptance objects (migrations 187-188)
+
+Phase 23's follow-ups (brief 110). 180-186 (the `apply` container's role and functions) are not
+described here; this section covers what 187 and 188 add or change.
+
+**The hold** (187). An answer the apply worker could not apply is *held*: a sync does not try it
+again, and a new answer or a press of Apply answers does.
+
+* **`inbox_apply_holds`** — `item_id bigint` pk → `attention_items` (cascade), `request_id bigint`
+  (the request whose run could not apply it; informational, no foreign key), `resolved_at timestamptz`
+  (the answer's `resolved_at` **as that run was handed it** by `inbox_apply_prepare`; null if the row
+  had none), `held_at timestamptz default now()`. Row level security on, **no policy, and every
+  privilege revoked** from `public`, `anon`, `authenticated`, `service_role` and both runner roles;
+  the test login holds `select` alone. Only `inbox_apply_close` writes it, with its owner's rights.
+* **`inbox_apply_held_items()`** → `setof bigint`: the `v_inbox_queue` rows that have a hold whose
+  `resolved_at` equals the row's own (`is not distinct from`; no clock is compared), unless the row has
+  `applied_at` set and no note (the worker records that without a run, so it is never held).
+  SECURITY DEFINER; the service role and the test login only.
+* **`inbox_apply_close(bigint, text, jsonb)`**: `result.skip_seen`, a list of `{id, resolved_at}` (the
+  time exactly as `prepare` gave it, or null), writes a hold for each id of `skip` that is still in the
+  queue with that same time. A malformed `skip_seen` is refused (22023); a close with none writes no
+  hold. The same close removes the holds whose item left the queue or was answered again, and files a
+  follow-up only for a row that is neither in its `skip` nor held. The `not_applied` notice says a sync
+  does not try the answers again and that a new answer or the button does.
+* **`inbox_apply_prepare(bigint)`** returns one more key, `held`: a JSON array of item ids for a request
+  whose params carry a `trigger` (a sync's, a follow-up's, the fallback skill's); `[]` for the Inbox
+  button's request, so a press tries held answers again. **`sync_request_inbox_apply(bigint)`** files a
+  request only when a row outside the held set waits (an id, or null as before).
+
+**Filing a decision in two steps** (187). `attention_items.decision_filed` is `{note_path, log_path?,
+ingested?, logged_at?}` or `{skipped: true, why}`.
+
+* `inbox_decision_filed(id, {note_path, log_path?})`: `note_path` required; `log_path` absent or null
+  means the day-file entry is not written yet. `inbox_decisions_unlogged(limit)` lists archived
+  `inbox-decision/1` rows filed with a note path and no log path (same columns as
+  `inbox_decisions_unfiled`); `inbox_decision_logged(id, log_path)` adds `log_path` and `logged_at`,
+  once. `inbox_decision_skipped(id, why)` marks a row filed with nothing to file, once: neither list
+  shows it. All invoker rights, the service role's (and the test login's) alone. Item 3782 (the test
+  item of the cut-over run) is marked skipped by the migration.
+
+**Acceptance objects** (187).
+
+* **`v_inbox_apply_runs`** (security invoker; `anon` revoked; select for `authenticated`,
+  `service_role`, `db_test_runner`): one row per `inbox_feedback` request, typed columns in this order —
+  `id bigint`, `state text`, `filed_by text` (`params.trigger`: `sync`, `followup`, `skill`, whatever
+  it holds; `button` when there is none), `after_request bigint` (`params.after`), `claimed_by text`,
+  `created_at`, `claimed_at`, `finished_at timestamptz`, `claude_started boolean`
+  (`result.claude.started`; false unless it is true), `error_code text` (`result.error`),
+  `archived_count integer` (`result.archived`), `skip_ids bigint[]` (what the request's own close
+  listed in `result.skip`; empty when none). It does not read `inbox_apply_holds`.
+* **`inbox_accept_question(p_run text, p_label text)`** → the new item's id. SECURITY DEFINER,
+  `authenticated` only; it refuses (42501) unless `auth.uid()` is `app_owner()`, before anything else.
+  `p_run` matches `^[a-z0-9]{6,24}$`, `p_label` `^[a-z][a-z0-9-]{0,15}$` (22023). The row: entity
+  `agent_request`, no course, no field, ref `accept/<run>/<label>`, a fixed sentence with the label in
+  it; kind `data_gap` for the labels `dismiss` and `offline` (a card with Dismiss), else
+  `stack_must_confirm`. It archives, as `closed_itself`, every unarchived row of that shape (ref
+  `accept/…`, entity `agent_request`, no course) with another run tag, refuses a ref used before and a
+  ninth open row. A test row carries no `inbox-decision/1` record, so the exporter never lists it.
+
+**`applied_at` on a session answer** (188). `link_file_sessions` now stamps `attention_items.applied_at`
+on the answer it applies (a pick written onto the file); an answer of "none", or a pick outside the
+week's sessions, writes nothing and gets no stamp. So a queue row for a session answer reads
+`was_applied = true` once the fold applied it. Answers the fold applied **before 188** were stamped by
+the migration's backfill (every session answer, resolved or archived and not self-closed, whose pick is
+the session its current file carries): their stamp time is **the migration's**, not the fold's.
+`supersede_replaced_files` also reads an archived answer (not self-closed) when it decides whether a
+`supersede/<file id>` question is already settled, so /inbox-apply archiving the answer no longer
+brings the question back.
+
 ## Seed state (2026-09-02)
 
 7 courses, 12 staff, 11 meeting patterns, 127 sessions, 25 grade components, 57 assignments,
