@@ -146,6 +146,7 @@ export function InboxApplyButton() {
         className={styles.button}
         onClick={() => void press()}
         disabled={busy || lookingForOpen || nothingToApply}
+        aria-busy={busy || lookingForOpen}
         title={title}
       >
         <ApplyIcon />
