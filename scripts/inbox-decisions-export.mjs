@@ -16,7 +16,9 @@
 // which is why they stay the manual step's.
 //
 // In both modes the decision of an acceptance run's test question (ref `accept/...`, entity
-// `agent_request`, no course) is marked skipped: no note, no day-file entry.
+// `agent_request`, no course) is marked skipped: no note, no day-file entry. When the database
+// refuses the skip (the item has a logged write, so the decision is a real one) the row is filed
+// like any other in that same run.
 //
 // Configuration comes from the environment, never from a path written here:
 //   SECRETS_DIR    the secrets folder outside every repo; the service key is read from the file
@@ -155,9 +157,11 @@ export function resolveVault({ harnessDir, run = runCommand, fsImpl = fs }) {
 }
 
 /**
- * A test question of an acceptance run: its ref starts `accept/`, its entity is `agent_request`
- * and it has no course. A ref alone proves nothing (the worker's role may raise a question under
- * any ref), so all three must hold. Such a decision is never filed and never reaches a public file.
+ * The shape of an acceptance run's test question: a ref that starts `accept/`, entity
+ * `agent_request` and no course. The three fields narrow the guess; they do not prove where a row
+ * came from (the worker's role may raise a row of this shape under any ref). What protects a real
+ * decision is the database: `inbox_decision_skipped` refuses a row whose item has a logged write,
+ * and the exporter then files that row like any other.
  */
 export function isTestQuestion(row) {
   return (
@@ -231,6 +235,11 @@ function writeLogEntry({ row, logDir, fsImpl }) {
   return [...LOG_DIR, logFileName(date)].join('/');
 }
 
+/** A note's text with its `applied_at` line(s) blanked, to tell "only the stamp moved" from a real difference. */
+function withoutAppliedAt(text) {
+  return text.replace(/^applied_at: .*$/gm, 'applied_at:');
+}
+
 /**
  * One decision's files: the note, and the day file unless `logDir` is null (--notes-only).
  * Returns what to mark it with, or the reason it was not filed.
@@ -242,8 +251,13 @@ function fileOne({ row, vault, logDir, fsImpl }) {
   const note = renderNote(row);
   const existing = readIfExists(fsImpl, noteFile);
   // A note of this id with other text was written by a person or an older run: never overwritten.
-  if (existing !== null && existing !== note) return { ok: false, why: `a different note already exists at ${noteRel}` };
-  if (existing === null) writeAtomic(fsImpl, noteFile, note);
+  // The one exception: a note that differs only in its `applied_at` line. A fold can stamp a row
+  // after its note was written (migration 188), and this row is still unfiled, so the note is
+  // written again from the row.
+  if (existing !== null && existing !== note && withoutAppliedAt(existing) !== withoutAppliedAt(note)) {
+    return { ok: false, why: `a different note already exists at ${noteRel}` };
+  }
+  if (existing !== note) writeAtomic(fsImpl, noteFile, note);
 
   const logRel = logDir === null ? null : writeLogEntry({ row, logDir, fsImpl });
   return { ok: true, noteRel, logRel };
@@ -262,31 +276,41 @@ function ingestNotes({ notes, vault, ingestProject, run, log }) {
   return result.status === 0;
 }
 
-/** Mark each test question skipped: no note and no entry are written for it. */
-async function skipTestQuestions({ rows, rpc, result, log }) {
+/**
+ * Mark each test question skipped: no note and no entry are written for it. A skip the database
+ * refuses (the item has a logged write, so the decision is a real one) is returned in `refused`:
+ * the caller files that row like any other. Returns its own { skipped, failed, refused }.
+ */
+async function skipTestQuestions({ rows, rpc, log }) {
+  const outcome = { skipped: [], failed: [], refused: [] };
   for (const row of rows) {
     try {
       if (await rpc.skipped(row.id, SKIP_WHY)) {
-        result.skipped.push(row.id);
+        outcome.skipped.push(row.id);
         log(`skipped item ${row.id}: an acceptance test question`);
-      } else result.failed.push({ id: row.id, why: 'the database did not mark it skipped (already filed, or no longer archived)' });
+      } else {
+        outcome.refused.push(row);
+        log(`item ${row.id}: the database kept it (its item has a logged write); it is filed like any other`);
+      }
     } catch (error) {
-      result.failed.push({ id: row.id, why: String(error?.message ?? error) });
+      outcome.failed.push({ id: row.id, why: String(error?.message ?? error) });
     }
   }
+  return outcome;
 }
 
-/** File the unfiled rows: the note (and the day file unless notes-only), one ingest, then the marks. */
-async function fileRows({ rows, deps, result }) {
+/** File the rows: the note (and the day file unless notes-only), one ingest, then the marks. Returns its own { filed, failed }. */
+async function fileRows({ rows, deps }) {
   const { rpc, vault, ingestProject, logDir, options, fsImpl = fs, run = runCommand, log } = deps;
+  const outcome = { filed: [], failed: [] };
   const written = [];
   for (const row of rows) {
     try {
-      const outcome = fileOne({ row, vault, logDir: options.notesOnly ? null : logDir, fsImpl });
-      if (outcome.ok) written.push({ id: row.id, ...outcome });
-      else result.failed.push({ id: row.id, why: outcome.why });
+      const filing = fileOne({ row, vault, logDir: options.notesOnly ? null : logDir, fsImpl });
+      if (filing.ok) written.push({ id: row.id, ...filing });
+      else outcome.failed.push({ id: row.id, why: filing.why });
     } catch (error) {
-      result.failed.push({ id: row.id, why: String(error?.message ?? error) });
+      outcome.failed.push({ id: row.id, why: String(error?.message ?? error) });
     }
   }
 
@@ -299,18 +323,23 @@ async function fileRows({ rows, deps, result }) {
         ? { note_path: item.noteRel, ingested }
         : { note_path: item.noteRel, log_path: item.logRel, ingested };
       if (await rpc.filed(item.id, filed)) {
-        result.filed.push(item.id);
+        outcome.filed.push(item.id);
         log(`filed item ${item.id}: ${[item.noteRel, item.logRel].filter(Boolean).join(', ')}`);
-      } else result.failed.push({ id: item.id, why: 'the database did not mark it (already filed, or no longer archived)' });
+      } else outcome.failed.push({ id: item.id, why: 'the database did not mark it (already filed, or no longer archived)' });
     } catch (error) {
-      result.failed.push({ id: item.id, why: String(error?.message ?? error) });
+      outcome.failed.push({ id: item.id, why: String(error?.message ?? error) });
     }
   }
+  return outcome;
 }
 
-/** The default mode's second pass: the day-file entry for each row that has a note and no entry, then the stamp. */
-async function logRows({ rows, deps, result }) {
+/**
+ * The default mode's second pass: the day-file entry for each row that has a note and no entry,
+ * then the stamp. Returns its own { logged, failed }.
+ */
+async function logRows({ rows, deps }) {
   const { rpc, logDir, fsImpl = fs, log } = deps;
+  const outcome = { logged: [], failed: [] };
   for (const row of rows) {
     // A test question is skipped before it can have a note; if one is listed here anyway, it gets no entry.
     if (isTestQuestion(row)) {
@@ -319,47 +348,57 @@ async function logRows({ rows, deps, result }) {
     }
     try {
       if (row?.decision?.schema !== DECISION_SCHEMA) {
-        result.failed.push({ id: row?.id, why: 'not an inbox-decision/1 record' });
+        outcome.failed.push({ id: row?.id, why: 'not an inbox-decision/1 record' });
         continue;
       }
       const logRel = writeLogEntry({ row, logDir, fsImpl });
       if (await rpc.logged(row.id, logRel)) {
-        result.logged.push(row.id);
+        outcome.logged.push(row.id);
         log(`logged item ${row.id}: ${logRel}`);
-      } else result.failed.push({ id: row.id, why: 'the database did not stamp the log (already logged, or not filed with a note)' });
+      } else outcome.failed.push({ id: row.id, why: 'the database did not stamp the log (already logged, or not filed with a note)' });
     } catch (error) {
-      result.failed.push({ id: row?.id, why: String(error?.message ?? error) });
+      outcome.failed.push({ id: row?.id, why: String(error?.message ?? error) });
     }
   }
+  return outcome;
 }
 
 /**
  * File every unfiled decision, and in the default mode log every unlogged one.
  * `deps`: { rpc, vault, ingestProject, logDir, options, fsImpl, run, log }.
- * Returns { filed, skipped, logged: number[], failed: { id, why }[] }.
+ * Returns a new { filed, skipped, logged: number[], failed: { id, why }[] }.
  */
 export async function exportDecisions(deps) {
   const { rpc, options, log } = deps;
   const unfiled = await rpc.unfiled(options.limit);
   const unlogged = options.notesOnly ? [] : await rpc.unlogged(options.limit);
-  const result = { filed: [], skipped: [], logged: [], failed: [] };
   if (unfiled.length === 0 && unlogged.length === 0) {
     log('nothing to file');
-    return result;
+    return { filed: [], skipped: [], logged: [], failed: [] };
   }
   if (options.dryRun) {
     for (const row of unfiled) {
       log(isTestQuestion(row) ? `would skip item ${row.id} (an acceptance test question)` : `would file item ${row.id} (${logDateOf(row)})`);
     }
     for (const row of unlogged) log(`would log item ${row.id} (${logDateOf(row)})`);
-    return result;
+    return { filed: [], skipped: [], logged: [], failed: [] };
   }
 
-  await skipTestQuestions({ rows: unfiled.filter(isTestQuestion), rpc, result, log });
-  await fileRows({ rows: unfiled.filter((row) => !isTestQuestion(row)), deps, result });
-  await logRows({ rows: unlogged, deps, result });
-  for (const item of result.failed) log(`not filed item ${item.id}: ${item.why}`);
-  return result;
+  const skips = await skipTestQuestions({ rows: unfiled.filter(isTestQuestion), rpc, log });
+  const refusedIds = new Set(skips.refused.map((row) => row.id));
+  // Original order is kept: a refused test-shaped row is filed in its place among the others.
+  const toFile = unfiled.filter((row) => !isTestQuestion(row) || refusedIds.has(row.id));
+  const filing = await fileRows({ rows: toFile, deps });
+  const logging = await logRows({ rows: unlogged, deps });
+
+  const merged = {
+    filed: filing.filed,
+    skipped: skips.skipped,
+    logged: logging.logged,
+    failed: [...skips.failed, ...filing.failed, ...logging.failed],
+  };
+  for (const item of merged.failed) log(`not filed item ${item.id}: ${item.why}`);
+  return merged;
 }
 
 /** One line to stdout: this is a command-line script, and its lines are its report. */
