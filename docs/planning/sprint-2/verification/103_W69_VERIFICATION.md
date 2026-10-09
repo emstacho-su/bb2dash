@@ -319,3 +319,21 @@ A tick on the done box writes to Stack's planner, so the geometry is the careful
 | GREEN | `cd web && npx vitest run test/planner-targets.css.test.ts test/planner-css.test.ts test/PlannerWeek.events.test.tsx` | exit 0, 3 files, 58 passed; `planner-css.test.ts` and `PlannerWeek.hydration.test.tsx` unedited |
 | Audit | `cd web && npx vitest run test/token-audit.test.ts` | exit 0, 89 passed, 0 stale A3 entries |
 | Gates | `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0 (167 files, 3255 tests); exit 0; exit 0 |
+
+## Task 37: busy says busy (W-69's part)
+
+`aria-busy={pending}` sits beside `disabled={pending}` at the nine sites of W-69, and two rules got the switched-off look on
+`:disabled:not([aria-busy='true'])` (fill `--color-neutral-900`, edge `--color-neutral-800`, words `--color-neutral-600`, `cursor:
+not-allowed`, opacity 1), while a busy control stays at half strength with `cursor: progress`.
+
+| Command | Printed |
+|---|---|
+| `git grep -c -E "aria-busy=\{(pending\|busy)\}" -- web/src/components/inbox web/src/components/planner web/src/components/tracker "web/src/app/(app)/inbox"` | `InboxCard.tsx:2`, `PlannerEventForm.tsx:1`, `PlannerEventFormFields.tsx:2`, `PlannerSeriesScopeDialog.tsx:3`, `StatusSelect.tsx:1` (the five lines the row names) |
+| `git grep -c -E ":disabled:not\(\[aria-busy=.true.\]\)" -- web/src/components/tracker web/src/components/planner` | `StatusSelect.module.css:1`, `PlannerItemPopover.module.css:1` |
+| Strength check (all stylesheets) | `9 3` (the two new rules set opacity 1, which is allowed; the 3 left are W-67's and W-68's) |
+| `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0 (167 files, 3255 tests); exit 0; exit 0 |
+
+Default taken: `PlannerItemPopover.tsx` also gets `aria-busy={save.isPending}` on its status select. Its `disabled` is
+`save.isPending || plannerUnavailable`, so it is not one of the 24 counted sites (the Busy sites command does not match it and
+still prints the same count), but without the attribute the new switched-off look would flash a grey box at every save. A save is
+busy; an unavailable planner is off.

@@ -354,6 +354,7 @@ export function InboxCard({
                     type="button"
                     className={tokens.btnPrimary}
                     disabled={pending}
+                    aria-busy={pending}
                     onClick={() => onResolve({ id: item.id, kind: 'conflict', accept: 'blackboard', note })}
                   >
                     Accept Blackboard
@@ -365,6 +366,7 @@ export function InboxCard({
                     type="button"
                     className={tokens.btnSecondary}
                     disabled={pending}
+                    aria-busy={pending}
                     onClick={() => onResolve({ id: item.id, kind: 'conflict', accept: 'keep', note })}
                   >
                     Keep mine

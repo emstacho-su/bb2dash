@@ -143,6 +143,7 @@ export function PlannerSeriesScopeDialog({
                 value={value}
                 checked={scope === value}
                 disabled={pending}
+                aria-busy={pending}
                 onChange={() => setScope(value)}
               />
               {SCOPE_LABELS[value]}
@@ -158,6 +159,7 @@ export function PlannerSeriesScopeDialog({
             className={tokens.btnSecondary}
             onClick={onCancel}
             disabled={pending}
+            aria-busy={pending}
           >
             Cancel
           </button>
@@ -166,6 +168,7 @@ export function PlannerSeriesScopeDialog({
             className={intent === 'delete' ? styles.danger : tokens.btnPrimary}
             onClick={() => onChoose(scope)}
             disabled={pending}
+            aria-busy={pending}
           >
             {pending ? 'Saving…' : wording.confirm}
           </button>

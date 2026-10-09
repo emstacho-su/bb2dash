@@ -276,6 +276,7 @@ export function PlannerItemPopover({
                 className={styles.control}
                 value={status}
                 disabled={save.isPending || plannerUnavailable}
+                aria-busy={save.isPending}
                 onChange={(e) =>
                   save.mutate({
                     assignmentId,

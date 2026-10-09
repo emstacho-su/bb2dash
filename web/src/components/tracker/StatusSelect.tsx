@@ -75,6 +75,7 @@ export function StatusSelect<T extends StatusSelectItem = WorkItem>({
       className={styles.statusSelect}
       value={item.status}
       disabled={pending}
+      aria-busy={pending}
       aria-label={`Status for ${item.title}`}
       onChange={(e) => onChange(item, e.target.value as ProgressStatus)}
     >

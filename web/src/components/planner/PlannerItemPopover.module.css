@@ -117,9 +117,18 @@
 .control:hover {
   border-color: var(--color-neutral-400);
 }
+/* Busy (a save is in flight): half strength and the wait pointer. */
 .control:disabled {
   opacity: 0.5;
-  cursor: default;
+  cursor: progress;
+}
+/* Switched off (the planner is unavailable): a flat grey field, not a busy one. */
+.control:disabled:not([aria-busy='true']) {
+  background: var(--color-neutral-900);
+  border-color: var(--color-neutral-800);
+  color: var(--color-neutral-600);
+  opacity: 1;
+  cursor: not-allowed;
 }
 /* The ring sits on the field's own hairline edge, so a focused field shows two
    pixels of ink. */

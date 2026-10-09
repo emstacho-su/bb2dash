@@ -22,7 +22,16 @@
   outline: var(--size-focus) solid var(--color-accent);
   outline-offset: calc(var(--size-underline) * -1);
 }
+/* Busy (a pick is being saved): half strength and the wait pointer. */
 .statusSelect:disabled {
   opacity: 0.5;
   cursor: progress;
+}
+/* Switched off: a flat grey field, so a save in flight never flashes a grey box. */
+.statusSelect:disabled:not([aria-busy='true']) {
+  background: var(--color-neutral-900);
+  border-color: var(--color-neutral-800);
+  color: var(--color-neutral-600);
+  opacity: 1;
+  cursor: not-allowed;
 }
