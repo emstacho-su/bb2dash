@@ -274,3 +274,27 @@ executed.
 view exist, `inbox_apply_close` is 186's body by md5, item 3782 is unfiled, no migration row is
 named 187, and `postgres` holds no set option on a runner role. The only thing left behind is the
 fetched text in `net._http_response`, which pg_net clears by itself.
+
+## The second look at round 2 (2026-10-09), and round 3
+
+An independent reader, given only the files, the brief and the findings, read round 2 of 187 with
+its units and the worker code that calls it. It ran nothing. Verdict: one MEDIUM to fix before 187
+is applied, the rest LOW. The dry runs above were made on round 2's file and are repeated on round
+3's before Stack is asked.
+
+| # | finding | ruling |
+|---|---|---|
+| L-1 (MEDIUM) | R3 as built: a retry follow-up is handed its own `params.skip`, the worker copies those ids into its close's `skip` with the answer's present time, and a failed close then held each of them, untried. An answer given again in the middle of a press's chain could be held without a try, and a hand-written `{trigger: followup, retry_held: true, skip: [...]}` could make things held | **fixed in 187 (round 3)**: the failed close of a retry follow-up writes no hold for an id in that request's own `params.skip`. Three new unit cases; none closed a retry follow-up as failed before. This gap came from the PM's own ruling R3, not from the worker |
+| L-2 (LOW) | while the old worker runs, a `not_applied` notice would say "a sync does not try again" though every sync still does | **fixed**: the new sentence only when the close sends `skip_seen` |
+| L-3 (LOW) | a press whose first six answers all fail archives nothing, so no follow-up is filed and a held answer past the sixth is not reached | **not changed**: the brief's own rule that a run which gets nowhere never loops. Named in STATUS, Known issues |
+| L-4 (LOW) | 187's guard read `service_role`'s grant on `inbox_apply_writes` and not that the role passes row level security; without it every skip would be allowed silently | **fixed**: the guard reads `rolbypassrls` too |
+| L-5 (LOW) | four changed places in the re-created bodies carry no `-- 187:` marker | **fixed** (comments only) |
+| L-6 (LOW) | four unit assertions prove less than their comment says | **fixed** in the units |
+
+What it found correct, by tracing: the four re-created bodies differ from 180, 185, 186 and 182
+only where intended, and 186's arm in the stuck test is character for character 186's; no chain can
+loop, the daily cap included; `retry_held` counts only as the JSON true; with the old worker a
+failed run and the next done run behave as on prod today (no hold, the same follow-ups, the notice
+held by 186's arm, nothing parked); a hold is inserted on a failed close only and a stale one is
+removed by any close; `phase23_186_notices.sql` is `main`'s text and its cases pass against the new
+close; the one-line change to `phase23_181` is right before and after 187.
