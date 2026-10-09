@@ -1,12 +1,18 @@
 /* ============================================================================
    bb2dash — global stylesheet.
 
-   Design tokens are ported from the Nocturne design system used by the GUI
-   artboards (the nocturne styles.css under "gui research context"). Nocturne is a
-   PLACEHOLDER SKIN: the artboards are the layout/interaction spec, the colours
-   and type are provisional until Stack signs off a styling pass. Everything
-   below is therefore expressed as custom properties so a restyle is a
-   token swap, not a component rewrite.
+   Design tokens for direction D, "Charcoal" (Phase 22): black, grey and white
+   with one red, #ff0000, kept for where you are, what is most urgent and what is
+   unread. The values come from docs/planning/sprint-2/evidence/103_style_tiles/
+   direction-d.json, value for value. Everything below is a custom property so a
+   restyle is a token swap, not a component rewrite.
+
+   Two theme blocks and no system copy of either:
+     * bare :root is the dark block, what a first visit shows and what a page
+       without JavaScript shows, also under a light system;
+     * :root[data-theme='light'] is the light block. lib/theme-preference.ts
+       stamps data-theme on the root before paint.
+   Every colour and shadow name is declared in both blocks.
 
    Rules of the road (see project-state/DECISIONS.md):
      * CSS Modules + custom properties. NO Tailwind, no UI framework.
@@ -15,61 +21,72 @@
        src/styles/tokens.module.css for the composable pattern.
    ========================================================================= */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400&family=Source+Sans+3:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600&display=swap');
 
 :root {
+
   /* — roles ————————————————————————————————————————————————————————— */
-  --color-bg: #161826;
-  --color-surface: #232532;
-  --color-text: #e9e9ed;
-  --color-accent: #9184d9;
-  --color-accent-2: #a7a1db;
-  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
-  --color-muted: color-mix(in srgb, var(--color-text) 55%, transparent);
+  --color-bg: #050505;
+  --color-panel: #111111;
+  --color-surface: #1d1d1d;
+  --color-surface-press: color-mix(in srgb, var(--color-text) 8%, var(--color-surface));
+  --color-text: #f2f2f2;
+  --color-accent: var(--color-neutral-100);
+  --color-on-accent: #000000;
+  --color-accent-2: #ffffff;
+  --color-divider: color-mix(in srgb, #ffffff 30%, transparent);
+  --color-muted: color-mix(in srgb, var(--color-text) 64%, transparent);
 
-  /* — tonal ramps (OKLCH-generated, one shared lightness scale) ————— */
-  --color-neutral-100: #f3f5fe;
-  --color-neutral-200: #e4e7f5;
-  --color-neutral-300: #cfd3e5;
-  --color-neutral-400: #b2b6ca;
-  --color-neutral-500: #9397ab;
-  --color-neutral-600: #75798c;
-  --color-neutral-700: #595d6c;
-  --color-neutral-800: #3f424d;
-  --color-neutral-900: #292b31;
-
-  --color-accent-100: #f5f4ff;
-  --color-accent-200: #e7e5fe;
-  --color-accent-300: #d2cefd;
-  --color-accent-400: #b5abfc;
-  --color-accent-500: #968ae0;
-  --color-accent-600: #796cbf;
-  --color-accent-700: #5d5294;
-  --color-accent-800: #423a6a;
-  --color-accent-900: #2b2741;
-
-  --color-accent-2-100: #f5f4ff;
-  --color-accent-2-200: #e7e5fe;
-  --color-accent-2-300: #d2cefd;
-  --color-accent-2-400: #b5afe8;
-  --color-accent-2-500: #9690c9;
-  --color-accent-2-600: #7972a9;
-  --color-accent-2-700: #5c5783;
-  --color-accent-2-800: #423e5d;
-  --color-accent-2-900: #2b293a;
+  /* — tonal ramps: the accent is the ink, so every step points at the neutral step of its number ——— */
+  --color-neutral-100: #fafafa;
+  --color-neutral-200: #e6e6e6;
+  --color-neutral-300: #d1d1d1;
+  --color-neutral-400: #bababa;
+  --color-neutral-500: #a3a3a3;
+  --color-neutral-600: #969696;
+  --color-neutral-700: #6b6b6b;
+  --color-neutral-800: #3a3a3a;
+  --color-neutral-900: #262626;
+  --color-accent-100: var(--color-neutral-100);
+  --color-accent-200: var(--color-neutral-200);
+  --color-accent-300: var(--color-neutral-300);
+  --color-accent-400: var(--color-neutral-400);
+  --color-accent-500: #ff0000;
+  --color-accent-600: var(--color-neutral-600);
+  --color-accent-700: var(--color-neutral-700);
+  --color-accent-800: var(--color-neutral-800);
+  --color-accent-900: var(--color-neutral-900);
+  --color-accent-2-100: var(--color-neutral-100);
+  --color-accent-2-200: var(--color-neutral-200);
+  --color-accent-2-300: var(--color-neutral-300);
+  --color-accent-2-400: var(--color-neutral-400);
+  --color-accent-2-500: var(--color-neutral-500);
+  --color-accent-2-600: var(--color-neutral-600);
+  --color-accent-2-700: var(--color-neutral-700);
+  --color-accent-2-800: #5c5c5c;
+  --color-accent-2-900: var(--color-neutral-900);
 
   /* — semantic aliases used by app chrome ——————————————————————————— */
-  --color-danger: #e0736c;
-  --color-danger-bg: color-mix(in srgb, #e0736c 16%, transparent);
+  --color-danger: #ff8f85;
+  --color-danger-bg: color-mix(in srgb, #ff0000 16%, transparent);
   --color-hover: color-mix(in srgb, var(--color-text) 7%, transparent);
-  --color-active: color-mix(in srgb, var(--color-text) 14%, transparent);
+  --color-active: color-mix(in srgb, var(--color-text) 13%, transparent);
+  --color-scrollbar: var(--color-neutral-600);
+  --color-scrollbar-hover: var(--color-neutral-400);
 
-  /* — type ——————————————————————————————————————————————————————————— */
-  --font-heading: 'Inter', system-ui, sans-serif;
-  --font-heading-weight: 500;
-  --font-body: 'Inter', system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* — type —————————————————————————————————————————————————————————— */
+  --font-heading: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-heading-weight: 600;
+  --font-body: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
+  /* font weights as tokens: no module writes a weight of its own */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* — type sizes (pinned by tests: 11, 12.5, 13.5, 15, 17, 20, 28) ——— */
   --text-xs: 11px;
   --text-sm: 12.5px;
   --text-base: 13.5px;
@@ -78,7 +95,17 @@
   --text-xl: 20px;
   --text-2xl: 28px;
 
-  /* — spacing (Nocturne's 0.70x scale) ————————————————————————————— */
+  /* the other type sizes the sweeps need, at today's values */
+  --text-3xs: 9px;
+  --text-2xs: 10px;
+  --text-10-5: 10.5px;
+  --text-11-5: 11.5px;
+  --text-12: 12px;
+  --text-13: 13px;
+  --text-14: 14px;
+  --text-19: 19px;
+
+  /* — spacing (Nocturne's 0.70x scale, pinned by tests) ————————————— */
   --space-1: 2.8px;
   --space-2: 5.6px;
   --space-3: 8.4px;
@@ -87,16 +114,40 @@
   --space-8: 22.4px;
   --space-12: 33.6px;
 
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 14px;
+  /* — shape ————————————————————————————————————————————————————————— */
+  --radius-xs: 1px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-control: 999px;
+  --radius-chip: 999px;
+  --radius-bar: 4px;
+  --radius-day: 8px;
 
-  /* — elevation (hairline edge + ambient darkness on a dark ground) ——— */
-  --shadow-sm: 0 0 0 1px #3f424d;
-  --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
-  --shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
+  /* one more corner the sweeps need, at today's value */
+  --radius-3: 3px;
 
-  /* — layout ————————————————————————————————————————————————————————— */
+  /* — elevation: a ring marks a card, only a floating panel gets a drop and it draws its own edge ——— */
+  --shadow-sm: 0 0 0 1px var(--color-neutral-700);
+  --shadow-hover: 0 0 0 1px var(--color-neutral-500);
+  --shadow-md: 0 0 0 1px var(--color-neutral-700), 0 6px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.6);
+  --shadow-mark: none;
+
+  /* — lines and rings ——————————————————————————————————————————————— */
+  --size-underline: 1px;
+  --size-underline-mark: 2px;
+  --size-underline-offset: 3px;
+  --size-notice-bar: 3px;
+  --size-focus: 2px;
+  --size-focus-gap: 2px;
+  --size-scrollbar: 10px;
+  --size-check: 13px;
+
+  /* the smallest pointer target (WCAG 2.2, task 36) */
+  --size-target: 24px;
+
+  /* — layout ———————————————————————————————————————————————————————— */
   --nav-height: 52px;
   --content-max: 1240px;
 
@@ -107,61 +158,274 @@
   --sidebar-side: row-reverse; /* row = left, row-reverse = right (Stack, 2026-09-14) */
   --sidebar-width: 260px;
 
-  /* — assignment-type hues (effort tracker glyph + segment tints, T-15) —
-     reading · assignment · quiz · project · exam.
+  /* — assignment-type colours: ONE URGENCY SCALE ——————————————————————————
+     Exam is the one red, #ff0000. Project is a second red. Quiz, assignment and
+     reading are greys, each quieter against the card than the one before, so
+     the order of the scale is the order of what is due first. The app has one
+     hue, and red is kept for what is most urgent. `test/type-tokens.contrast.test.ts`
+     holds the rule in each theme, against that theme's card and its picked-day
+     fill, straight out of this file. */
+  --type-reading-bg: #7a7a7a;
+  --type-reading-fg: #000000;
+  --type-assignment-bg: #b5b5b5;
+  --type-assignment-fg: #000000;
+  --type-quiz-bg: #ffffff;
+  --type-quiz-fg: #000000;
+  --type-project-bg: #ff6257;
+  --type-project-fg: #000000;
+  --type-exam-bg: #ff0000;
+  --type-exam-fg: #000000;
 
-     P-home-1 / H-1: these were one purple ramp plus a grey — five steps of the
-     same hue, told apart only by lightness, which on a 14-column tracker bar
-     reads as one smear. They are now five HUES at a deliberately common
-     lightness, so the category is carried by colour and the bar's own heights
-     stay the only thing lightness means.
+  /* — planner-event kinds (Phase 11b): one bg / fg / edge per kind. Kind is the
+     colour; a course never recolours a block (Q5). Out of office adds a hatch,
+     working location a dashed edge and an appointment slot a dotted one, so the
+     six read apart without colour too. */
+  --planner-event-bg: #3d3d3d;
+  --planner-event-fg: #ffffff;
+  --planner-event-edge: #ffffff;
+  --planner-task-bg: #303030;
+  --planner-task-fg: var(--color-text);
+  --planner-task-edge: var(--color-neutral-500);
+  --planner-ooo-bg: var(--color-neutral-900);
+  --planner-ooo-fg: var(--color-neutral-200);
+  --planner-ooo-edge: var(--color-neutral-600);
+  --planner-ooo-hatch: color-mix(in srgb, #ffffff 10%, transparent);
+  --planner-focus-bg: var(--color-bg);
+  --planner-focus-fg: var(--color-text);
+  --planner-focus-edge: #ffffff;
+  --planner-worklocation-bg: #232323;
+  --planner-worklocation-fg: var(--color-neutral-300);
+  --planner-worklocation-edge: var(--color-neutral-600);
+  --planner-appointment-bg: var(--color-neutral-800);
+  --planner-appointment-fg: var(--color-neutral-100);
+  --planner-appointment-edge: var(--color-neutral-300);
 
-     The five luminances sit in a narrow band (0.170–0.172) chosen so the same
-     token works on either ground: >= 3:1 against the dark card (WCAG 1.4.11,
-     a bar segment carries meaning) and >= 4.5:1 for white on it (WCAG AA, the
-     glyph chip carries a letter). Above the band the letter fails; below it the
-     segment does. `test/type-tokens.contrast.test.ts` measures all of it
-     straight out of this file, on a light ground as well as this dark one, so
-     the Phase 13 restyle has a check rather than a judgement call.
+  /* — motion: a few quiet transitions and no decoration. No rule outside this
+     file writes a time or a curve; the reduce block below stills all of it. */
+  --motion-press: 80ms;
+  --motion-state: 120ms;
+  --motion-enter: 180ms;
+  --motion-enter-lg: 240ms;
+  --motion-delay: 240ms;
+  --motion-shift: 6px;
+  --motion-spin: 900ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-linear: linear;
+  --motion-exit: 120ms;
+  --motion-exit-lg: 160ms;
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --motion-control:
+    background-color var(--motion-state) var(--ease-out),
+    border-color var(--motion-state) var(--ease-out),
+    color var(--motion-state) var(--ease-out),
+    box-shadow var(--motion-state) var(--ease-out),
+    text-decoration-color var(--motion-state) var(--ease-out),
+    opacity var(--motion-state) var(--ease-out),
+    transform var(--motion-press) var(--ease-out);
 
-     Literal hexes, not ramp names, because no ramp holds these hues. A restyle
-     may reintroduce `var(--…)` references; the test resolves them. */
-  --type-reading-bg: #137e92; /* teal */
-  --type-reading-fg: #ffffff;
-  --type-assignment-bg: #725fde; /* violet — the accent family */
-  --type-assignment-fg: #ffffff;
-  --type-quiz-bg: #9d6811; /* amber */
-  --type-quiz-fg: #ffffff;
-  --type-project-bg: #1a8352; /* green */
-  --type-project-fg: #ffffff;
-  --type-exam-bg: #c8435a; /* rose */
-  --type-exam-fg: #ffffff;
+  /* — lengths the sweeps need, one name per value, at today's values ————— */
+  --size-3: 3px;
+  --size-4: 4px;
+  --size-5: 5px;
+  --size-6: 6px;
+  --size-7: 7px;
+  --size-8: 8px;
+  --size-9: 9px;
+  --size-10: 10px;
+  --size-12: 12px;
+  --size-13: 13px;
+  --size-14: 14px;
+  --size-16: 16px;
+  --size-17: 17px;
+  --size-18: 18px;
+  --size-22: 22px;
+  --size-28: 28px;
+  --size-32: 32px;
+  --size-36: 36px;
+  --size-38: 38px;
+  --size-40: 40px;
+  --size-44: 44px;
+  --size-54: 54px;
+  --size-58: 58px;
+  --size-60: 60px;
+  --size-66: 66px;
+  --size-68: 68px;
+  --size-72: 72px;
+  --size-84: 84px;
+  --size-96: 96px;
+  --size-116: 116px;
+  --size-120: 120px;
+  --size-128: 128px;
+  --size-140: 140px;
+  --size-150: 150px;
+  --size-160: 160px;
+  --size-180: 180px;
+  --size-220: 220px;
+  --size-280: 280px;
+  --size-300: 300px;
+  --size-320: 320px;
+  --size-380: 380px;
+  --size-420: 420px;
+  --size-620: 620px;
+  --size-760: 760px;
+  --size-12-5: 12.5px;
+  --size-panel-gutter: 28px;
+  --size-toast-top: 38px;
+  --size-nav-search-min: 72px;
+  --size-sync-label-max: 72px;
+  --size-nav-search-narrow: 180px;
+  --size-nav-search-width: 240px;
+  --size-toast-width: 320px;
+  --size-panel-max: 360px;
+  --size-search-popover-max: 560px;
+  --size-planner-gutter: 62px;
+  --size-planner-gutter-narrow: 48px;
+  --size-planner-day-min: 101px;
+  --size-assignment-max: 760px;
+  --size-conversations-min: 14rem;
+  --size-conversations-max: 18rem;
+  --size-report-card-min: 11rem;
+  --size-report-card-max: 16rem;
 
-  /* — planner-event kinds (Phase 11b) — one bg / fg / edge per kind, all on the
-     ramps above. Kind is the colour; a course never recolours a block (Q5).
-     Out of office adds a hatch, working location a dashed edge and an
-     appointment slot a dotted one, so the six read apart without colour too. */
-  --planner-event-bg: var(--color-accent-700);
-  --planner-event-fg: var(--color-accent-100);
-  --planner-event-edge: var(--color-accent-300);
-  --planner-task-bg: var(--color-neutral-800);
-  --planner-task-fg: var(--color-neutral-100);
-  --planner-task-edge: var(--color-neutral-300);
-  --planner-ooo-bg: var(--color-danger-bg);
-  --planner-ooo-fg: var(--color-text);
-  --planner-ooo-edge: var(--color-danger);
-  --planner-ooo-hatch: color-mix(in srgb, var(--color-danger) 14%, transparent);
-  --planner-focus-bg: var(--color-accent-900);
-  --planner-focus-fg: var(--color-accent-200);
-  --planner-focus-edge: var(--color-accent-500);
-  --planner-worklocation-bg: var(--color-neutral-900);
-  --planner-worklocation-fg: var(--color-neutral-200);
-  --planner-worklocation-edge: var(--color-neutral-500);
-  --planner-appointment-bg: color-mix(in srgb, var(--color-accent-2-700) 40%, transparent);
-  --planner-appointment-fg: var(--color-accent-2-100);
-  --planner-appointment-edge: var(--color-accent-2-400);
+  /* — colours the sweeps need, at today's values (the light block redeclares each) — */
+  --color-scrim: rgba(0, 0, 0, 0.5);
+  --color-scrim-popout: color-mix(in srgb, var(--color-bg) 72%, transparent);
+  --color-text-45: color-mix(in srgb, var(--color-text) 45%, transparent);
+  --color-text-30: color-mix(in srgb, var(--color-text) 30%, transparent);
+  --color-text-78: color-mix(in srgb, var(--color-text) 78%, transparent);
+  --color-mix-text-4-surface: color-mix(in srgb, var(--color-text) 4%, var(--color-surface));
+  --color-mix-accent-14-surface: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
+  --color-mix-accent-10-surface: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+  --color-mix-accent-8-surface: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+  --color-mix-accent-10-transparent: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  --color-mix-accent-16-transparent: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  --color-mix-accent-2-800-78-transparent: color-mix(in srgb, var(--color-accent-2-800) 78%, transparent);
+  --color-mix-bg-55-transparent: color-mix(in srgb, var(--color-bg) 55%, transparent);
+  --color-mix-bg-45-transparent: color-mix(in srgb, var(--color-bg) 45%, transparent);
+  --color-mix-bg-80-transparent: color-mix(in srgb, var(--color-bg) 80%, transparent);
+  --color-mix-text-45-transparent: var(--color-text-45);
+  --color-mix-text-6-transparent: color-mix(in srgb, var(--color-text) 6%, transparent);
+  --color-accent-tint-6: color-mix(in srgb, var(--color-accent) 6%, transparent);
+  --color-accent-tint-7: color-mix(in srgb, var(--color-accent) 7%, transparent);
+  --color-accent-tint-12: color-mix(in srgb, var(--color-accent) 12%, transparent);
 
   color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+
+  /* — roles ————————————————————————————————————————————————————————— */
+  --color-bg: #f4f4f4;
+  --color-panel: #e9e9e9;
+  --color-surface: #ffffff;
+  --color-surface-press: color-mix(in srgb, var(--color-text) 8%, var(--color-surface));
+  --color-text: #111111;
+  --color-accent: var(--color-neutral-100);
+  --color-on-accent: #000000;
+  --color-accent-2: #000000;
+  --color-divider: color-mix(in srgb, #000000 16%, transparent);
+  --color-muted: color-mix(in srgb, var(--color-text) 68%, transparent);
+
+  /* — tonal ramps: redefined so a step keeps its distance from the ground (100 is the strong end here too) ——— */
+  --color-neutral-100: #0a0a0a;
+  --color-neutral-200: #1f1f1f;
+  --color-neutral-300: #333333;
+  --color-neutral-400: #474747;
+  --color-neutral-500: #595959;
+  --color-neutral-600: #696969;
+  --color-neutral-700: #848484;
+  --color-neutral-800: #d6d6d6;
+  --color-neutral-900: #efefef;
+  --color-accent-100: var(--color-neutral-100);
+  --color-accent-200: var(--color-neutral-200);
+  --color-accent-300: var(--color-neutral-300);
+  --color-accent-400: var(--color-neutral-400);
+  --color-accent-500: #ff0000;
+  --color-accent-600: var(--color-neutral-600);
+  --color-accent-700: var(--color-neutral-700);
+  --color-accent-800: var(--color-neutral-800);
+  --color-accent-900: var(--color-neutral-900);
+  --color-accent-2-100: var(--color-neutral-100);
+  --color-accent-2-200: var(--color-neutral-200);
+  --color-accent-2-300: var(--color-neutral-300);
+  --color-accent-2-400: var(--color-neutral-400);
+  --color-accent-2-500: var(--color-neutral-500);
+  --color-accent-2-600: var(--color-neutral-600);
+  --color-accent-2-700: var(--color-neutral-700);
+  --color-accent-2-800: #ababab;
+  --color-accent-2-900: var(--color-neutral-900);
+
+  /* — semantic aliases used by app chrome ——————————————————————————— */
+  --color-danger: #a31515;
+  --color-danger-bg: color-mix(in srgb, #ff0000 8%, transparent);
+  --color-hover: color-mix(in srgb, var(--color-text) 6%, transparent);
+  --color-active: color-mix(in srgb, var(--color-text) 11%, transparent);
+  --color-scrollbar: var(--color-neutral-600);
+  --color-scrollbar-hover: var(--color-neutral-400);
+
+  /* — elevation ————————————————————————————————————————————————————— */
+  --shadow-sm: 0 0 0 1px var(--color-neutral-800);
+  --shadow-hover: 0 0 0 1px var(--color-neutral-600);
+  --shadow-md: 0 0 0 1px var(--color-neutral-800), 0 2px 6px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 14px 36px rgba(0, 0, 0, 0.16);
+  --shadow-mark: none;
+
+  /* — assignment-type colours: the urgency scale, measured against this block's card — */
+  --type-reading-bg: #808080;
+  --type-reading-fg: #000000;
+  --type-assignment-bg: #484848;
+  --type-assignment-fg: #ffffff;
+  --type-quiz-bg: #111111;
+  --type-quiz-fg: #ffffff;
+  --type-project-bg: #a80000;
+  --type-project-fg: #ffffff;
+  --type-exam-bg: #ff0000;
+  --type-exam-fg: #000000;
+
+  /* — planner-event kinds — */
+  --planner-event-bg: #d2d2d2;
+  --planner-event-fg: #000000;
+  --planner-event-edge: #000000;
+  --planner-task-bg: #e3e3e3;
+  --planner-task-fg: var(--color-text);
+  --planner-task-edge: var(--color-neutral-500);
+  --planner-ooo-bg: var(--color-neutral-900);
+  --planner-ooo-fg: var(--color-neutral-200);
+  --planner-ooo-edge: var(--color-neutral-600);
+  --planner-ooo-hatch: color-mix(in srgb, #000000 9%, transparent);
+  --planner-focus-bg: var(--color-bg);
+  --planner-focus-fg: var(--color-text);
+  --planner-focus-edge: #000000;
+  --planner-worklocation-bg: #f7f7f7;
+  --planner-worklocation-fg: var(--color-neutral-300);
+  --planner-worklocation-edge: var(--color-neutral-600);
+  --planner-appointment-bg: var(--color-neutral-800);
+  --planner-appointment-fg: var(--color-neutral-100);
+  --planner-appointment-edge: var(--color-neutral-300);
+
+  /* — colours the sweeps need: the same expressions, read against this block's values — */
+  --color-scrim: rgba(0, 0, 0, 0.5);
+  --color-scrim-popout: color-mix(in srgb, var(--color-bg) 72%, transparent);
+  --color-text-45: color-mix(in srgb, var(--color-text) 45%, transparent);
+  --color-text-30: color-mix(in srgb, var(--color-text) 30%, transparent);
+  --color-text-78: color-mix(in srgb, var(--color-text) 78%, transparent);
+  --color-mix-text-4-surface: color-mix(in srgb, var(--color-text) 4%, var(--color-surface));
+  --color-mix-accent-14-surface: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
+  --color-mix-accent-10-surface: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+  --color-mix-accent-8-surface: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+  --color-mix-accent-10-transparent: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  --color-mix-accent-16-transparent: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  --color-mix-accent-2-800-78-transparent: color-mix(in srgb, var(--color-accent-2-800) 78%, transparent);
+  --color-mix-bg-55-transparent: color-mix(in srgb, var(--color-bg) 55%, transparent);
+  --color-mix-bg-45-transparent: color-mix(in srgb, var(--color-bg) 45%, transparent);
+  --color-mix-bg-80-transparent: color-mix(in srgb, var(--color-bg) 80%, transparent);
+  --color-mix-text-45-transparent: var(--color-text-45);
+  --color-mix-text-6-transparent: color-mix(in srgb, var(--color-text) 6%, transparent);
+  --color-accent-tint-6: color-mix(in srgb, var(--color-accent) 6%, transparent);
+  --color-accent-tint-7: color-mix(in srgb, var(--color-accent) 7%, transparent);
+  --color-accent-tint-12: color-mix(in srgb, var(--color-accent) 12%, transparent);
+
+  color-scheme: light;
 }
 
 *,
@@ -176,13 +440,16 @@ body {
   margin: 0;
 }
 
+/* A focused control is not left under the sticky bar (WCAG 2.2, focus not obscured). */
+html { scroll-padding-top: var(--nav-height); }
+
 body {
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-body);
   font-size: var(--text-md);
   line-height: 1.55;
-  font-weight: 400;
+  font-weight: var(--font-weight-regular);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -197,6 +464,8 @@ h6 {
   line-height: 1.12;
   letter-spacing: -0.015em;
   margin: 0 0 var(--space-2);
+  /* a short heading breaks into even lines */
+  text-wrap: balance;
 }
 
 h1 { font-size: var(--text-2xl); }
@@ -205,11 +474,19 @@ h3 { font-size: var(--text-md); }
 
 p { margin: 0 0 var(--space-3); }
 
+/* A link is the ink with a thin grey underline; the underline takes the ink when
+   the pointer is on it. */
 a {
   color: var(--color-accent);
-  text-underline-offset: 3px;
+  text-decoration-color: var(--color-neutral-600);
+  text-decoration-thickness: var(--size-underline);
+  text-underline-offset: var(--size-underline-offset);
+  transition: var(--motion-control);
 }
-a:hover { color: var(--color-accent-400); }
+a:hover {
+  color: var(--color-accent);
+  text-decoration-color: var(--color-accent);
+}
 
 img {
   display: block;
@@ -229,9 +506,91 @@ img {
   border: 0;
 }
 
+/* One focus ring everywhere: the ink, --size-focus thick, --size-focus-gap off.
+   It appears at once; nothing eases it. */
 :focus { outline: none; }
 :focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: var(--size-focus-gap);
 }
 ::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
+
+/* Scrollbars in the theme: the page and every box that scrolls, where a pointer is
+   the way in. A touch browser keeps its overlay bar. */
+@media (hover: hover) and (pointer: fine) {
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-scrollbar) transparent;
+    }
+  }
+  ::-webkit-scrollbar {
+    width: var(--size-scrollbar);
+    height: var(--size-scrollbar);
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-scrollbar);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+    border-radius: var(--radius-control);
+  }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--color-scrollbar-hover); }
+}
+
+/* A checkbox the app draws: a hairline edge in the text colour; ticked, it fills and
+   a tick in the ground colour scales in. :where() weighs nothing, so a module's own
+   class still wins (the planner's done box keeps its size and its tick colour). */
+:where(input[type='checkbox']) {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: var(--size-check);
+  height: var(--size-check);
+  margin: 0;
+  border: var(--size-underline) solid currentColor;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  cursor: pointer;
+  transition: var(--motion-control);
+}
+:where([type='checkbox'])::before {
+  content: '';
+  position: absolute;
+  inset: 12%;
+  background: var(--color-bg);
+  clip-path: polygon(10% 52%, 0 66%, 38% 100%, 100% 22%, 86% 8%, 37% 72%);
+  transform: scale(0);
+  transition: transform var(--motion-press) var(--ease-out);
+}
+:where([type='checkbox']:checked) { background: currentColor; }
+:where([type='checkbox']:checked)::before { transform: scale(1); }
+
+/* The theme switch does not animate: the script marks the two frames around it. */
+:root[data-theme-switching] *, :root[data-theme-switching] *::before, :root[data-theme-switching] *::after { transition: none !important; }
+
+/* A loading line waits, then fades in once; nothing loops. */
+@keyframes arrives {
+  from { opacity: 0; }
+}
+
+/* Reduced motion: nothing eases, slides, fades or turns, and a panel that closes is
+   gone at once. One thing is kept, the wait before a loading line, so a fast answer
+   still never flashes it; the line then shows with no fade. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-exit: 0ms;
+    --motion-exit-lg: 0ms;
+  }
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  [data-loading] { animation: arrives 0s var(--ease-linear) var(--motion-delay) backwards !important; }
+}

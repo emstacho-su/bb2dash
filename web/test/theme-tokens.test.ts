@@ -12,6 +12,10 @@
  * suites that measure the live file are `type-tokens.contrast.test.ts` and, from
  * task 8, `theme-contrast.test.ts`.
  *
+ * The last describe block reads the LIVE `globals.css` (Phase 22, task 8) and holds
+ * what direction D's token set promises: both theme blocks, the 18 layout tokens
+ * as `main` had them, `color-scheme` per block.
+ *
  * WHAT IS PINNED
  *
  *   1. Blocks. A light block never moves the dark map. The light map is the
@@ -26,6 +30,8 @@
  *      which is why they are measured here on the copy.
  */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   contrastRatio,
@@ -33,6 +39,7 @@ import {
   LIGHT_SELECTOR,
   pairContrast,
   parseColour,
+  readGlobalsThemeMaps,
   readThemeMaps,
   resolveColour,
   toHex,
@@ -472,3 +479,120 @@ describe("contrast on today's tokens, measured from the verbatim copy", () => {
 function darkMap(css: string) {
   return readThemeMaps(css).dark;
 }
+
+
+/* ---------------------------------------------------------------------------
+ * The live stylesheet (task 8)
+ * ------------------------------------------------------------------------ */
+
+/** The 18 tokens that hold layout. A direction does not change them. */
+const LAYOUT_TOKENS = [
+  '--space-1',
+  '--space-2',
+  '--space-3',
+  '--space-4',
+  '--space-6',
+  '--space-8',
+  '--space-12',
+  '--nav-height',
+  '--content-max',
+  '--sidebar-width',
+  '--sidebar-side',
+  '--text-xs',
+  '--text-sm',
+  '--text-base',
+  '--text-md',
+  '--text-lg',
+  '--text-xl',
+  '--text-2xl',
+] as const;
+
+const GLOBALS = readFileSync(join(process.cwd(), 'src', 'app', 'globals.css'), 'utf8');
+const COMMENTS = /\/\*[\s\S]*?\*\//g;
+const LIVE = readGlobalsThemeMaps();
+const MAIN = readThemeMaps(DARK_ROOT).dark;
+
+/** The `color-scheme` a block declares, read from the block's own text. */
+function colourSchemeOf(selector: string): string | null {
+  const stripped = GLOBALS.replace(COMMENTS, '');
+  const open = stripped.indexOf(`${selector} {`);
+  if (open < 0) return null;
+  const body = stripped.slice(open, stripped.indexOf('}', open));
+  return /color-scheme:\s*([a-z]+)\s*;/.exec(body)?.[1] ?? null;
+}
+
+/** The light block on its own: the stylesheet with the dark block taken out. */
+function lightBlockOnly(): ReadonlyMap<string, string> {
+  return readThemeMaps(GLOBALS.replace(/:root \{[\s\S]*?\n\}/, '')).light;
+}
+
+const squeeze = (value: string): string => value.replace(/\s+/g, ' ').replace(/"/g, "'").trim();
+
+describe('globals.css, direction D', () => {
+  const evidence = join(process.cwd(), '..', 'docs', 'planning', 'sprint-2', 'evidence', '103_style_tiles');
+  const direction = JSON.parse(readFileSync(join(evidence, 'direction-d.json'), 'utf8')) as {
+    dark: Record<string, string>;
+    light: Record<string, string>;
+    tileOnly: { dark: Record<string, string> };
+  };
+
+  it('has a light block', () => {
+    expect(LIVE.hasLightBlock).toBe(true);
+  });
+
+  it("the dark block holds every name of the JSON's dark map at its value, and the light block its light map", () => {
+    const wrongDark = Object.entries(direction.dark).filter(([k, v]) => squeeze(LIVE.dark.get(k) ?? '') !== squeeze(v));
+    expect(wrongDark.map(([k]) => k)).toEqual([]);
+    const light = lightBlockOnly();
+    const wrongLight = Object.entries(direction.light).filter(([k, v]) => squeeze(light.get(k) ?? '') !== squeeze(v));
+    expect(wrongLight.map(([k]) => k)).toEqual([]);
+  });
+
+  it('the three exit names the JSON holds under tileOnly are declared in :root at its values', () => {
+    for (const [name, value] of Object.entries(direction.tileOnly.dark)) {
+      expect(squeeze(LIVE.dark.get(name) ?? ''), name).toBe(squeeze(value));
+    }
+  });
+
+  it("the light block lacks none of :root's --color-* and --shadow-* names", () => {
+    const light = lightBlockOnly();
+    const wanted = [...LIVE.dark.keys()].filter((name) => /^--(color|shadow)-/.test(name));
+    expect(wanted.length).toBeGreaterThan(60);
+    expect(wanted.filter((name) => !light.has(name))).toEqual([]);
+  });
+
+  it('color-scheme is dark in :root and light in the light block', () => {
+    expect(colourSchemeOf(':root')).toBe('dark');
+    expect(colourSchemeOf(":root[data-theme='light']")).toBe('light');
+  });
+
+  it("the 18 layout tokens equal main's values (the verbatim copy), in both blocks", () => {
+    expect(LAYOUT_TOKENS).toHaveLength(18);
+    for (const name of LAYOUT_TOKENS) {
+      expect(MAIN.has(name), name).toBe(true);
+      expect(LIVE.dark.get(name), name).toBe(MAIN.get(name));
+      expect(LIVE.light.get(name), name).toBe(MAIN.get(name));
+    }
+  });
+
+  it('declares no system-preference copy of either block', () => {
+    expect(GLOBALS.replace(COMMENTS, '')).not.toMatch(/@media\s*\(prefers-color-scheme/);
+  });
+
+  it('every colour token in a block resolves: no name points at a name nobody declares', () => {
+    for (const block of ['dark', 'light'] as const) {
+      const map = LIVE[block];
+      const over = resolveColour(map, '--color-surface');
+      const broken: string[] = [];
+      for (const name of map.keys()) {
+        if (!/^--(color|planner|type)-/.test(name)) continue;
+        try {
+          resolveColour(map, name, over);
+        } catch (error) {
+          broken.push(`${name}: ${(error as Error).message}`);
+        }
+      }
+      expect(broken, block).toEqual([]);
+    }
+  });
+});

@@ -202,3 +202,59 @@
   background: var(--type-exam-bg);
   color: var(--type-exam-fg);
 }
+
+/* — the error notice, once (Phase 22, entry error-notice-shared) —————————
+   The danger tint, the danger words, a bar of the danger colour down the left
+   edge and the word "Error" in front. A boxed error rule composes this class
+   and keeps its own padding, radius and type size:
+
+       .problem { composes: errorNotice from '@/styles/tokens.module.css'; … }
+
+   Tokens only: the bar is an inset shadow, so no size moves. */
+.errorNotice {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  box-shadow: inset var(--size-notice-bar) 0 0 var(--color-danger);
+}
+.errorNotice::before {
+  content: 'Error';
+  margin-right: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* — the drawn label of an icon button (Phase 22, task 32) ———————————————
+   The app's own small label in place of the browser tooltip. The button carries
+   its name in data-tip; the accessible name stays its .sr-only text. The label
+   shows under the button after twice --motion-delay of hover, and at once on
+   keyboard focus. A button with no data-tip draws nothing. */
+.tip { position: relative; }
+.tip[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 50%;
+  z-index: 3;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-lg), 0 0 0 var(--size-underline) var(--color-divider);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity var(--motion-state) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .tip[data-tip]:hover::after {
+    opacity: 1;
+    transition-delay: calc(var(--motion-delay) * 2);
+  }
+}
+.tip[data-tip]:focus-visible::after { opacity: 1; }
