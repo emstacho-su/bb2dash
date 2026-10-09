@@ -205,11 +205,30 @@ export function createRetriever(deps: RetrieverDeps): Retriever {
     }
   };
 
+  /**
+   * During the pause the search is skipped but an attached file is still read: the child is started
+   * with no queries. The state stays `failed`-like (`paused`); this read counts no failure and does
+   * not move the pause.
+   */
+  const pausedResult = async (request: RetrieveRequest, started: number): Promise<RetrieveResult> => {
+    const skipped = failedResult('paused', started, deps.now);
+    if (request.attachments.length === 0) return skipped;
+    try {
+      const outcome = await run(spec, requestBody({ ...request, plan: { ...request.plan, queries: [] } }), { timeoutMs: RETRIEVE_TIMEOUT_MS, signal: request.signal });
+      const answer = outcome.exitCode === 0 && !outcome.timedOut ? parseBatchAnswer(outcome.stdout) : null;
+      if (answer === null || request.signal.aborted) return skipped;
+      deps.log(`retrieve: paused, attachments read=${answer.attachments.length} ms=${Math.round(deps.now() - started)}`);
+      return { ...skipped, attachments: answer.attachments, ms: Math.round(deps.now() - started) };
+    } catch {
+      return skipped;
+    }
+  };
+
   return async function retrieve(request) {
     const started = deps.now();
     if (started < breaker.pausedUntil) {
       deps.log(`retrieve: skipped, the search is paused for ${Math.ceil((breaker.pausedUntil - started) / MS_PER_SECOND)} more s`);
-      return failedResult('paused', started, deps.now);
+      return pausedResult(request, started);
     }
     let outcome: BatchRun;
     try {
