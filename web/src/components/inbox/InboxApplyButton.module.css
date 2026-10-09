@@ -3,9 +3,10 @@
  *
  * Same shape and the same tokens as the top bar's Sync button, because it is
  * the same affordance: file a request and watch the state (Phase 23: the apply
- * worker takes it; nothing is copied unless nothing claims it). The one difference is where the toast hangs — this button sits at
- * the left of a page header rather than at the right of the bar, so the panel
- * is anchored to its left edge and cannot run off the screen.
+ * worker takes it; nothing is copied unless nothing claims it). The one difference is where the toast hangs. This button sits at
+ * the right of the Inbox footer, which is sticky at the bottom of the window, so the
+ * panel opens ABOVE the button and is anchored to its right edge: under the button
+ * it would open below the window, where its text and the fallback command cannot be read.
  */
 
 .wrap {
@@ -56,12 +57,12 @@
   white-space: nowrap;
 }
 
-/* The toast hangs under the button, anchored to its left edge. */
+/* The toast opens above the button, anchored to its right edge (the footer is the bottom of the window). */
 .toast {
   position: absolute;
   z-index: 30;
-  top: 38px;
-  left: 0;
+  bottom: calc(100% + var(--space-2));
+  right: 0;
   width: 320px;
   display: flex;
   flex-direction: column;
