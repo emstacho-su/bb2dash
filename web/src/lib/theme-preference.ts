@@ -154,7 +154,12 @@ function markSwitching(root: HTMLElement): void {
  *     picked after boot). On a change it reads storage again; with `auto` stored
  *     it sets `data-theme-switching`, re-stamps and re-colours the metas, and
  *     removes the switching attribute two frames later. With anything else it
- *     does nothing.
+ *     does nothing;
+ *   - keeps every `theme-color` meta on the stamped theme's ground with a
+ *     MutationObserver on `<head>`: a client navigation can replace the viewport
+ *     meta with a fresh one that holds the server's dark value (R2-3);
+ *   - follows another tab: a `storage` event for the key, or for a cleared
+ *     storage, re-resolves and re-stamps as a system change does (R2-5).
  */
 export const THEME_BOOT_SCRIPT = [
   '(function(){try{',
@@ -168,9 +173,17 @@ export const THEME_BOOT_SCRIPT = [
   'var t=resolve();',
   'r.setAttribute("data-theme",t);',
   'if(t==="light"){metas(t);}',
+  // A client navigation can replace the viewport meta (R2-3): keep every theme-color meta on the
+  // stamped theme's ground. Setting a content that is already right changes nothing, so this ends.
+  'function sync(){var c=r.getAttribute("data-theme");if(c!=="light"&&c!=="dark"){return;}var l=d.querySelectorAll(\'meta[name="theme-color"]\');for(var i=0;i<l.length;i++){if(l[i].getAttribute("content")!==BG[c]){l[i].setAttribute("content",BG[c]);}}}',
+  'try{if(typeof window.MutationObserver==="function"&&d.head){new window.MutationObserver(sync).observe(d.head,{childList:true,subtree:true,attributes:true,attributeFilter:["content","name"]});}}catch(e){}',
+  // Re-resolve, re-stamp and mark the switch for two frames: a system change and another tab's pick.
+  'function apply(){var u=resolve();r.setAttribute(A,"");r.setAttribute("data-theme",u);metas(u);frames(' + THEME_SWITCHING_FRAMES + ',function(){r.removeAttribute(A);});}',
   'if(m!==null){',
-  'var on=function(){if(stored()!=="auto"){return;}var u=resolve();r.setAttribute(A,"");r.setAttribute("data-theme",u);metas(u);frames(' + THEME_SWITCHING_FRAMES + ',function(){r.removeAttribute(A);});};',
+  'var on=function(){if(stored()!=="auto"){return;}apply();};',
   'if(typeof m.addEventListener==="function"){m.addEventListener("change",on);}else if(typeof m.addListener==="function"){m.addListener(on);}',
   '}',
+  // Another tab's pick (R2-5): the storage event fires for the key, or for a cleared storage (key null).
+  'try{window.addEventListener("storage",function(e){if(e.key!==null&&e.key!==K){return;}apply();});}catch(e){}',
   '}catch(e){}})();',
 ].join('');

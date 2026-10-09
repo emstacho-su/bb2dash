@@ -33,6 +33,7 @@
  */
 
 import { type BrowserContext, type Locator, type Page } from '@playwright/test';
+import { THEME_BG } from '../src/lib/theme-preference';
 import { A1_POPOUT, coldCache, failReads, fulfillView, openSignedIn } from './walk';
 import { expect, quietSync, shotPath22, shotsAsked22, test } from './walk22.lib';
 
@@ -258,7 +259,7 @@ interface Surface {
   /** Whether the case runs signed in under a quiet Sync label. */
   quiet?: boolean;
   /** Reaches the surface's state and asserts something of it is on screen. */
-  reach: (page: Page, context: BrowserContext) => Promise<void>;
+  reach: (page: Page, context: BrowserContext, theme: Theme) => Promise<void>;
 }
 
 const route =
@@ -277,6 +278,34 @@ async function openSignedOut(page: Page, context: BrowserContext, path: string):
   await page.goto(path);
   await page.waitForLoadState('load');
   await page.waitForTimeout(SETTLE_MS);
+}
+
+/**
+ * R2-3: the `theme-color` meta after an in-app navigation. The boot script and a ThemeMenu pick stamp
+ * the light ground on the meta, and Next may replace a viewport meta when a client navigation commits.
+ * Picks Light, follows a bar link (a client navigation: a marker on `window` survives it), reads every
+ * `meta[name="theme-color"]`, and opens the account menu again so the shot still shows it.
+ */
+async function themeColorSurvivesNavigation(page: Page): Promise<void> {
+  await page.getByRole('menuitemradio', { name: 'Light' }).click();
+  await page.evaluate(() => {
+    (window as unknown as { __clientNavigation: boolean }).__clientNavigation = true;
+  });
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Planner' }).click();
+  await expect(page).toHaveURL(/\/planner/);
+  await expect(page.getByRole('link', { name: 'Next week' })).toBeVisible();
+  const stayedInDocument = await page.evaluate(
+    () => (window as unknown as { __clientNavigation?: boolean }).__clientNavigation === true,
+  );
+  expect(stayedInDocument, 'the bar link navigated inside the document, not by a reload').toBe(true);
+  const colours = await page.evaluate(() =>
+    [...document.querySelectorAll('meta[name="theme-color"]')].map((meta) => meta.getAttribute('content') ?? ''),
+  );
+  console.log(`25 account-menu: theme-color metas after the navigation: ${JSON.stringify(colours)}`);
+  expect(colours.length, 'a theme-color meta exists').toBeGreaterThan(0);
+  expect(colours, 'every theme-color meta after a client navigation on Light').toEqual(colours.map(() => THEME_BG.light));
+  await page.getByRole('button', { name: 'Account', exact: true }).click();
+  await expect(page.getByRole('menu')).toBeVisible();
 }
 
 const SURFACES: readonly Surface[] = [
@@ -463,13 +492,14 @@ const SURFACES: readonly Surface[] = [
     slug: 'account-menu',
     window: 'config',
     quiet: true,
-    reach: async (page) => {
+    reach: async (page, _context, theme) => {
       await openAt(page, '/');
       await page.getByRole('button', { name: 'Account', exact: true }).click();
       await expect(page.getByRole('menu')).toBeVisible();
       // The theme control is W-67's component, mounted in this menu by W-68 (task 10).
       await expect(page.getByRole('group', { name: 'Theme' })).toBeVisible();
       await expect(page.getByRole('menuitemradio')).toHaveCount(3);
+      if (theme === 'light') await themeColorSurvivesNavigation(page);
     },
   },
   {
@@ -577,7 +607,7 @@ for (const surface of SURFACES) {
       await useTheme(context, theme);
       if (surface.quiet === true) await quietSync(context);
 
-      await surface.reach(page, context);
+      await surface.reach(page, context, theme);
 
       // The theme is the one the case asked for, stamped before paint.
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);

@@ -812,3 +812,85 @@ Selector fixes, all in `web/e2e/theme-walk.spec.ts`:
 
 No case failed because of an element in another worker's file. Nothing was written to the database in either run
 (`guardWrites22` is on every case). The two cases left out, `31 frame-scrolled` and `planner targets`, stay owed to tasks 26 and 36.
+
+## Round 2
+
+From the first `/code-review main high`. The branch was merged with `origin/feat/styling-22` first (it holds `origin/main` after
+the Phase 23 follow-ups; nothing of it is in these files). One commit per item.
+
+### R2-3 (HIGH): the `theme-color` meta after an in-app navigation
+
+**It reproduced.** The assertion went into `25 account-menu [light]` first (`b9d3976`): pick Light, set a marker on `window`,
+follow the bar's Planner link (the marker survives, so it is a client navigation), read every `meta[name="theme-color"]`.
+
+| | Run | Printed | Result |
+|---|---|---|---|
+| RED, before any fix | `20261009T030405Z`, `b9d3976`, `dirty` false | `theme-color metas after the navigation: ["#f4f4f4","#050505"]` | `25 account-menu [dark]` passed, `[light]` failed, `exit_code` 1 |
+| GREEN, after `da7719c` | `20261009T031847Z`, `8a4faf5`, `dirty` false | `theme-color metas after the navigation: ["#f4f4f4","#f4f4f4"]` | `25 account-menu [light]` passed |
+
+The stamped meta stays and Next inserts a fresh one with the server's dark value beside it. The fix is in the boot script
+(`da7719c`): a `MutationObserver` on `<head>` sets any `theme-color` meta whose content is not the stamped theme's ground.
+Setting a content that is already right changes nothing, so the observer ends. Compile-time constants only, no storage write,
+no `MutationObserver` means no observer and the stamp still happens. Unit cases in `theme-preference.test.ts` (5 plus one
+with the real observer), RED against the old script: 9 failed of 49 (the R2-3 and R2-5 cases), GREEN with it.
+
+### R2-5 (MEDIUM): another tab's pick
+
+`ab0a9fc`. The boot script adds a `storage` listener: for the key `bb2dash.theme`, or a cleared storage (key null), it
+re-resolves and re-stamps the attribute and the metas with `data-theme-switching` for two frames (the same `apply` a system
+change uses); any other key does nothing; it writes no storage. `ThemeMenu` keeps what it picked together with what storage
+read back right after the pick (`lastPick`): while storage still reads that, the pick shows (a storage that cannot be written
+keeps its old value, so the pick has to show beside it); when storage reads anything else, another tab wrote it and the menu
+follows. Cases: `theme-preference.test.ts` (6) and `ThemeMenu.test.tsx` (3); RED for the menu before the fix: 2 failed of 18
+(a later change after a local pick; the unwritable storage), GREEN after.
+
+### R2-9 (LOW): the preconnect
+
+`07c6d6d`. `crossOrigin` is off the `fonts.googleapis.com` preconnect and on `fonts.gstatic.com` only. A comment over the
+`@import` in `globals.css` says the build drops it and the layout's link is what loads. `fonts-href.test.ts` is unchanged and
+passes.
+
+### R2-tip (MEDIUM): the drawn label and the button's name
+
+`e82a36c`. `.tip[data-tip]::after` has `content: attr(data-tip) / '';`, an empty alternative text, so the label is drawn and not
+spoken. lightningcss keeps the form (`content:attr(data-tip) / ""` out of a minified transform) and the audit is green with
+`foundation.json` at `{}`. W-68 can take its `aria-label` workaround off: the name is the `.sr-only` text again.
+
+### R2-notice (LOW): the count
+
+`d84b012`. The comment over `.errorNotice` no longer quotes the compose line.
+`git grep -c "composes: errorNotice from" -- web/src/styles/tokens.module.css` prints nothing (exit 1), and
+`git grep -l "composes: errorNotice from" -- web/src/styles ...` in the foundation prints `web/src/app/login/Login.module.css` only.
+
+### R2-4c (MEDIUM): the switched-off look on a save
+
+Every `disabled=` in my files, `login/`, `ThemeMenu`, `privacy/`, `terms/`, `not-found` and `layout.tsx`:
+
+| Site | Expression | Decision |
+|---|---|---|
+| `LoginForm.tsx:101` the email field | `disabled={pending}` | already `aria-busy={pending}` (task 37); nothing beside it |
+| `LoginForm.tsx:117` the password field | `disabled={pending}` | already `aria-busy={pending}` |
+| `LoginForm.tsx:126` the submit button | `disabled={pending}` | already `aria-busy={pending}`; a button, reached by `.btn:disabled` and `.btnPrimary:disabled`, not by the five field rules |
+
+`ThemeMenu` has no `disabled`. No site holds a pending or busy flag beside something else, so none changed and none was left out
+for a reason other than that. The `aria-busy={pending}` count in `web/src/app/login` is still 3.
+
+### Checks
+
+| Check | Result |
+|---|---|
+| `npx vitest run test/theme-preference.test.ts test/ThemeMenu.test.tsx test/fonts-href.test.ts test/raw-html.audit.test.ts test/token-audit.test.ts test/theme-tokens.test.ts test/foundation-round2.test.ts` | exit 0, 7 files, 216 passed |
+| `npm test` | exit 0, 170 files, 3328 passed |
+| `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0; exit 0 |
+| Direction check | `125 0 77 0 true` |
+| allowlist | `git diff --quiet ce2519f HEAD -- web/test/token-audit.allowlist.ts` exits 0 |
+
+`web/test/foundation-round2.test.ts` (new, 6 cases) pins R2-9, R2-tip and R2-notice; RED against the three files as they stood
+before the round: 4 failed, 2 passed; GREEN after.
+
+### The closing harness run
+
+`node scripts/walk-box.mjs web/e2e/theme-walk.spec.ts -- -g "25 account-menu|13 login|motion off"` on the committed and pushed tree
+(`8a4faf5`), no `WALK_SHOTS`, no `bb2dash-walk22-` or `bb2dash-accept-` container and no `accept.lock` before it: run
+`20261009T031847Z`, `exit_code` 0, `result` `passed`, `dirty` false, **5 passed, 0 failed** (`13 login` in both themes, `25 account-menu`
+in both, `motion off under reduced motion`).

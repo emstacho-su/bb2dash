@@ -173,3 +173,46 @@ describe('picking a row', () => {
     expect(document.documentElement.hasAttribute(THEME_SWITCHING_ATTRIBUTE)).toBe(false);
   });
 });
+
+describe("another tab's pick (R2-5)", () => {
+  /** Fires the event another tab's write makes in this one. */
+  function otherTabWrites(value: string | null): void {
+    if (value === null) localStorage.removeItem(THEME_STORAGE_KEY);
+    else localStorage.setItem(THEME_STORAGE_KEY, value);
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: THEME_STORAGE_KEY, newValue: value }));
+    });
+  }
+
+  it('the menu follows another tab before any local pick', () => {
+    render(<ThemeMenu />);
+    otherTabWrites('light');
+    expect(row('Light')).toHaveAttribute('aria-checked', 'true');
+    expect(row('Dark')).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('after a local pick the menu still follows a later change from another tab', () => {
+    render(<ThemeMenu />);
+    fireEvent.click(row('Light'));
+    expect(row('Light')).toHaveAttribute('aria-checked', 'true');
+
+    otherTabWrites('auto');
+    expect(row('Auto')).toHaveAttribute('aria-checked', 'true');
+    expect(row('Light')).toHaveAttribute('aria-checked', 'false');
+
+    otherTabWrites(null);
+    expect(row('Dark')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('with a storage that cannot be written the pick still shows, until storage itself changes', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    render(<ThemeMenu />);
+    fireEvent.click(row('Light'));
+    expect(row('Light')).toHaveAttribute('aria-checked', 'true');
+    vi.restoreAllMocks();
+    otherTabWrites('auto');
+    expect(row('Auto')).toHaveAttribute('aria-checked', 'true');
+  });
+});
