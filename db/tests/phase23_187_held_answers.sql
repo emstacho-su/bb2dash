@@ -18,7 +18,9 @@
 --   8. a done close keeps `inbox-apply-failed` open while an item is held, and archives it once
 --      none is
 --   9. the `not_applied` notice says a sync does not try the answers again, names a new answer and
---      the button, and holds no "Undo"; every other failure keeps its sentence
+--      the button, and holds no "Undo", when a hold stands for an id of the close's skip (round 4:
+--      with an empty skip, or an id answered again before the close, it keeps 186's sentence);
+--      every other failure keeps its sentence
 --  18. R4: a failed close with a skip and NO skip_seen (the old worker) writes no hold, and a later
 --      done close still keeps `inbox-apply-failed` open while that answer waits
 --
@@ -508,9 +510,17 @@ do $$
 declare
   v_r    bigint;
   v_text text;
+  v_h    bigint := pg_temp.t187_item('test187:nah');
+  v_g    bigint := pg_temp.t187_item('test187:nag');
+  v_seen jsonb;
 begin
+  -- (c) A hold stands for an id of this close's skip: the new sentence.
   v_r := pg_temp.t187_request();
-  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(array[]::bigint[], '[]'::jsonb, 'not_applied'));
+  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(
+    array[v_h], jsonb_build_array(pg_temp.t187_seen(v_h)), 'not_applied'));
+  if not v_h = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 9 (setup): no hold stands for the skipped id';
+  end if;
   select question into v_text from attention_items where state = 'open' and ref = 'inbox-apply-failed';
   if v_text is null then
     raise exception 'FAIL 9: a not_applied failure raised no notice';
@@ -520,6 +530,33 @@ begin
   end if;
   if v_text ilike '%undo%' or v_text ilike '%press Apply answers to run the rest%' then
     raise exception 'FAIL 9: the not_applied notice still names Undo or the old sentence: "%"', v_text;
+  end if;
+
+  -- Round 4 (b): skip_seen is sent but nothing was skipped (a write left unarchived): no hold stands,
+  -- a sync will try again, so 186's sentence.
+  perform pg_temp.t187_archive_notices();
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(array[]::bigint[], '[]'::jsonb, 'not_applied'));
+  select question into v_text from attention_items where state = 'open' and ref = 'inbox-apply-failed';
+  if v_text is null or v_text not like '%failed: not_applied.%' or v_text not like '%press Apply answers to run the rest.'
+     or v_text ilike '%sync does not try%' then
+    raise exception 'FAIL 9b: a not_applied close with an empty skip carries "%"', v_text;
+  end if;
+
+  -- Round 4 (a): the one skipped id was answered again before the close, so it gets no hold and the
+  -- next sync tries it: 186's sentence.
+  perform pg_temp.t187_archive_notices();
+  v_seen := pg_temp.t187_seen(v_g);
+  perform pg_temp.t187_reanswer(v_g);
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(array[v_g], jsonb_build_array(v_seen), 'not_applied'));
+  if v_g = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 9a (setup): an answer given again was held';
+  end if;
+  select question into v_text from attention_items where state = 'open' and ref = 'inbox-apply-failed';
+  if v_text is null or v_text not like '%failed: not_applied.%' or v_text not like '%press Apply answers to run the rest.'
+     or v_text ilike '%sync does not try%' then
+    raise exception 'FAIL 9a: a not_applied close whose only skipped id was answered again carries "%"', v_text;
   end if;
 
   -- Every other failure keeps 186's sentence.

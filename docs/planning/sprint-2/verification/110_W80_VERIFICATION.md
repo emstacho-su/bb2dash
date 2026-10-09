@@ -348,3 +348,38 @@ inbox_apply_held_items() is missing"; filing and accept: "migration 187 is not a
 
 Defaults: the case 20 (ii) text-variant check goes beyond the brief (it pins the strict `retry_held`
 on the close side); nothing was built other than as written.
+
+## Round 4 (the PR-level code review: the notice sentence, R6)
+
+Merged `origin/fix/phase23-followups` first. Units first (red, the "round 4 units" commit), then the migrations.
+
+### Runner results, line counts
+
+The five units (`phase23_187_held_answers`, `_b`, `_decision_filing`, `_accept_objects` and
+`phase23_188_archived_answers`) read "migration 187 is not applied" (the held ones: "the hold table or
+inbox_apply_held_items() is missing") and "migration 188 is not applied (...supersede_replaced_files... is
+not its body)". `phase23_180`, `_181`, `_182`, `_183`, `_185`, `_186` PASS. Line counts: 187 **940**; 188
+**614**; `phase23_187_held_answers.sql` **642**; `_b` **721**; `phase23_188_archived_answers.sql` **446**.
+
+### Per point (red = new unit against round 3's files on the PGlite stand-in)
+
+1. **Notice sentence.** `v_stands` = a hold stands, after this close's holds are written, for an id of
+   its skip (`inbox_apply_held_items()`, the same test the function uses); the new sentence needs
+   `error = 'not_applied' and v_stands`, else 186's. Case 9: (c) a skipped id with a hold keeps the new
+   sentence; (b) `skip_seen: []` with an empty skip carries 186's; (a) an id answered again before the
+   close (no hold) carries 186's; case 18 (old worker) is unchanged. Red: "FAIL 9b: a not_applied close
+   with an empty skip carries 'Inbox apply request N failed: not_applied. ... A sync does not try again
+   ...'"; green: PASS.
+2. **R6.** `link_file_sessions` ends with one `update attention_items` (the backfill's predicate plus
+   `dismissed`; alias `cf`, because `f` is the function's record variable: the first try failed with
+   "column reference f.id is ambiguous" on the stand-in); step c's inline stamp is gone and step c is 163's
+   again (the diff of the body against 163 is that one statement). The migration's backfill and guard are
+   untouched. Header updated. Unit: new section b2 (resolved, archived and dismissed answers whose file
+   already carried the pick before the fold are stamped; a differing pick, "none" and a self-closed row
+   are not; a stamp already there does not move; no file's session changes); section c's backfill-twice
+   check now also holds after a fold, and the fold leaves the refused answers unstamped. Red: "FAIL b2:
+   the resolved answer whose pick its file already carried was not stamped by the fold"; green: PASS.
+   (a), (b), (c) still pass.
+
+Default: the fold's statement stamps `dismissed` answers too (the brief's wording for it); the one-time
+backfill still reads resolved and archived only, as before.

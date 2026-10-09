@@ -300,6 +300,7 @@ declare
   v_one        jsonb;      -- 187:
   v_params     jsonb;      -- 187: the request's params, for v_retry and the hold insert
   v_retry      boolean;    -- 187: a press of Apply answers and its chain (R3)
+  v_stands     boolean;    -- 187: a hold stands for an id of this close's skip (round 4)
 begin
   if p_result is null or jsonb_typeof(p_result) <> 'object'
      or jsonb_typeof(p_result->'lines') is distinct from 'array'
@@ -400,6 +401,11 @@ begin
    where not exists (select 1 from v_inbox_queue q
                       where q.id = h.item_id and q.resolved_at is not distinct from h.resolved_at);
 
+  -- 187 (round 4): does a hold stand, after the holds above, for at least one id of this close's skip?
+  -- The same test as inbox_apply_held_items (the hold's time is the queue row's own, and the row
+  -- needs a reader). Only then does the notice say a sync will not try again.
+  v_stands := exists (select 1 from public.inbox_apply_held_items() as h(id) where h.id = any (v_skip));
+
   if p_state = 'failed' then
     perform raise_attention(
       null, 'stack_must_confirm', null, 'agent_request',
@@ -410,9 +416,10 @@ begin
           then format('The apply worker''s Claude sign-in has expired, so Inbox apply request %s did not run. Renew the token (claude setup-token), then press Apply answers.', p_request)
         -- 187: answers a run could not apply are held. A sync does not try them again; a new answer
         -- to one of them, or a press of Apply answers, does. No Undo: the card offers none for every row.
-        -- Only when the close sends skip_seen: the old worker writes no hold, every sync still
-        -- retries, and 186's sentence below is the true one for it.
-        when p_result->>'error' = 'not_applied' and p_result ? 'skip_seen'
+        -- 187: Only when a hold stands for an id of this close's skip (v_stands): the old worker
+        -- writes none, an answer given again during the run gets none, and an empty skip has none;
+        -- the next sync tries those, so 186's sentence below is the true one.
+        when p_result->>'error' = 'not_applied' and v_stands
           then format('Inbox apply request %s failed: %s. Answers it had already applied stay applied. A sync does not try again the answers it could not apply; a new answer to one of them, or a press of Apply answers, does.',
                       p_request, left(coalesce(p_result->>'error', 'no error recorded'), 200))
         else format('Inbox apply request %s failed: %s. Answers it had already applied stay applied; press Apply answers to run the rest.',

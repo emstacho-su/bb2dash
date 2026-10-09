@@ -429,9 +429,10 @@ again, and a new answer or a press of Apply answers does.
   queue with that same time, **on a failed close only** (a new hold always comes with the notice a failed
   close raises). A malformed `skip_seen` is refused (22023); a close with none writes no hold. Either
   close removes the holds whose item left the queue or was answered again. The `not_applied` notice says
-  a sync does not try the answers again and that a new answer or the button does **only when the close
-  sends `skip_seen`**; the old worker's failed run keeps 186's sentence ("press Apply answers to run the
-  rest"), which is the true one while every sync still retries. The failure notice
+  a sync does not try the answers again and that a new answer or the button does **only when,
+  after the close has written its holds, a hold stands for an id of its `skip`** (the held-items test); an
+  old worker's failed run, an empty skip, or an answer given again during the run keeps 186's sentence
+  ("press Apply answers to run the rest"), which is the true one while the next sync still retries. The failure notice
   (`inbox-apply-failed`) stays open while an id of this close's `skip` waits, **or** a waiting answer is
   held, **or** 186's own arm holds (a failed request of the worker listed the id in its `result.skip` and
   finished at or after the answer's `resolved_at`: this covers the old worker, which sends no
@@ -485,13 +486,15 @@ ingested?, logged_at?}` or `{skipped: true, why}`.
   `accept/…`, entity `agent_request`, no course) with another run tag, refuses a ref used before and a
   ninth open row. A test row carries no `inbox-decision/1` record, so the exporter never lists it.
 
-**`applied_at` on a session answer** (188). `link_file_sessions` now stamps `attention_items.applied_at`
-on the answer it applies (a pick written onto the file); an answer of "none", or a pick outside the
-week's sessions, writes nothing and gets no stamp. So a queue row for a session answer reads
-`was_applied = true` once the fold applied it. Answers the fold applied **before 188** were stamped by
-the migration's backfill (every session answer, resolved or archived and not self-closed, whose pick is
-the session its current file carries): their stamp time is **the migration's**, not the fold's.
-`supersede_replaced_files` also reads an archived answer (not self-closed) when it decides whether a
+**`applied_at` on a session answer** (188). `attention_items.applied_at` on a `session_link/<file id>`
+answer now means **his pick is the session the file carries**. `link_file_sessions` ends every fold with
+one statement that stamps every such answer (resolved, dismissed, or archived and not self-closed, with no
+stamp yet) whose pick is the `session_id` its current file (not superseded) carries, however the file came
+by it: the answer itself, the reading's date, the week's only session, the lecture number, an inherited
+link. An answer of "none", or a pick the file does not carry, is never stamped. So a queue row for a
+session answer reads `was_applied = true` once the fold has run. Answers the fold applied **before 188**
+were stamped by the migration's one-time backfill (the same predicate, for resolved and archived rows):
+their stamp time is **the migration's**, not the fold's. `supersede_replaced_files` also reads an archived answer (not self-closed) when it decides whether a
 `supersede/<file id>` question is already settled, so /inbox-apply archiving the answer no longer
 brings the question back.
 
