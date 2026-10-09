@@ -62,3 +62,22 @@ describe('R2-notice: the compose line is not quoted in the tokens module', () =>
     expect(tokens).toMatch(/^\.errorNotice::before\s*\{/m);
   });
 });
+
+describe('V-14: no drawn label behind its own open panel', () => {
+  const hover = tokens.indexOf(".tip[data-tip]:hover::after");
+  const focus = tokens.indexOf(".tip[data-tip]:focus-visible::after");
+  const open = tokens.indexOf(".tip[data-tip][aria-expanded='true']::after");
+
+  it('has a rule for a trigger that says it is open, and it shows no label', () => {
+    expect(open).toBeGreaterThan(0);
+    const rule = /\.tip\[data-tip\]\[aria-expanded='true'\]::after\s*\{([^}]*)\}/.exec(tokens)?.[1] ?? '';
+    expect(rule.trim()).toBe('display: none;');
+  });
+
+  it('comes after the hover and the focus rules, which weigh the same, so it wins on both', () => {
+    expect(hover).toBeGreaterThan(0);
+    expect(focus).toBeGreaterThan(0);
+    expect(open).toBeGreaterThan(hover);
+    expect(open).toBeGreaterThan(focus);
+  });
+});
