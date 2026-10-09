@@ -7,11 +7,13 @@
  * React escapes text by default, so the only ways to break that are the sinks
  * this file scans `web/src` for.
  *
- * One use is allowed, in one file: `src/app/(app)/layout.tsx` injects
- * `SIDEBAR_BOOT_SCRIPT`, a constant written in this repo, so the rail paints in
- * its remembered state. Anything else fails here, and the fix is to render the
- * value as text, or to sanitise it first and then add the file to the list
- * below under its own DECISIONS row.
+ * Two uses are allowed, one in each of two files, and each file injects one
+ * constant written in this repo: `src/app/(app)/layout.tsx` injects
+ * `SIDEBAR_BOOT_SCRIPT`, so the rail paints in its remembered state, and
+ * `src/app/layout.tsx`, the root layout, injects `THEME_BOOT_SCRIPT`, so the
+ * page paints in its theme (Phase 22, task 9). Anything else fails here, and the
+ * fix is to render the value as text, or to sanitise it first and then add the
+ * file to the list below under its own DECISIONS row.
  *
  * It scans source, not a rendered tree, so a screen no test mounts is covered.
  */
@@ -24,11 +26,15 @@ import { describe, expect, it } from 'vitest';
 const WEB = process.cwd();
 const SRC = join(WEB, 'src');
 
-/** The files that may set raw HTML, as paths from `web/`. Exactly one. */
-const ALLOWED_RAW_HTML_FILES: readonly string[] = ['src/app/(app)/layout.tsx'];
-
-/** The one expression the allowed file may inject. */
-const ALLOWED_INJECTION = 'dangerouslySetInnerHTML={{ __html: SIDEBAR_BOOT_SCRIPT }}';
+/**
+ * The files that may set raw HTML, as paths from `web/`, each with the one
+ * expression it may inject. Exactly two.
+ */
+const ALLOWED_INJECTIONS: ReadonlyMap<string, string> = new Map([
+  ['src/app/(app)/layout.tsx', 'dangerouslySetInnerHTML={{ __html: SIDEBAR_BOOT_SCRIPT }}'],
+  ['src/app/layout.tsx', 'dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }}'],
+]);
+const ALLOWED_RAW_HTML_FILES: readonly string[] = [...ALLOWED_INJECTIONS.keys()].sort();
 
 /**
  * The JSX attribute, exactly what `grep -rl "dangerouslySetInnerHTML=" web/src`
@@ -97,15 +103,15 @@ describe('the scanner itself', () => {
 });
 
 describe('Blackboard rich text is never rendered as HTML', () => {
-  it('finds `dangerouslySetInnerHTML=` in exactly one file, the app layout', () => {
+  it('finds `dangerouslySetInnerHTML=` in exactly two files, the app layout and the root layout', () => {
     expect(filesMatching(SOURCES, JSX_RAW_HTML)).toEqual([...ALLOWED_RAW_HTML_FILES]);
   });
 
-  it('the one allowed use injects the sidebar boot constant and nothing else', () => {
-    for (const file of ALLOWED_RAW_HTML_FILES) {
+  it('each allowed use injects its own boot constant and nothing else', () => {
+    for (const [file, injection] of ALLOWED_INJECTIONS) {
       const text = SOURCES.get(file) ?? '';
       const uses = text.match(/dangerouslySetInnerHTML\s*=\s*\{\{[^}]*\}\}/g) ?? [];
-      expect(uses, file).toEqual([ALLOWED_INJECTION]);
+      expect(uses, file).toEqual([injection]);
     }
   });
 
