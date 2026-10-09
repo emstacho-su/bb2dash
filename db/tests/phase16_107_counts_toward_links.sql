@@ -19,8 +19,9 @@
 --      of the view's row with its snapshot, so only the flag may move.
 --   4  the table refuses a not-excluded link with no component (the reason for no case 4).
 --   5  the invariant of 2 again after the fixtures, and the grade model view agrees with the flag.
---   6  inbox_apply_runner, which 181 lets read the view, still can (the view is security_invoker and
---      now reads grade_column_links, which that role was never granted).
+--   6  inbox_apply_runner, which 181 lets read the view, still can: the view is security_invoker and
+--      now reads grade_column_links, so 107 grants that role select there (and a select policy), and
+--      no write. Run under set local role, as the phase23_18x units do.
 --
 -- HOW THE FIXTURE ROW IS PICKED (deterministic): the first row of v_gradebook_latest, by course_id
 -- then column_id, whose column_kind is item or attendance, which links exactly one assignments row
@@ -252,20 +253,63 @@ end $$;
 -- =============================================================================================
 -- 6. A role that already reads the view still can. The view is security_invoker, so since 107 its
 --    reader needs select on grade_column_links as well. inbox_apply_runner (181) is granted
---    select on v_gradebook_latest and not on grade_column_links.
+--    select on v_gradebook_latest, so 107 gives it select on grade_column_links and a select
+--    policy, and nothing more: as that role the view and the table both read, and an insert, an
+--    update and a delete on the table are each refused (42501).
 -- =============================================================================================
 do $$
 declare
-  n bigint;
+  n_login_view  bigint;
+  n_login_links bigint;
+  n_role_view   bigint;
+  n_role_links  bigint;
+  v_refused     int := 0;
+  v_read_error  text;
 begin
+  select count(*) into n_login_view  from public.v_gradebook_latest;
+  select count(*) into n_login_links from public.grade_column_links;
+
   set local role inbox_apply_runner;
   begin
-    select count(*) into n from public.v_gradebook_latest;
+    select count(*) into n_role_view from public.v_gradebook_latest;
+    select count(*) into n_role_links from public.grade_column_links;
   exception when insufficient_privilege then
-    reset role;
-    raise exception 'FAIL inbox_apply_runner can no longer read v_gradebook_latest: it has no select on grade_column_links (and no read policy there), which the view reads since 107';
+    v_read_error := sqlerrm;
   end;
+  if v_read_error is null then
+    -- Each write is refused by the privilege check before any row is looked at, so where false
+    -- touches nothing and the insert never reaches its trigger.
+    begin
+      insert into public.grade_column_links (course_id, column_id, component_id, excluded)
+      values ('none', 'none', null, true);
+    exception when insufficient_privilege then
+      v_refused := v_refused + 1;
+    end;
+    begin
+      update public.grade_column_links set excluded = excluded where false;
+    exception when insufficient_privilege then
+      v_refused := v_refused + 1;
+    end;
+    begin
+      delete from public.grade_column_links where false;
+    exception when insufficient_privilege then
+      v_refused := v_refused + 1;
+    end;
+  end if;
   reset role;
+
+  if v_read_error is not null then
+    raise exception 'FAIL inbox_apply_runner cannot read v_gradebook_latest or grade_column_links (%): 107 must grant it select on the table', v_read_error;
+  end if;
+  if n_role_view is distinct from n_login_view then
+    raise exception 'FAIL inbox_apply_runner sees % v_gradebook_latest rows, the test login sees %', n_role_view, n_login_view;
+  end if;
+  if n_role_links is distinct from n_login_links then
+    raise exception 'FAIL inbox_apply_runner sees % grade_column_links rows, the test login sees %: a select policy for the role is missing', n_role_links, n_login_links;
+  end if;
+  if v_refused <> 3 then
+    raise exception 'FAIL inbox_apply_runner was refused % of 3 writes (insert, update, delete) on grade_column_links', v_refused;
+  end if;
 end $$;
 
 select 'phase16_107_counts_toward_links: PASS' as result, current_user as ran_as;

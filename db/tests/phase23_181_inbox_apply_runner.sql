@@ -96,6 +96,9 @@ begin
     cross join (values ('select'), ('insert'), ('update'), ('delete'), ('truncate')) p(priv)
    where n.nspname = 'public' and c.relkind in ('r', 'v', 'm', 'p')
      and has_table_privilege('inbox_apply_runner', c.oid, p.priv);
+  -- 107 gives the role select on grade_column_links (v_gradebook_latest, which it reads, is
+  -- security_invoker and reads that table), and phase16_107 pins that. Before 107 it is absent here.
+  v_got := replace(v_got, 'grade_column_links:select,', '');
   if v_got is distinct from
      'assignment_progress:insert,assignment_progress:select,assignment_progress:update,'
      'assignments:insert,assignments:select,assignments:update,attention_items:select,'
