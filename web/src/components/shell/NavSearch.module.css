@@ -13,6 +13,8 @@
   align-items: center;
   min-width: 0;
   border-radius: var(--radius-md);
+  /* The pill, its field and its results popover are no-drag in the desktop title bar. */
+  app-region: no-drag;
 }
 
 /* Expanded: the field and the icon share one outlined pill. */
