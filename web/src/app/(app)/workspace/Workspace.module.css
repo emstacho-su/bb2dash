@@ -5,7 +5,7 @@
 /* The list beside the thread; one column under the phone fold. */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+  grid-template-columns: minmax(var(--size-conversations-min), var(--size-conversations-max)) minmax(0, 1fr);
   gap: var(--space-8);
   align-items: start;
   min-width: 0;
@@ -22,11 +22,10 @@
 
 /* A read or a write that failed, in the app's own words for it (the Inbox's form). */
 .problem {
+  composes: errorNotice from '@/styles/tokens.module.css';
   margin: 0;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
   font-size: var(--text-sm);
 }
 

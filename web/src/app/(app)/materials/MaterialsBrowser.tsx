@@ -1,5 +1,6 @@
 'use client';
 
+import { MARK_CHAR, Mark, MarkedLabel } from '@/components/shell/icons';
 import { useId, useMemo } from 'react';
 import Link from 'next/link';
 import { courseCode, useCourses, type CourseSummary } from '@/lib/queries';
@@ -72,10 +73,10 @@ function FileRow({ file, blackboardUrl = null }: { file: BbFileRow; blackboardUr
               rel="noreferrer"
               title="bb2dash cannot submit for you — open Blackboard and attach it there."
             >
-              {STAGED_LABEL}
+              <MarkedLabel label={STAGED_LABEL} />
             </a>
           ) : (
-            <span className={styles.rowReason}>{STAGED_LABEL}</span>
+            <span className={styles.rowReason}><MarkedLabel label={STAGED_LABEL} /></span>
           ))}
       </span>
 
@@ -151,7 +152,7 @@ function ReadingRowView({
             target="_blank"
             rel="noreferrer"
           >
-            {route.action}
+            <MarkedLabel label={route.action} />
           </a>
         </span>
       ) : route.syllabus ? (
@@ -224,7 +225,7 @@ function BucketSection({
         onClick={onToggle}
       >
         <span className={styles.bucketCaret} aria-hidden="true">
-          {collapsed ? '▸' : '▾'}
+          {collapsed ? <Mark name="caretRight" /> : <Mark name="caretDown" />}
         </span>
         <span className={tokens.kicker}>{label}</span>
         <span className={styles.bucketCount}>{count}</span>
@@ -373,7 +374,7 @@ function CourseBlock({
           onClick={() => onToggle(course.id)}
         >
           <span className={styles.bucketCaret} aria-hidden="true">
-            {courseFolded ? '▸' : '▾'}
+            {courseFolded ? <Mark name="caretRight" /> : <Mark name="caretDown" />}
           </span>
           <span className={styles.courseCode}>{courseCode(course)}</span>
           <span className={styles.courseTitle}>{course.title_short ?? course.title_bb ?? course.id}</span>
@@ -384,11 +385,11 @@ function CourseBlock({
         <div className={styles.courseHeadRight}>
           {/* R-06: the same materials, in the folder tree Blackboard put them in. */}
           <Link className={styles.bbLink} href={`/course/${course.id}/classwork`}>
-            Open in Classwork →
+            Open in Classwork <Mark name="caretRight" char={MARK_CHAR.arrowRight} />
           </Link>
           {course.bb_url && (
             <a className={styles.bbLink} href={course.bb_url} target="_blank" rel="noreferrer">
-              Blackboard ↗
+              Blackboard <Mark name="arrowUpRight" />
             </a>
           )}
         </div>

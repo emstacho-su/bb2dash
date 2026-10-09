@@ -88,3 +88,6 @@
 .emptyLink {
   composes: btnGhost from '@/styles/tokens.module.css';
 }
+.emptyLink:active {
+  opacity: 0.7;
+}

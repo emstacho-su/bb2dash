@@ -75,8 +75,8 @@
 }
 
 .foldToggle:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: calc(var(--size-focus-gap) * -1);
 }
 
 .caret {
@@ -84,24 +84,21 @@
   color: var(--color-muted);
 }
 
-/* The way into the course, beside the header (P-grades-2). */
+/* The way into the course, beside the header (P-grades-2). It shows the global
+   link style (ink words, a thin grey underline) and dims while it is held. */
 .openLink {
   margin-inline-start: auto;
   font-size: var(--text-sm);
-  color: var(--color-accent);
-  text-decoration: none;
   border-radius: var(--radius-sm);
 }
 
-.openLink:hover,
-.openLink:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.18em;
+.openLink:active {
+  opacity: 0.7;
 }
 
 .openLink:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: var(--size-focus-gap);
 }
 
 .body {

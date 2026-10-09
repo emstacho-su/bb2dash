@@ -61,7 +61,7 @@
 }
 
 .fieldLabel {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-neutral-500);
@@ -108,7 +108,7 @@
 }
 
 .policyLabel {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-neutral-500);

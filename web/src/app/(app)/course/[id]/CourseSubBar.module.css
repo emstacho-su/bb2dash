@@ -15,18 +15,23 @@
 .tab {
   color: var(--color-text);
   text-decoration: none;
-  padding: 4px 2px;
+  padding: var(--size-4) 2px;
   cursor: pointer;
   background: none;
   border: 0;
   font: inherit;
+  /* A control of the chrome: dragging across the tabs selects no words and lifts
+     no ghost of the link. */
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: var(--motion-control);
 }
 .tab:hover { color: var(--color-accent); }
 
 .tabActive {
   composes: tab;
   color: var(--color-accent);
-  box-shadow: inset 0 -2px 0 var(--color-accent);
+  box-shadow: inset 0 -2px 0 var(--color-accent-500);
 }
 
 .meta {
@@ -66,8 +71,8 @@
 .dispute {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 1px 8px;
+  gap: var(--size-4);
+  padding: 1px var(--size-8);
   border-radius: calc(var(--radius-md) * 0.75);
   font-size: var(--text-xs);
   color: var(--color-danger);

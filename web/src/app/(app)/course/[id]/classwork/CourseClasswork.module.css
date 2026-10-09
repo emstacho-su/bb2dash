@@ -65,7 +65,7 @@
 }
 
 .kind {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-neutral-500);
@@ -73,12 +73,15 @@
 
 .stateChip {
   composes: tagOutline from '@/styles/tokens.module.css';
-  padding: 0 6px;
+  padding: 0 var(--size-6);
 }
 
 .bbLink {
   margin-left: auto;
   font-size: var(--text-xs);
+}
+.bbLink:active {
+  opacity: 0.7;
 }
 
 .files {
@@ -96,8 +99,8 @@
 
 .chip {
   font-family: var(--font-mono);
-  font-size: 10px;
-  padding: 1px 5px;
+  font-size: var(--text-2xs);
+  padding: 1px var(--size-5);
   border-radius: var(--radius-sm);
   background: var(--color-neutral-800);
   color: var(--color-neutral-200);
@@ -113,7 +116,7 @@
 
 /* T-13 (R-40): a file's note, marked the way Materials marks it. */
 .noteMark {
-  font-size: 9px;
+  font-size: var(--text-3xs);
   letter-spacing: 0.04em;
   color: var(--color-accent-2);
   cursor: help;
@@ -122,7 +125,7 @@
 /* T-13 (R-39): a node Blackboard no longer lists, shown on request. */
 .goneChip {
   composes: tagOutline from '@/styles/tokens.module.css';
-  padding: 0 6px;
+  padding: 0 var(--size-6);
   color: var(--color-neutral-500);
 }
 
