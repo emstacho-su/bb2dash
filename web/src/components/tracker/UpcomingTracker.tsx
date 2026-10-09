@@ -492,6 +492,7 @@ export function UpcomingTracker({
         className={styles.tracker}
         role="tablist"
         aria-label="Effort by day"
+        title="line = Monday · click a day for detail"
         onScroll={handleScroll}
         style={{ ['--tracker-columns' as string]: String(columnsInView) }}
       >
@@ -509,20 +510,16 @@ export function UpcomingTracker({
 
       <div className={styles.windowSummary}>
         <span>Window · {formatDayRange(view.firstIso, view.lastIso)}</span>
-        <span>
-          Scrolls {formatDayRange(strip.firstIso, strip.lastIso)} · line = Monday · click a day for
-          detail
-        </span>
+        <span>Scrolls {formatDayRange(strip.firstIso, strip.lastIso)}</span>
       </div>
 
       <div className={styles.detail}>
         <div className={styles.detailHead}>
-          <span className={styles.detailTitle}>
+          <span className={styles.detailTitle} title="status is click-to-edit">
             {activeSelected === today ? 'Today' : DOW_LABELS[selectedDate.getDay()]},{' '}
             {MONTH_LABELS[selectedDate.getMonth()]} {selectedDate.getDate()}
           </span>
           <span className={styles.sub}>{detailSub}</span>
-          <span className={styles.detailHint}>status is click-to-edit</span>
         </div>
 
         {error !== null && (

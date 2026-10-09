@@ -28,6 +28,7 @@ export function WeekHeader({
   itemCount,
   eventCount,
   onAdd,
+  captionTitle,
 }: {
   view: PlannerWeekModel;
   pathname: string;
@@ -39,6 +40,8 @@ export function WeekHeader({
   eventCount: number;
   /** R3-9: open the new-event wizard; the button is where focus returns. */
   onAdd?: (opener: HTMLElement) => void;
+  /** What the count line explains, as its tooltip (the how-to lines left the page). */
+  captionTitle?: string;
 }) {
   const term = useTerm();
   const termWeek = termWeekNumber(term.data ?? null, view.weekStart);
@@ -51,7 +54,7 @@ export function WeekHeader({
           {term.data ? `Week ${termWeek} · ${term.data.name}` : `Week ${termWeek}`}
         </span>
       )}
-      <span className={styles.sub}>
+      <span className={styles.sub} title={captionTitle}>
         {loading
           ? 'loading…'
           : error !== null

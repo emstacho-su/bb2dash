@@ -248,8 +248,12 @@ export function Today() {
       {/* ---- 2. Course cards (no grade line) ---- */}
       <section className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2 className={styles.h2}>Courses</h2>
-          <span className={styles.sub}>Open = items due this week · strip = meeting days, dot = something due</span>
+          <h2
+            className={styles.h2}
+            title="Open = items due this week · strip = meeting days, dot = something due"
+          >
+            Courses
+          </h2>
         </div>
         <div className={styles.courseGrid}>
           {(coursesQ.data ?? []).map((course) => (

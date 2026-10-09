@@ -250,3 +250,29 @@ PM's.
 | `grep -c "font-family: var(--font-mono)" web/src/components/inbox/InboxCard.module.css` | 1 | 0 |
 | Serif check restricted to W-69's two rules (`.title`, `.value`) | | `2 0 0` |
 | Weight check over the screens A paths | prints nothing | prints nothing |
+
+## Task 34: captions (W-69's part)
+
+Four how-to lines left the page's visible text and became the `title` of what they explain; each sentence is still in its file.
+
+| Sentence | Now the `title` of |
+|---|---|
+| "Open = items due this week · strip = meeting days, dot = something due" | the Courses `h2` (`Today.tsx`) |
+| "line = Monday · click a day for detail" | the day strip's tablist (`UpcomingTracker.tsx`); "Window · ..." and "Scrolls ..." stay |
+| "status is click-to-edit" | the detail panel's day heading (`UpcomingTracker.tsx`) |
+| the planner's two lines, as one sentence ending "the grid shows New York time" | the week header's count line, through a new optional `captionTitle` prop of `WeekHeader` (`PlannerWeek.tsx` holds the string) |
+
+The rules left dead by it are deleted: `PlannerWeek.module.css` `.legend` and `UpcomingTracker.module.css` `.detailHint`. The two
+`.sub { white-space: normal }` blocks of task 15 stay, because `.sub` is still used (Home's Undated count, the tracker's caption).
+
+| Check | Before | After |
+|---|---|---|
+| `grep -c "<span className={styles.sub}>Open = " "web/src/app/(app)/Today.tsx"` | 1 | 0 |
+| `grep -c "styles.detailHint" web/src/components/tracker/UpcomingTracker.tsx` | 1 | 0 |
+| `grep -c "className={styles.legend}" web/src/components/planner/PlannerWeek.tsx` | 1 | 0 |
+| `grep -c "strip = meeting days" "web/src/app/(app)/Today.tsx"` | 1 | 1 |
+| `grep -c "line = Monday" web/src/components/tracker/UpcomingTracker.tsx` | 1 | 1 |
+| `grep -c "status is click-to-edit" web/src/components/tracker/UpcomingTracker.tsx` | 1 | 1 |
+| `grep -c "the grid shows New York time" web/src/components/planner/PlannerWeek.tsx` | 1 | 1 |
+| `npx vitest run test/UpcomingTracker.scroll.test.tsx test/UpcomingTracker.test.tsx test/TodayLayout.test.tsx test/PlannerWeek.test.tsx` | | exit 0, 4 files, 109 passed; the four files unedited |
+| `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | | exit 0 (165 files, 3242 tests); exit 0; exit 0 |
