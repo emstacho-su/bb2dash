@@ -505,7 +505,7 @@ and `search`; and, new in 24a, `workspace_documents`, `workspace_document_text`,
 `workspace_search`, `hybrid_search_workspace_text`, `workspace_attachment_read` (192),
 `workspace_ingest_claim`, `workspace_ingest_put_text`, `workspace_ingest_finish`,
 `workspace_ingest_heartbeat` and the table `workspace_ingest_heartbeat` (193), `workspace_job_finish`
-(196), `v_workspace_index_status` (197) and the edge functions `workspace-embed` and
+(196), `v_workspace_index_status` (197), `v_workspace_store_proof` (199: one row of plain columns with the catalog answers of proofs 1, 2, 3 and 7, for the acceptance run) and the edge functions `workspace-embed` and
 `workspace-search`. The five **content tables** are `bb_file_text`, `bb_text_embeddings`,
 `workspace_documents`, `workspace_document_text` and `workspace_text_embeddings`.
 `workspace_ingest_heartbeat` is the sixth table and holds no content.
