@@ -249,3 +249,40 @@ the heartbeat table), 196 needs 194 and 195, 192/193/194/195 need 190, 190's mem
 both `phase24_196_runner_v2.sql` and `phase24_196b_feed_jobs.sql`, and after the ninth apply
 `phase24_store_proof.sql`, `phase21_140_workspace_tables.sql`, `phase21_142`, `phase21_143` and
 `phase15_100`, with the `phase15_101` change above.
+
+## Round 3: migration 199, the review round
+
+Files: `db/migrations/199_workspace_review_round.sql` (`create or replace` and `comment on` only, no table or
+column; grants re-stated; a guard) and `db/tests/phase24_199_review_round.sql`. The unit is red against prod
+until 199 is applied: `FAIL phase24_199: migration 199 is not applied (workspace_job_claim is still 196's)`.
+Green only in the stand-in (190 to 199 applied, every phase24 unit, 140, 143 pass; 197 passes too unless the
+stand-in's non-invoker stub view is fed a seeded course unit, a stand-in artefact). A dry run adds
+`grant workspace_runner to postgres with inherit false, set true;` and the same for `workspace_ingest_runner`.
+
+1. **Rolling job.** A message is old when the bytes of the messages NEWER than it pass 14,000, and the newest
+   finished message (after the through-point) is never old. A last answer of 20,000 bytes with only the
+   question behind it gives no job; with three 5,000-byte messages behind it the job is the question and the
+   three, `through` is the third's time, and the next request's context holds the answer verbatim.
+2. **Ingest wait.** The time is `claimed_at`: `retry` now sets it to the time of the try (it cleared it); the
+   claim skips a row with attempts > 0 and a `claimed_at` younger than 60 s times attempts. Counted by state, so
+   `v_workspace_index_status` is unchanged. The unit moves the clock by setting `claimed_at` back (the
+   `updated_at` trigger would overwrite that column).
+3. **Job finish.** The claim records the kind in the holder, `rolling:<runner>` or `memory:<runner>` (no new
+   column); finish needs that exact holder and a lease under 5 minutes old, for every outcome.
+4. **Turn put.** Attachments cut to `{kind, id, state}`, malformed elements dropped, five kept; titles come
+   from the database row (cut to 200) and the feed's is fixed. The prior code already took material, upload
+   and memory titles from the row; it did not cut them or fix the feed's.
+
+**Embed time bound (answer).** Yes: today `retry` always counts a try, and the third ends the row `failed`, so a
+document that makes progress and runs out of time would burn its tries. 199 adds the outcome `release` to
+`workspace_ingest_finish` (only for a document in `text_ready`, held by the caller: lease freed, attempts
+unchanged, state stays, claimable at once). The fixture README gains the outcome (the PM writes it).
+
+**Units of applied migrations that 199 moves (edited, and why).** `phase24_193_ingest_role.sql` section 3d: the
+retry loop claimed the same row at once; it now asserts the wait (not at once, not 1 s early) and moves
+`claimed_at` back. `phase24_196b_feed_jobs.sql`: the simulated holds are now `'memory:' || runner`; the first
+rolling job is the question and A to D through D (196 included E, the fourth newest message), and the second job
+starts at E. `phase24_196_runner_v2.sql` unchanged.
+
+**Defaults.** The wait uses `claimed_at` rather than `updated_at` (any edit bumps the latter); a row with a null
+`claimed_at` (never tried, or swept) waits for nothing. Release is refused outside `text_ready`.

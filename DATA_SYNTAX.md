@@ -475,6 +475,19 @@ first and then granted what the owner needs. Every policy names `app_owner()` in
   courses are the request's own stored scope), `workspace_job_claim` and `workspace_job_finish` (a
   rolling summary, or a remembered item written as an upsert on its conversation).
 
+* **The review round (199)** — `create or replace` only. `workspace_job_claim`: a message is old for a
+  rolling job when the messages newer than it already pass 14,000 bytes, and the newest finished
+  message of a conversation is never old (`through` never reaches it), so the next question always sees
+  one verbatim turn; the lease holder records its kind (`rolling:<runner>` or `memory:<runner>`).
+  `workspace_job_finish` refuses (22023) unless the runner holds the lease for that kind and it is under
+  5 minutes old. `workspace_ingest_claim`: after a failed try a document is not handed out until 60
+  seconds times its `attempts` have passed since that try (`claimed_at`, which `retry` now keeps as the
+  time of the try); it still counts as waiting. `workspace_ingest_finish` gains the outcome `release`
+  (a document in `text_ready`: lease freed, attempts unchanged). `workspace_turn_put` stores each
+  attachment as exactly `{kind, id, state}` (kind `file` | `upload`; state `read`, `cut`, `not_ready`,
+  `failed`, `missing`, `no_text`; five at most) and takes a source's title from the database (the feed's
+  is `Planner and grades`), at most 200 characters.
+
 ### The pgvector store, scoped to bb2dash
 
 One retrieval store inside the bb2dash project, schema `public`, vector type from the `vector`
