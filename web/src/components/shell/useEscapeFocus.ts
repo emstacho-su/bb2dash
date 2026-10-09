@@ -8,12 +8,23 @@ import { useEffect, type RefObject } from 'react';
  * `usePopover` closes on Escape and returns no focus (R-51), and keeps that shape. A panel that
  * wants focus back says so with this hook: while it is open, an Escape moves focus to its own
  * button. An outside press is not Escape: the press puts focus where the pointer went.
+ *
+ * Only an Escape that belongs to this popover moves focus (round 2, R2-8): focus is inside the
+ * popover's anchor (its button and its panel) or nowhere. An Escape pressed in another widget, the
+ * search field with this popover still open, is that widget's, and it needs the focus where it is.
  */
 export function useEscapeFocus(open: boolean, button: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     if (!open) return;
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') button.current?.focus();
+      if (event.key !== 'Escape') return;
+      const target = button.current;
+      if (target === null) return;
+      const focused = document.activeElement;
+      // The anchor is the element that wraps the button and the panel (see usePopover).
+      const belongsHere =
+        focused === null || focused === document.body || (target.parentElement?.contains(focused) ?? false);
+      if (belongsHere) target.focus();
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);

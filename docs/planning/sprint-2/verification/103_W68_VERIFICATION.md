@@ -457,3 +457,13 @@ Mark characters before my files `41 20`, after `36 17` (5 characters in 3 files,
   `route / [dark]` and `route / [light]`: `page scrollWidth=402`. The element is W-69's: the Upcoming work strip on Home (`UpcomingTracker.module.css`, the `.day` buttons reach right=400 and the strip is not held to the pane's width at 390 px).
   I did not touch it. The earlier full run 20261009T014210Z (before the label fix) was `4 failed, 50 passed`: the same two and `open state 7 search` in both themes.
 * Printed in the same run: `unfolded bar at 721: nav scrollWidth=815` (it was 851 in Inter), `bar at 390 longest label: nav scrollWidth=390`, `bar at 900 longest label: nav scrollWidth=900`.
+
+## Round 2
+
+**R2-8 (HIGH), `useEscapeFocus.ts`.** The hook moved focus to its button on any Escape while its popover was open, so an Escape pressed in the search field (opened with Ctrl+K over an open bell) was stolen before NavSearch's own guard ran.
+It now moves focus only when focus is inside the popover's anchor (its button and its panel) or nowhere (the body); `usePopover` is untouched.
+RED, written first in `web/test/shell-keyboard.test.tsx` (bell, Activity and the account menu open, Ctrl+K, Escape in the field: search folds, focus is on the Search icon and not on the popover's button): `Test Files 1 failed`, `Tests 3 failed | 15 passed (18)`.
+GREEN: see the gates below.
+GREEN: the row's six files (`shell-keyboard`, `TopNav.search`, `Bell`, `TopNav.update`, `TopNav.workspace`, `TopNav.fold`): 6 files, 75 passed, 0 failed, the old files unedited. The existing Escape case for Bell and Activity now focuses each button before its press, as a real press does
+(in jsdom `fireEvent.click` does not move focus, and the second button's Escape would otherwise belong to the first). `cd web && npm test`: 174 files, 3351 passed; typecheck 0; eslint 0; `test/token-audit.test.ts` 89 passed.
+Recorded, no change: `Bell.module.css` `.panel` repeats `dd`'s arrive and leave rules because the brief's own checks pin Bell's copy; declined.

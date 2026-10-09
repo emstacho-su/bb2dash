@@ -151,6 +151,8 @@ describe('Bell and Activity', () => {
 
     for (const name of [/^Announcements/, /^Activity/]) {
       const button = screen.getByRole('button', { name });
+      // A real press focuses the button it opens from; fireEvent.click alone does not.
+      button.focus();
       fireEvent.click(button);
       expect(button).toHaveAttribute('aria-expanded', 'true');
 
@@ -202,5 +204,45 @@ describe('the skip link', () => {
     fireEvent.click(link);
 
     expect(screen.getByRole('main')).toHaveFocus();
+  });
+});
+
+describe('an Escape that belongs to another widget moves nothing (round 2, R2-8)', () => {
+  /** Opens a popover with the mouse, then search with Ctrl+K, and presses Escape in the search field. */
+  function escapeInSearchWhileOpen(name: string | RegExp) {
+    renderNav();
+    const button = screen.getByRole('button', { name });
+    fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    const field = screen.getByRole('combobox', { name: 'Search materials' });
+    expect(field).toHaveFocus();
+
+    fireEvent.keyDown(field, { key: 'Escape' });
+    return button;
+  }
+
+  it.each([
+    ['Bell', /^Announcements/],
+    ['Activity', /^Activity/],
+    ['the account menu', 'Account'],
+  ] as const)('%s: search folds as on main and focus is not taken to the popover’s button', (_label, name) => {
+    const button = escapeInSearchWhileOpen(name);
+
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(button).not.toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Search' })).toHaveFocus();
+  });
+
+  it('still returns focus when focus is nowhere (the body) and the popover is open', () => {
+    renderNav();
+    const button = screen.getByRole('button', { name: 'Account' });
+    fireEvent.click(button);
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+
+    expect(button).toHaveFocus();
   });
 });
