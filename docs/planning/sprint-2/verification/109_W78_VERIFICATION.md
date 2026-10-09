@@ -189,3 +189,42 @@ The smoke script has the `--tools-only` mode on this branch. No test file was re
 * Nothing outside my folders was edited. `project-state/`, `db/`, `web/`, `workspace/`, `sync/`,
   `apply/`, `ingest/`, `docker/`, `compose.yaml`, `search/`, `embed-corpus/` and `calendar-push/` are
   untouched; no lock file or dependency changed.
+
+## Round 3: a `workspace-embed` call is proportional to the work left
+
+Finding: every call read all units of the document with full text, re-chunked them and re-read every
+stored part number, then embedded at most `max_parts`.
+
+Red: `node --test supabase/functions/_shared/embed_call_test.ts` ->
+`Cannot find module '.../_shared/embed-call.ts'` (then, with the module, one test-file syntax slip of
+mine, a TS parameter property that Node's strip-only mode refuses; fixed in the test).
+Green: `ℹ tests 39 / pass 39 / fail 0` over `chunk_test.ts` (21), `embed_call_test.ts` (7) and
+`search_test.ts` (11). `mcp-server`: typecheck clean, 143 tests pass, build clean, smoke lists three tools.
+
+What it reads now (`_shared/embed-call.ts`, the whole call behind an `EmbedStore`; `index.ts` is only
+the supabase-js store and the gte-small session, made on first use):
+the document row; a head COUNT of its units with `embedded_at` null (no text); the text of at most
+`min(limit, max_parts)` of those, id ascending (each embedded unit needs at least one part of the
+budget); the stored part numbers of those units only. A fake-store test: 300 units, 290 marked, reads
+the text of 10 units and the part numbers of 10 ids.
+
+The two counts: `missing_parts_before` = exact missing parts of the units read + 1 for each unmarked
+unit not read (an unmarked unit is missing at least one part, so it is a lower bound that is exact once
+every unmarked unit fits the window); `remaining_parts` = that minus parts stored by this call (a 23505
+counts as stored). Zero is exact: it is 0 only when no unmarked unit is out of the window and every part
+of the window is stored, and a unit whose parts are all stored is marked in the same call. A fake-store
+loop test checks `remaining_parts` stays above 0 until the last part is stored and is 0 on that call.
+Between calls the figure is a lower bound that only falls; it does not equal the true part total for a
+large document until the last calls. `dry_run`/`--check` reports the same bound (above 0 exactly when
+work is left).
+
+Declined: an exact whole-document part total on every call. PostgREST cannot return text lengths
+without a view or a column, and I may not add either (no `db/`); reading lengths would still need a
+second pass over the document.
+
+For probe 8: on a multi-unit upload, `missing_parts_before` on the first call is a lower bound (it
+will be smaller than the true part total when units are long and more than `min(limit,max_parts)`
+units are unmarked); it falls call by call and the loop must end with `remaining_parts` 0, every unit
+marked and `v_workspace_index_status` counts right. The empty-text unit still shows in `failed`, and a
+document in `failed`/`deleting` still answers 200 with zeros and reads no text. A window of unmarked
+units that all fail to embed would be re-read each call (the loop stops at the first `failed` anyway).
