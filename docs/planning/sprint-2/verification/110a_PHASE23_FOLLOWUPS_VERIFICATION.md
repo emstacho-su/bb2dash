@@ -513,3 +513,56 @@ request open, the text fetched from commit 1d7cf22 and compared by SHA-256 first
 Also merged since: W-84's round 3 (step 6 watches eight and a half minutes, about 45 seconds of
 slack; step 3's nine minutes have about 35) and W-82's round 4 (76 tests pass; the path literal
 count 1, control characters 0, non-ASCII bytes 0, parse errors 0).
+
+## Task 16 again, task 17, and bb2dash-stack's reviews (2026-10-09, about 01:45Z to 02:10Z)
+
+**The gates, run again on the branch after the review rounds (at 1d7cf22's code): every step exits 0.**
+`apply/` typecheck 0 and lines 94.87 % (630 of 664); `scripts/` `npm test` 238 pass (the line now
+also holds `register-exports.test.mjs`); `sync/` 159 pass; the acceptance suite 41 pass; the docker
+tests and `install-skills.test.mjs` pass; the firewall regenerated with no diff; `web/` typecheck 0,
+eslint 0, 2913 tests; `playwright --list` shows the seven new titles. `git status --porcelain`
+showed only the PM's own edit to the root `CLAUDE.md`: no lock file moved.
+
+**Task 17, the test image.** Run in `bb2dash-wt-23f` at 515b456, after waiting for the Phase 22 walk
+boxes that were running (rule 5 of the parallel sessions' file):
+
+```text
+SECRETS_DIR=C:/Users/stack/.bb2dash-secrets HARNESS_DIR=C:/Users/stack/agentic-harness MSYS_NO_PATHCONV=1 docker compose -p bb2dash-wt23f -f compose.yaml -f <scratchpad>/apply-wt23f.compose.yaml --profile apply build apply
+```
+
+The second file's whole content is `services: {apply: {image: "bb2dash-apply:wt23f"}}`, kept outside
+every repository. The build exited 0. `bb2dash-apply:local` was
+`sha256:3315bf7c18e2b14615a0e226f9ed8144c0a3f0ad7de0a9b50435c98d48340873` before and after;
+`bb2dash-apply:wt23f` is `sha256:16a25942d0888f7271a329999c70d04a1d8d0f1eb31b06a66601597281400b47`;
+`docker ps -a --filter name=bb2dash-wt23f -q` printed nothing; `bb2dash-apply-1` and `bb2dash-sync-1`
+were up and healthy with their start times unchanged. `node --test docker/apply/image.test.mjs`:
+9 pass. No container of the test project was started.
+
+**bb2dash-stack.** W-83's round 2 (K-1 to K-10; `fix/phase23-followups` there at f9a6474): nine
+fixed; the Workspace half of K-5 was not, because the unedited `doctor/workspace.test.mjs` pins the
+old hint. `BB2DASH_DIR=<this worktree> node --test doctor/*.test.mjs scripts/*.test.mjs`, run by the
+PM: **341 pass, 0 fail, 0 skipped** (the enum test ran in full: the registry's fifteen action names
+equal the schema's enum).
+
+* **`/security-review` on the bb2dash-stack branch: no HIGH and no MEDIUM.** Every command is an
+  argument array spawned without a shell; the five new actions take no parameter and a pack that
+  hands them one is refused when the manifest is read; the marker that records an owed service is
+  outside every folder the sandbox can write and its names are held to a fixed list; the state file
+  is not mounted into the sandbox and none of its strings is printed; `apply.doctorRow` reads the
+  secret's status (present, empty, missing), never its content; `compose.yaml` changed in comments
+  only. Three LOW notes on the door, taken in the last round.
+* **The second look at W-83's fix round: ready for the PR**, one MEDIUM and five LOW:
+
+| # | finding | ruling |
+|---|---|---|
+| D-1 (MEDIUM) | the door matched `apply` as a whole word only, so `compose cp apply:/run/secrets/... ./x` and a `--scale=apply=3` form passed. No registered action issues either and a pack cannot supply a command, so it is the door's second line only | **fix (W-83, round 3)**: the split `namesUntouchable` uses, and the whole command pinned for `apply` (no `-p`, `-f` or second `--profile` before the verb) |
+| D-2 | a test of "state unreadable: stops nothing" recorded no call and so proved nothing | **fix** |
+| D-3 | a leftover container that is `restarting` or `paused` read as stopped, no problem | **fix**: only exited, created and dead are stopped |
+| D-4 | apply's hint is built from the environment's value when one is set | **fix**: from the value written in `.env` |
+| D-5 | `exports.runNow`'s second ask can itself be dropped by the task; `schtasks` is started by bare name | **fix**: ask again every 30 seconds inside the limit; the full path |
+| D-6 | off Windows `exports.doctorRow` fails where the doctor's row is not a problem | **fix**: one function for both |
+
+  It traced a run cut off after the note and before the stop, after the stop, and after the start:
+  `apply` is never started when it was not running before the run and never left stopped when it
+  was. It found that nothing in either repository validates `verdict.json`, so the new `services`
+  key cannot turn a run red.
