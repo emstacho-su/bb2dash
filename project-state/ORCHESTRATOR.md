@@ -272,8 +272,8 @@ Learned in the Phase 23 follow-ups (2026-10-09; each from `verification/110a_PHA
      build and 188 at the cut-over); migration 187 as one file of 940 lines, over your 800 limit (a split would
      have spent 189); and rulings R1 to R7 (DECISIONS 2026-10-08 and 2026-10-09).
   5. **The failing SQL units are audited and corrected** (2026-10-09, on your word; record
-     `verification/115_SQL_UNITS_AUDIT_2026-10-09.md`; the suite went from 70 of 81 to 75 of 81, and the six
-     left each have a named reason). That also answers item 7 under Phase 21 below. Two things the audit found
+     `verification/115_SQL_UNITS_AUDIT_2026-10-09.md`; the suite went from 70 of 81 to 79 of 81 with Phase 24a's
+     port merged in, and the two left are true: file 2851 and 188 before the cut-over). That also answers item 7 under Phase 21 below. Two things the audit found
      are yours:
      * **A number for a small grades fix, and your look at it.** The Grades table's "counts toward" flag does not
        see the "Counts toward…" picker: GEO.103's two attendance columns that you marked "Not graded" are still

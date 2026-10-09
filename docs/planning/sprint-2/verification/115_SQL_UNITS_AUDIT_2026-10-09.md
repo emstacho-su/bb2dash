@@ -127,3 +127,17 @@ its current version; either is the eval owner's call and neither is taken here.
 
 **The suite after the review round:** passed 75, failed 6, units 81, the same six as in the table
 above. `node --test ingest/eval_search.test.mjs`: 10 pass (the pin test is gone).
+
+## After `main` moved (2026-10-09, about 03:40Z)
+
+Phase 24a's test port merged as PR #86 (d78f576) while this branch was open. It edits the same line
+of `phase15_101_search_path_pin.sql`. `origin/main` was merged into this branch (never rebased) and
+the one conflict resolved by keeping both sets, in name order:
+`app_owner(), calendar_push_now(), inbox_accept_question(), workspace_ask_with(), workspace_document_delete(), workspace_upload_register(), workspace_upload_retry()`,
+with both phases' comments above it.
+
+The whole suite from the merged branch: **passed 79, failed 2, units 81.** The two:
+
+* `phase18_post_embed_checks.sql`, "(a) no text unit: 2851": true, and Stack's to settle (the file).
+* `phase23_188_archived_answers.sql`, "migration 188 is not applied": true until the follow-ups'
+  cut-over.
