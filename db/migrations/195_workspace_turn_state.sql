@@ -22,8 +22,8 @@
 --
 -- NOTHING HERE HOLDS TEXT. `workspace_sources` and `workspace_turns` keep ids, kinds, counts, states,
 -- titles and timings, never a passage, a question or an answer (privacy rules for a public
--- repository; the unit refuses a column named text, passage, content or snippet). A source's title is
--- the file's name or the upload's title, so a row stays readable after its upload is deleted.
+-- repository; the unit refuses a column named text, passage, content or snippet). A source's title
+-- is the file's name or the upload's title, so a row stays readable after its upload is deleted.
 --
 -- `memory_since` is null until a runner first asks for memory jobs (workspace_job_claim, 196); that
 -- call stamps it once and it is never moved. So switching memory on summarises nothing said before
