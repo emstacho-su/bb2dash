@@ -158,6 +158,8 @@ function markSwitching(root: HTMLElement): void {
  *   - keeps every `theme-color` meta on the stamped theme's ground with a
  *     MutationObserver on `<head>`: a client navigation can replace the viewport
  *     meta with a fresh one that holds the server's dark value (R2-3);
+ *   - follows another tab: a `storage` event for the key, or for a cleared
+ *     storage, re-resolves and re-stamps as a system change does (R2-5).
  */
 export const THEME_BOOT_SCRIPT = [
   '(function(){try{',
@@ -181,5 +183,7 @@ export const THEME_BOOT_SCRIPT = [
   'var on=function(){if(stored()!=="auto"){return;}apply();};',
   'if(typeof m.addEventListener==="function"){m.addEventListener("change",on);}else if(typeof m.addListener==="function"){m.addListener(on);}',
   '}',
+  // Another tab's pick (R2-5): the storage event fires for the key, or for a cleared storage (key null).
+  'try{window.addEventListener("storage",function(e){if(e.key!==null&&e.key!==K){return;}apply();});}catch(e){}',
   '}catch(e){}})();',
 ].join('');

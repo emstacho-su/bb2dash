@@ -372,6 +372,72 @@ describe('the theme-color meta after a client navigation (R2-3)', () => {
   });
 });
 
+describe("another tab's pick (R2-5)", () => {
+  /** Fires the event another tab's write makes in this one. */
+  function otherTabWrites(key: string | null, value: string | null): void {
+    if (key !== null) {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    } else {
+      localStorage.clear();
+    }
+    window.dispatchEvent(new StorageEvent('storage', { key, newValue: value }));
+  }
+
+  it('re-stamps the attribute and every meta, and marks the switch for two frames', () => {
+    runBootScript();
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+
+    otherTabWrites(THEME_STORAGE_KEY, 'light');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(metaColours()).toEqual([THEME_BG.light, THEME_BG.light]);
+    expect(document.documentElement.hasAttribute(THEME_SWITCHING_ATTRIBUTE)).toBe(true);
+    flushFrame();
+    flushFrame();
+    expect(document.documentElement.hasAttribute(THEME_SWITCHING_ATTRIBUTE)).toBe(false);
+  });
+
+  it('follows a pick of Dark in the other tab (the key removed) back to dark', () => {
+    localStorage.setItem(THEME_STORAGE_KEY, 'light');
+    runBootScript();
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+
+    otherTabWrites(THEME_STORAGE_KEY, null);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(metaColours()).toEqual([THEME_BG.dark, THEME_BG.dark]);
+  });
+
+  it('follows a cleared storage (key null) back to dark', () => {
+    localStorage.setItem(THEME_STORAGE_KEY, 'light');
+    runBootScript();
+    otherTabWrites(null, null);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('follows Auto in the other tab through the system query', () => {
+    stubSystem('light');
+    runBootScript();
+    otherTabWrites(THEME_STORAGE_KEY, 'auto');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it('ignores a storage event for any other key', () => {
+    runBootScript();
+    otherTabWrites('bb2dash.sidebar', 'open');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(document.documentElement.hasAttribute(THEME_SWITCHING_ATTRIBUTE)).toBe(false);
+  });
+
+  it('writes no storage itself', () => {
+    runBootScript();
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const removeItem = vi.spyOn(Storage.prototype, 'removeItem');
+    window.dispatchEvent(new StorageEvent('storage', { key: THEME_STORAGE_KEY, newValue: 'light' }));
+    expect(setItem).not.toHaveBeenCalled();
+    expect(removeItem).not.toHaveBeenCalled();
+  });
+});
+
 describe('the real MutationObserver (last: its observer stays on <head> for the rest of the file)', () => {
   it('re-stamps a fresh dark meta by itself after a tick', async () => {
     vi.unstubAllGlobals();

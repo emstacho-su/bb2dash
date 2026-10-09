@@ -17,7 +17,9 @@
  * server and hydration see Dark and every render after sees the stored choice;
  * this menu is only mounted while the account menu is open, which is after
  * hydration. A storage that throws still stamps the page: what was picked in this
- * mount is kept beside the stored value, so the checked row follows the pick.
+ * mount is kept beside the stored value, so the checked row follows the pick, and
+ * a later change of the stored value from another tab (the `storage` event) wins
+ * over it. The page itself follows that tab through the boot script's listener.
  */
 
 import { useState, useSyncExternalStore } from 'react';
@@ -67,14 +69,17 @@ function serverChoice(): ThemeChoice {
 
 export function ThemeMenu() {
   const stored = useSyncExternalStore(subscribe, readChoice, serverChoice);
-  const [picked, setPicked] = useState<ThemeChoice | null>(null);
-  const checked = picked ?? stored;
+  // What this mount picked, and what storage read back right after the pick. While storage still
+  // reads that, the pick is shown (a storage that cannot be written keeps the old value, so the
+  // pick must show beside it). When storage reads anything else, another tab wrote it: follow it.
+  const [lastPick, setLastPick] = useState<{ choice: ThemeChoice; storedAfter: ThemeChoice } | null>(null);
+  const checked = lastPick !== null && stored === lastPick.storedAfter ? lastPick.choice : stored;
 
   function pick(choice: ThemeChoice): void {
     if (choice === 'dark') clearStoredTheme();
     else writeStoredTheme(choice);
     stampTheme(resolveTheme(choice === 'dark' ? null : choice, systemPrefersLight()), true);
-    setPicked(choice);
+    setLastPick({ choice, storedAfter: readChoice() });
     notify();
   }
 
