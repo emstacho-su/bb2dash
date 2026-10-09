@@ -159,3 +159,32 @@ New files: `acceptance/24/{manifest.json,playbook.md,proofs.json}`, `web/e2e/acc
 3. That the page's own CORS and CSP let the page `fetch` the project's storage path (pack 23 does it for REST).
 4. Deviation 2: whether to leave proofs 1, 2, 3 and 7 reduced.
 5. That nothing else uses the Workspace during the run (deviation 4).
+
+## Round 2: the four reduced store proofs are whole
+
+Merged `origin/feat/workspace-24` (a merge). Migration 199 adds `public.v_workspace_store_proof`
+(one row, security invoker; columns in the order `extension_version`, `extension_schema`,
+`extension_ok`, `vector_columns`, `vector_columns_ok`, `vector_indexes`, `vector_indexes_ok`,
+`foreign_servers`, `foreign_tables`, `link_extensions`, `store_functions_that_call_out`,
+`no_links_ok`). The PM applies 199 before the first live run; until then these four proofs find no
+relation and give no verdict.
+
+The four statements now read, each one `select` from the view with `ok` the matching `_ok` column:
+
+* `store-extension`: `select v.extension_ok as ok, v.extension_version, v.extension_schema from public.v_workspace_store_proof v`
+* `store-vector-columns`: `ok` is `vector_columns_ok`; detail `vector_columns_list` (the text split at `, `, one element a column) and `vector_columns_n`.
+* `store-vector-indexes`: `ok` is `vector_indexes_ok`; detail `vector_indexes_list` and `vector_indexes_n`. An element is longer than 64 characters, so the host's detail filter shows it as `withheld`; the count stands. (The raw lists hold blanks and are longer still, so they would be withheld whole; splitting them is what keeps the short ones visible.)
+* `store-no-links`: `ok` is `no_links_ok`; detail the four counts.
+
+The earlier reduced checks (`to_regtype`, `to_regclass`, null-vector scan, `to_regprocedure`) are
+removed: the view says all of it and more. `store-counts` is unchanged. Manifest step 16's text is
+updated; the playbook has no section for host step 16, so it needed no change.
+
+**How the kit gets the view:** a stand-in. The view reads `pg_*` and the type `extensions.vector`,
+which the in-process Postgres (no pgvector) cannot run. `accept-proofs-db24.test.mjs` creates a table
+named `v_workspace_store_proof` with the view's twelve columns, sets its one row to the unit's
+expected row (section 5 of `phase24_199_review_round.sql`) with the changes a case makes, and a case
+holds the stand-in's column list to the migration's own view definition (via `columnsOf`). So the
+tests hold the statements to the columns and to what each `_ok` says; the catalog answers are the unit's.
+
+Gates: `node --test acceptance/acceptance.test.mjs` 55/55; `npm test` in `scripts/` green (db24: 23/23).
