@@ -210,7 +210,7 @@ records carry the red and green runs ("Round 2" in `110_W80_VERIFICATION.md` and
 
 ## The rolled-back dry runs of 187 and 188 (tasks 5 and 6, the part before Stack's word)
 
-Made by the PM on 2026-10-09, about 01:10Z, on prod, through `execute_sql`, every run inside
+Made by the PM on 2026-10-09, between about 00:30Z and 00:45Z, on round 2's file, on prod, through `execute_sql`, every run inside
 `begin; ... rollback;`. No `agent_requests` row was queued or claimed and `v_inbox_queue` held no
 row; each run checks that first and stops if one is. Nothing was applied.
 
@@ -298,3 +298,31 @@ failed run and the next done run behave as on prod today (no hold, the same foll
 held by 186's arm, nothing parked); a hold is inserted on a failed close only and a stale one is
 removed by any close; `phase23_186_notices.sql` is `main`'s text and its cases pass against the new
 close; the one-line change to `phase23_181` is right before and after 187.
+
+## Round 3 landed, and the dry runs repeated on the final files (2026-10-09, 00:55Z)
+
+W-80's round 3 is merged (921d201). 187 is 933 lines, SHA-256 `4b099693...818f4c` (57,151 bytes);
+188 is unchanged (`d1ae01d7...ed308e`). The held-answers units are 605 and 721 lines; case 20 of the
+second holds L-1's three cases and one more (a `retry_held` that is the text "true" is an ordinary
+request, so its failed close does hold).
+
+One rolled-back transaction on prod, the same method as above, with no request open and no answer
+waiting. The four files round 3 changed were fetched again from commit 921d201 and each compared by
+SHA-256 with the local file before it ran.
+
+* **Control, before 187:** `phase23_187_held_answers_b` stops at "migration 187 is not applied".
+* **187 executed whole, guards silent.** Item 3782 reads `{"skipped": true, "why": "test item of the
+  Phase 23 cut-over run: no note, no day-file entry"}`; 16 decisions unfiled; `inbox_apply_holds`
+  empty; `sync_runner` executes 14 functions and `inbox_apply_runner` 7, as before the file;
+  `v_inbox_apply_runs` shows 18 rows.
+* **13 of 13 units PASS against 187:** the four `phase23_187_*`, `phase23_180`, `_181`, `_182`,
+  `_183`, `_185`, `_186` (main's text), `phase14_093_review_fixes`, `phase14_095_storage_key`, and
+  `phase14_091_queue` after its loader.
+* **188 on top, in the same transaction:** the backfill stamped 14; `phase23_188_archived_answers`
+  PASS; both held-answers units and `phase23_185` still PASS with 188 in; `phase18_124`, `_162`,
+  `_163` PASS; `phase18_122` and `phase18_123` fail with the same two lines they give on `main`.
+* **After the rollback, one read (00:58Z):** no holds table, `inbox_apply_close` is 186's body and
+  `link_file_sessions` is 163's by md5, item 3782 unfiled, no session answer stamped, no migration
+  row for 187 or 188, no request open (the last is 2519), no answer waiting.
+
+**187 is ready to apply and waits for Stack's word.**
