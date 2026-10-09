@@ -5,15 +5,13 @@
 --     row's answer_phrase
 --   * a file-only truth (no text_ids) has at least one unit that contains the answer_phrase, and
 --     names every current file of that course whose text carries it
--- Q7's truth is the two current IST.466 schedules, 2509 and 2773, both carrying the answer. It is a
--- schedule the course RE-POSTS: each re-post supersedes the file before it (74 > 149 > 2509 and
--- 150 > 967 > 2640 > 2773 by 2026-10-09), so this unit FAILS at each re-post until the two ids are
--- refreshed. The failure names the new ids ("Q7 file not current: 149 -> 2509, ..."); put them in
--- the row below AND in ingest/eval/golden_set.json (the eval scores by id through the search
--- function, which hides superseded files, so a stale id there misses silently). The lasting fix is
--- a golden question whose answer does not move; that is the eval owner's call. A file without text
--- until a sync pulls its bytes passes, because the checks need only one truth file to carry the
--- phrase. Q10 (the IST.323 AI-use disclosure) was
+-- Until 2026-10-09 Q7 asked for a date in a schedule the course re-posts about weekly, so its truth
+-- (the schedule files by id) went stale at every re-post. On Stack's word it was replaced by a
+-- question answered in two documents that have one version each (IST.466 files 21 and 39, units 88
+-- and 101, "50 points"). The unit stays strict: when any truth file is superseded it fails and
+-- names the file that replaces it ("Q7 file not current: <old id> -> <new id>, ..."); put the new ids in the
+-- row AND in ingest/eval/golden_set.json (the eval scores by id through the search function, which
+-- hides superseded files, so a stale id there misses silently). Q10 (the IST.323 AI-use disclosure) was
 -- removed on 2026-09-29 by Stack's call to take the AI policy out of the app and the corpus (Phase 17
 -- migration 119), not for its ranking.
 -- The truth rows below are the same as ingest/eval/golden_set.json; ingest/eval_search.test.mjs
@@ -40,7 +38,7 @@ begin
       (4, array[213]::bigint[], array[23]::bigint[], 'Lowest Exam Grade'),
       (5, array[218]::bigint[], array[23]::bigint[], 'Exam 1'),
       (6, array[]::bigint[], array[21]::bigint[], 'less than 30 minutes'),
-      (7, array[]::bigint[], array[2509, 2773]::bigint[], 'Deloitte to Visit'),
+      (7, array[88, 101]::bigint[], array[21, 39]::bigint[], '50 points'),
       (8, array[]::bigint[], array[27]::bigint[], 'penalty of 20%'),
       (9, array[348]::bigint[], array[26]::bigint[], 'evaluation form will result in no credit')
     ) as g(qid, text_ids, file_ids, answer_phrase)

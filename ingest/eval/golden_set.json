@@ -50,10 +50,10 @@
   {
     "qid": 7,
     "course": "IST.466",
-    "query": "when is Deloitte visiting the IST 466 class",
-    "type": "exact",
-    "truth": { "text_ids": [], "file_ids": [2509, 2773] },
-    "answer_phrase": "Deloitte to Visit"
+    "query": "how many points is the practice presentation worth in IST 466",
+    "type": "paraphrase",
+    "truth": { "text_ids": [88, 101], "file_ids": [21, 39] },
+    "answer_phrase": "50 points"
   },
   {
     "qid": 8,
