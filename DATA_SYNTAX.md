@@ -429,7 +429,9 @@ again, and a new answer or a press of Apply answers does.
   queue with that same time, **on a failed close only** (a new hold always comes with the notice a failed
   close raises). A malformed `skip_seen` is refused (22023); a close with none writes no hold. Either
   close removes the holds whose item left the queue or was answered again. The `not_applied` notice says
-  a sync does not try the answers again and that a new answer or the button does. The failure notice
+  a sync does not try the answers again and that a new answer or the button does **only when the close
+  sends `skip_seen`**; the old worker's failed run keeps 186's sentence ("press Apply answers to run the
+  rest"), which is the true one while every sync still retries. The failure notice
   (`inbox-apply-failed`) stays open while an id of this close's `skip` waits, **or** a waiting answer is
   held, **or** 186's own arm holds (a failed request of the worker listed the id in its `result.skip` and
   finished at or after the answer's `resolved_at`: this covers the old worker, which sends no
@@ -437,7 +439,10 @@ again, and a new answer or a press of Apply answers does.
 * **A retry request** is a press of Apply answers and its chain: a request whose params carry no
   `trigger`, or `retry_held: true` (the JSON boolean; nothing else counts). The follow-up that its close
   files carries `{trigger: followup, after, skip, retry_held: true}`, and is filed while any queue row
-  outside the close's `skip` waits, held or not. Every other request's follow-up (no `retry_held`) is
+  outside the close's `skip` waits, held or not. The failed close of a retry follow-up writes **no hold
+  for an id in that request's own `params.skip`** (it was handed those ids as `held` and never tried
+  them; the id stays in the close's `skip`, so the notice stays open, and a hold that already stands is
+  left as it is). Every other request's follow-up (no `retry_held`) is
   filed only for a row that is neither in the close's `skip` nor held.
 * **`inbox_apply_prepare(bigint)`** returns one more key, `held`: a JSON array of item ids the worker must
   not hand to Claude. `[]` for a request with no `trigger` (the Inbox button's: a press tries held

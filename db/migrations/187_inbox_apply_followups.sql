@@ -202,7 +202,7 @@ create or replace function public.inbox_apply_prepare(p_request bigint)
 declare
   v_params jsonb;
   -- 187: the answers the worker holds, for a request a sync, a follow-up or the fallback skill filed.
-  v_held   jsonb := '[]'::jsonb;
+  v_held   jsonb := '[]'::jsonb;   -- 187:
 begin
   if not inbox_apply_is_own_claim(p_request) then
     raise exception 'inbox_apply_prepare: request % is not the apply worker''s claim', coalesce(p_request::text, 'null')
@@ -265,7 +265,7 @@ begin
          and a.result->'claude'->>'started' = 'true'
          and (a.claimed_at at time zone 'America/New_York')::date
              = (now() at time zone 'America/New_York')::date),
-    'held', v_held);
+    'held', v_held);   -- 187:
 end $$;
 
 comment on function public.inbox_apply_prepare(bigint) is
@@ -297,9 +297,9 @@ declare
   v_follow     bigint;
   v_signed_in  boolean;
   v_stuck      boolean;
-  v_one        jsonb;
-  v_params     jsonb;
-  v_retry      boolean;
+  v_one        jsonb;      -- 187:
+  v_params     jsonb;      -- 187: the request's params, for v_retry and the hold insert
+  v_retry      boolean;    -- 187: a press of Apply answers and its chain (R3)
 begin
   if p_result is null or jsonb_typeof(p_result) <> 'object'
      or jsonb_typeof(p_result->'lines') is distinct from 'array'
@@ -349,6 +349,7 @@ begin
     v_archived := (p_result->>'archived')::numeric::integer;
   end if;
 
+  -- 187: select ... into v_params replaces 186's `perform 1` (same lock, same conditions).
   select a.params into v_params from agent_requests a
     where a.id = p_request and a.kind = 'inbox_feedback' and a.state = 'claimed'
       and a.claimed_by = c_claimant
@@ -379,6 +380,16 @@ begin
         on q.id = ((e.value->>'id')::numeric)::bigint
        and q.resolved_at is not distinct from (e.value->>'resolved_at')::timestamptz
      where q.id = any (v_skip)
+       -- 187 (round 3): the failed close of a retry follow-up writes no hold for an id in that
+       -- request's own params.skip. It was handed those ids as `held`, the worker copies them into
+       -- its skip with the answer's present time, and this run never tried them: an answer given
+       -- again in the middle of a press's chain, or a hand-written request, would be held untried.
+       -- A hold that already stands for the same answer is untouched; the id stays in v_skip, so
+       -- the notice stays open. (`is not true`: the conjunction is null for an ordinary request.)
+       and (coalesce(v_params->>'trigger', '') <> ''
+            and v_params->'retry_held' = 'true'::jsonb
+            and jsonb_typeof(v_params->'skip') = 'array'
+            and v_params->'skip' @> to_jsonb(q.id)) is not true
      order by q.id
     on conflict (item_id) do update
       set request_id = excluded.request_id, resolved_at = excluded.resolved_at, held_at = excluded.held_at
@@ -399,7 +410,9 @@ begin
           then format('The apply worker''s Claude sign-in has expired, so Inbox apply request %s did not run. Renew the token (claude setup-token), then press Apply answers.', p_request)
         -- 187: answers a run could not apply are held. A sync does not try them again; a new answer
         -- to one of them, or a press of Apply answers, does. No Undo: the card offers none for every row.
-        when p_result->>'error' = 'not_applied'
+        -- Only when the close sends skip_seen: the old worker writes no hold, every sync still
+        -- retries, and 186's sentence below is the true one for it.
+        when p_result->>'error' = 'not_applied' and p_result ? 'skip_seen'
           then format('Inbox apply request %s failed: %s. Answers it had already applied stay applied. A sync does not try again the answers it could not apply; a new answer to one of them, or a press of Apply answers, does.',
                       p_request, left(coalesce(p_result->>'error', 'no error recorded'), 200))
         else format('Inbox apply request %s failed: %s. Answers it had already applied stay applied; press Apply answers to run the rest.',
@@ -413,7 +426,7 @@ begin
   -- "Sign in again": a run that started Claude and got as far as a result has signed in.
   v_signed_in := p_result->'claude'->>'started' = 'true'
                  and (p_state = 'done' or (p_result->>'error' = any (c_signed_in)) is true);
-  -- "The apply run failed ... ": an answer a failed run could not apply still waits. Three arms
+  -- 187: "The apply run failed ... ": an answer a failed run could not apply still waits. Three arms
   -- (R4): this close's own skip; a waiting answer that is held; and 186's own arm exactly as it was
   -- (a failed request of the worker listed the id in its skip and finished at or after the answer's
   -- resolved_at), which still covers the old worker, that sends no skip_seen and so writes no
@@ -899,8 +912,11 @@ begin
 
   -- (g2) The exporter runs as the service role with invoker rights: inbox_decision_skipped reads
   -- inbox_apply_writes (R5), so that role must be able to.
-  if not has_table_privilege('service_role', 'public.inbox_apply_writes', 'select') then
-    raise exception 'FAIL 187: service_role cannot read inbox_apply_writes (inbox_decision_skipped reads it)';
+  -- The table has policies for authenticated and inbox_apply_runner only, so the role must also pass
+  -- row level security; otherwise it would read zero rows and every skip would be allowed silently.
+  if not has_table_privilege('service_role', 'public.inbox_apply_writes', 'select')
+     or not coalesce((select r.rolbypassrls from pg_roles r where r.rolname = 'service_role'), false) then
+    raise exception 'FAIL 187: service_role cannot read inbox_apply_writes (inbox_decision_skipped reads it): no select, or no bypassrls';
   end if;
 
   -- (h) The bodies are 187's, and keep the two words the standing units pin.
