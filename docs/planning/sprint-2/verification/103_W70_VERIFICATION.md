@@ -88,8 +88,8 @@ moves it to 600, so the plain 500 asks for its own name below.
 
 | Name | Today's value | Where it is used |
 |---|---|---|
-| `--text-9` | `9px` | font-size: CC 116; MT 176, 196; CT 66, 199, 299, 310, 336, 423, 469, 510 |
-| `--text-10` | `10px` | font-size: CC 68, 99; CI 64, 111; MT 112, 118; GT 25 |
+| `--text-3xs` (first asked as `--text-9`) | `9px` | font-size: CC 116; MT 176, 196; CT 66, 199, 299, 310, 336, 423, 469, 510 |
+| `--text-2xs` (first asked as `--text-10`) | `10px` | font-size: CC 68, 99; CI 64, 111; MT 112, 118; GT 25 |
 | `--text-10-5` | `10.5px` | font-size: CT 46 |
 | `--text-11-5` | `11.5px` | font-size: CT 147, 213, 293 |
 | `--text-12` | `12px` | font-size: CT 249, 325 |
@@ -135,3 +135,16 @@ I do not start the sweep (task 19): it waits for W-67's task 8.
 
 W-67's task 8 (the token declarations, `.errorNotice`, the light block) before the sweep, task 19. Nothing in this task
 was blocked by another worker's file: all 16 cases of rows 05-12 pass.
+
+## Resume: after W-67's task 8
+
+Merged `origin/feat/styling-22` (a merge). The five start checks each printed one line (`data-theme='light'` in
+`globals.css`; `^\.errorNotice` in `tokens.module.css`; `motion-control`; `size-target`; `attemptText`).
+
+* **Names corrected.** The PM ruled one name per value: 10px type is `--text-2xs` and 9px is `--text-3xs`; there is no
+  `--text-10` or `--text-9`. The two rows of the table above now carry the declared names, with the first-asked name
+  beside each.
+* **Token names**, printed: `68 38 0`, `69 53 0`, `70 31 0`. (31, not 30: the command's pattern also reads the
+  `--size-4, ...` bullet of the notes under the table, which starts with a backticked name.)
+* **The gradebook hook, closed.** W-68's spec now reads it. Run `20261009T001508Z` printed
+  `route /course/IST.466/grades [dark]: box scrollWidth=620 clientWidth=345` (the same in light). The box scrolls.
