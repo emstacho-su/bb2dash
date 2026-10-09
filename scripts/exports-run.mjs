@@ -28,13 +28,13 @@
 // failed, 2 when the checkout is not on main or a folder argument is missing or the exporter stopped
 // on its configuration.
 
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { RESULT_PREFIX } from './inbox-decisions-export.mjs';
+// One copy of the process start, the line printer and the atomic write: the exporter's.
+import { RESULT_PREFIX, printLine, runCommand, writeAtomic } from './inbox-decisions-export.mjs';
 
 export const STATE_SCHEMA = 1;
 export const STATE_FILE = 'state.json';
@@ -45,7 +45,6 @@ export const DEFAULT_STATE_DIRNAME = '.bb2dash-exports';
 export const MAX_LOG_BYTES = 256 * 1024;
 /** Below the task's own 15-minute limit, so a stuck exporter ends here and is recorded. */
 const EXPORTER_TIMEOUT_MS = 14 * 60 * 1000;
-const MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 const MAX_LOGGED_LINES = 200;
 const MAX_LOGGED_LINE_CHARS = 500;
 const MAIN_HEAD = 'ref: refs/heads/main';
@@ -112,23 +111,6 @@ export function parseResultLine(stdout) {
   return { filed: parsed.filed, skipped: parsed.skipped, notFiled: parsed.not_filed };
 }
 
-function runCommand(command, args, options) {
-  const result = spawnSync(command, args, {
-    cwd: options.cwd,
-    env: options.env,
-    encoding: 'utf8',
-    shell: false,
-    windowsHide: true,
-    timeout: EXPORTER_TIMEOUT_MS,
-    maxBuffer: MAX_OUTPUT_BYTES,
-  });
-  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? String(result.error?.message ?? '') };
-}
-
-function printLine(line) {
-  process.stdout.write(`${line}\n`);
-}
-
 const NO_COUNTS = Object.freeze({ filed: 0, skipped: 0, notFiled: 0 });
 
 function outcomeOf(exitCode, reason, exporterExit, counts = NO_COUNTS) {
@@ -159,11 +141,7 @@ function appendLog({ stateDir, text, maxLogBytes, fsImpl }) {
 
 /** Replace the state file whole, through a temporary file beside it. */
 function writeState({ stateDir, state, fsImpl }) {
-  fsImpl.mkdirSync(stateDir, { recursive: true });
-  const file = path.join(stateDir, STATE_FILE);
-  const temp = `${file}.tmp-${process.pid}`;
-  fsImpl.writeFileSync(temp, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
-  fsImpl.renameSync(temp, file);
+  writeAtomic(fsImpl, path.join(stateDir, STATE_FILE), `${JSON.stringify(state, null, 2)}\n`);
 }
 
 function buildState({ startedAt, endedAt, outcome }) {
@@ -215,7 +193,8 @@ export async function main(argv, deps = {}) {
   const {
     repoRoot = REPO_ROOT,
     stateDir = path.join(os.homedir(), DEFAULT_STATE_DIRNAME),
-    run = runCommand,
+    spawn,
+    run = (command, args, options) => runCommand(command, args, options.cwd, { env: options.env, timeout: EXPORTER_TIMEOUT_MS, spawn }),
     now = () => new Date(),
     log = printLine,
     env = process.env,
