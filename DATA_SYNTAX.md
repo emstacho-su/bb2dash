@@ -426,14 +426,26 @@ again, and a new answer or a press of Apply answers does.
   SECURITY DEFINER; the service role and the test login only.
 * **`inbox_apply_close(bigint, text, jsonb)`**: `result.skip_seen`, a list of `{id, resolved_at}` (the
   time exactly as `prepare` gave it, or null), writes a hold for each id of `skip` that is still in the
-  queue with that same time. A malformed `skip_seen` is refused (22023); a close with none writes no
-  hold. The same close removes the holds whose item left the queue or was answered again, and files a
-  follow-up only for a row that is neither in its `skip` nor held. The `not_applied` notice says a sync
-  does not try the answers again and that a new answer or the button does.
-* **`inbox_apply_prepare(bigint)`** returns one more key, `held`: a JSON array of item ids for a request
-  whose params carry a `trigger` (a sync's, a follow-up's, the fallback skill's); `[]` for the Inbox
-  button's request, so a press tries held answers again. **`sync_request_inbox_apply(bigint)`** files a
-  request only when a row outside the held set waits (an id, or null as before).
+  queue with that same time, **on a failed close only** (a new hold always comes with the notice a failed
+  close raises). A malformed `skip_seen` is refused (22023); a close with none writes no hold. Either
+  close removes the holds whose item left the queue or was answered again. The `not_applied` notice says
+  a sync does not try the answers again and that a new answer or the button does. The failure notice
+  (`inbox-apply-failed`) stays open while an id of this close's `skip` waits, **or** a waiting answer is
+  held, **or** 186's own arm holds (a failed request of the worker listed the id in its `result.skip` and
+  finished at or after the answer's `resolved_at`: this covers the old worker, which sends no
+  `skip_seen`). Only the notice reads that third arm; no hold or sync decision reads `agent_requests`.
+* **A retry request** is a press of Apply answers and its chain: a request whose params carry no
+  `trigger`, or `retry_held: true` (the JSON boolean; nothing else counts). The follow-up that its close
+  files carries `{trigger: followup, after, skip, retry_held: true}`, and is filed while any queue row
+  outside the close's `skip` waits, held or not. Every other request's follow-up (no `retry_held`) is
+  filed only for a row that is neither in the close's `skip` nor held.
+* **`inbox_apply_prepare(bigint)`** returns one more key, `held`: a JSON array of item ids the worker must
+  not hand to Claude. `[]` for a request with no `trigger` (the Inbox button's: a press tries held
+  answers again); the request's own `params.skip` (numbers only) for a follow-up with `retry_held: true`,
+  so inside a press's chain only what that chain already failed on is left alone; `inbox_apply_held_items()`
+  for every other request (a sync's, a follow-up's of a sync, the fallback skill's).
+  **`sync_request_inbox_apply(bigint)`** files a request only when a row outside the held set waits (an
+  id, or null as before).
 
 **Filing a decision in two steps** (187). `attention_items.decision_filed` is `{note_path, log_path?,
 ingested?, logged_at?}` or `{skipped: true, why}`.
@@ -443,8 +455,11 @@ ingested?, logged_at?}` or `{skipped: true, why}`.
   `inbox-decision/1` rows filed with a note path and no log path (same columns as
   `inbox_decisions_unfiled`); `inbox_decision_logged(id, log_path)` adds `log_path` and `logged_at`,
   once. `inbox_decision_skipped(id, why)` marks a row filed with nothing to file, once: neither list
-  shows it. All invoker rights, the service role's (and the test login's) alone. Item 3782 (the test
-  item of the cut-over run) is marked skipped by the migration.
+  shows it. It returns false and marks nothing when `inbox_apply_writes` holds a row for the item (a
+  logged write is never skipped, so the exporter files that row like any other). All invoker rights, the
+  service role's (and the test login's) alone. Item 3782 (the test item of the cut-over run, which has a
+  logged write) is marked skipped by the migration's own guarded statement, with the same
+  `{skipped: true, why}` shape.
 
 **Acceptance objects** (187).
 
