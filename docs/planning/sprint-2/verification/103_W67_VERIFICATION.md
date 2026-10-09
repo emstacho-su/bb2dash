@@ -446,3 +446,109 @@ circular and undeclared `var()` chains each fail with a named error.
    `type-tokens.contrast.test.ts` into `css-tokens.ts` and now take parsed colours, not hex strings. Nothing else
    imported them (searched `web/src`, `web/test`, `web/e2e` and `desktop`).
 7. **`css-tokens.ts` is under `web/test/`, so the token audit (which scans `web/src`) does not see it.**
+
+## ui-ux-pro-max
+
+Required by the brief's working rules (amendment 3, H-1). One row per task that changes what is drawn.
+
+| Task | Skill loaded | Files read first | Searches run | Advice set aside, and the rule that won |
+|---|---|---|---|---|
+| 8 | yes (Skill tool, `ui-ux-pro-max`, at the start of the task) | `design-system/bb2dash/MASTER.md` (all of it); `docs/planning/sprint-2/evidence/103_style_tiles/direction-d.json` for every value | none. The design system was generated and hand-edited to direction D, the brief names every rule task 8 writes and `direction-d.json` holds every value, so a query would only have returned advice the brief already overrides. No `--persist` was passed and no script ran | the skill's `touch-target-size` (44 px) loses to `--size-target`, 24 px, the brief's WCAG 2.2 AA target for desktop web (task 36); `readable-font-size` (16 px body) loses to the seven pinned `--text-*` sizes (the 18 layout tokens do not move); `spring-physics` loses to the `--ease-out` / `--ease-in` curves the brief declares; `toast-dismiss` (3 to 5 s) loses to the app's `TOAST_MS`; the icon-package advice loses to "no new dependency" |
+
+## Task 8: the token set for direction D (P-78, R-53)
+
+Written 2026-10-08. The branch was merged with `origin/feat/styling-22` first; the six start checks passed (the
+DECISIONS row `:1`, the JSON, `tileOnly` in the JSON, `MASTER.md`, the three "Tokens my sweep needs" sections each `:1`).
+
+### What the commit holds
+
+* `web/src/app/globals.css`, rewritten from `main`'s: `:root` (dark, `color-scheme: dark`) and
+  `:root[data-theme='light']` (`color-scheme: light`) written from `direction-d.json`'s two maps, value for value; the
+  fonts `@import` is D's `fontsHref`; the three exit names from `tileOnly.dark`; `--size-target: 24px`; the scrollbar
+  block in `@media (hover: hover) and (pointer: fine)`; the one checkbox rule on `:where(input[type='checkbox'])`; the
+  one reduced-motion block; the `data-theme-switching` rule; `scroll-padding-top` on `html`; `text-wrap: balance` on
+  the headings; the thin-underline link rules and `transition: var(--motion-control)` on `a`; the one focus ring on the
+  new tokens; the `arrives` keyframe.
+* `web/src/styles/tokens.module.css`: `.errorNotice` and `.tip`, tokens only. The foundation baseline did not move.
+* `web/src/lib/queries.grades.ts`: `attemptText` (a `Map`, so a code such as `constructor` reads as itself), left off
+  the object when `attemptStatus` is null. `web/test/queries.grades.attempt-text.test.ts`, 8 cases. The two old files
+  (`queries.grades.test.ts`, `status-vocabulary.test.ts`) are unedited.
+* `web/test/theme-contrast.test.ts` (new): the 38 frozen pairs in both blocks, 32 of text and 6 of non-text.
+* `web/test/type-tokens.contrast.test.ts`: keeps its first two assertions, drops the four, holds the urgency rule in
+  both blocks against the card and the picked-day fill. Header and the comment over the `--type-*` tokens rewritten.
+* `web/test/theme-tokens.test.ts`: a live-file describe block (the JSON's two maps, the exit names, the light block's
+  colour and shadow names, `color-scheme`, the 18 layout tokens against the verbatim `main` copy, no system block, every
+  colour resolves).
+
+### RED, then GREEN
+
+| Step | Command | Exit | Result |
+|---|---|---|---|
+| RED: `attemptText` test against `main`'s `queries.grades.ts` | `npx vitest run test/queries.grades.attempt-text.test.ts` | 1 | 5 failed, 3 passed (8) |
+| RED: the three theme tests against `main`'s `globals.css` | `npx vitest run test/theme-tokens.test.ts test/theme-contrast.test.ts test/type-tokens.contrast.test.ts` | 1 | 35 failed, 127 passed (162) |
+| GREEN: the row's vitest line | `npx vitest run test/theme-tokens.test.ts test/theme-contrast.test.ts test/type-tokens.contrast.test.ts test/Workspace.layout.test.tsx` | 0 | 4 files, 166 passed (166) |
+| GREEN: the attempt-text line | `npx vitest run test/queries.grades.attempt-text.test.ts test/queries.grades.test.ts test/status-vocabulary.test.ts` | 0 | 3 files, 68 passed (68) |
+| `npm test` | | 0 | 164 files, 3238 passed (3238) |
+| `npm run typecheck` | | 0 | no error |
+| `npx eslint . --max-warnings 0` | | 0 | no output |
+
+### The named commands, as printed
+
+| Command | Printed |
+|---|---|
+| Direction check | `125 0 77 0 true` |
+| Exit tokens | `3 0` |
+| New names | `34 0 17` (the third reaches 0 at task 20) |
+| Token names | `68 38 0`, `69 53 0`, `70 31 2` (the 2 are `--text-9` and `--text-10`, which the PM's ruling 2 does not declare; see below) |
+| Red files over `web/src` | prints nothing |
+| `grep -c "MIN_DELTA_E = 30" web/test/type-tokens.contrast.test.ts` | 0 |
+| `grep -c` in `globals.css` of `prefers-reduced-motion: reduce`; `data-theme-switching`; `(hover: hover) and (pointer: fine)`; `:where(input\[type=`; `text-wrap: balance`; `scroll-padding-top: var(--nav-height)`; `text-decoration-thickness: var(--size-underline)` | 1 each |
+| `grep -c "family=Inter" web/src/app/globals.css` | 0 |
+| `grep -c "^\.tip"`; `grep -c "^\.errorNotice"` in `tokens.module.css` | 3; 2 |
+
+### Token names as declared
+
+The sweep workers read this section. One name per value for the numeric names; a name with a purpose in it stands
+beside the numeric name of its value. Every other name a table asked for is declared as asked.
+
+| Asked name | Declared name | Value | Asked by |
+|---|---|---|---|
+| `--text-10` | `--text-2xs` (no `--text-10`) | 10px | W-70 (W-69 asked `--text-2xs`) |
+| `--text-9` | `--text-3xs` (no `--text-9`) | 9px | W-70 (W-69 asked `--text-3xs`) |
+| `--color-mix-text-45-transparent` | declared as `var(--color-text-45)`, so one mix and two names | text 45% over transparent | W-69 (W-68 asked `--color-text-45`) |
+| `--size-3` to `--size-150` and the rest of the plain numeric names | each once, as asked | N px | W-68, W-69, W-70 (the three tables agree) |
+| `--font-weight-semibold` | once | 600 | W-69, W-70 |
+| `--font-weight-regular`, `--font-weight-medium` | as asked | 400, 500 | W-70 |
+| `--size-panel-gutter`, `--size-toast-top`, `--size-nav-search-min`, `--size-sync-label-max`, `--size-nav-search-narrow`, `--size-nav-search-width`, `--size-toast-width`, `--size-panel-max`, `--size-search-popover-max` | as asked, each its own literal, beside the numeric name of its value where one exists (28, 38, 72, 180, 240, 320) | 28, 38, 72, 72, 180, 240, 320, 360, 560 px | W-68 |
+| `--size-planner-gutter`, `--size-planner-gutter-narrow`, `--size-planner-day-min` | as asked | 62, 48, 101 px | W-69 |
+| `--size-assignment-max` (beside `--size-760`), `--size-conversations-min/-max`, `--size-report-card-min/-max` | as asked | 760px, 14rem, 18rem, 11rem, 16rem | W-70 |
+| the 12 `--color-mix-*`, `--color-accent-tint-6/7/12`, `--color-scrim`, `--color-scrim-popout`, `--color-text-45/-30/-78` | as asked; the same expression in the dark and the light block, so each resolves against its own block's values | today's mixes | W-69, W-70, W-68 |
+| `--radius-3` | as asked (3px, the value `--radius-sm` also holds) | 3px | W-69 |
+
+Names W-67's own files need, declared at the same step: `--text-12` (also W-70's), `--text-14`, `--text-19`,
+`--size-380`, `--font-weight-bold` (700, for `.glyph`; entry `weights-as-tokens` default). `--size-3`, `-5`, `-6`, `-10`,
+`-18` and `-36` are the tables' own.
+
+No table name was outside the eight families, and none repeated one of D's 34 under another name, so ruling 3 mapped
+nothing beyond the two `--text-*` names above.
+
+### Defaults taken
+
+1. **Light block, `--color-mix-*` and the other new colours:** the same expression as the dark block (ruling 4); it
+   reads the light block's own `--color-text`, `--color-bg`, `--color-surface` and `--color-accent`. `--color-scrim` is
+   `rgba(0, 0, 0, 0.5)` in both.
+2. **`.tip` markup contract.** The brief does not name the attribute. The class draws `attr(data-tip)`, under the
+   button, after twice `--motion-delay` of hover and at once on keyboard focus, only when `data-tip` is present. W-68
+   puts `data-tip="<name>"` and the class `tip` on the five icon buttons (task 32). It is centred under the button;
+   the rightmost button may need a side offset in W-68's own module.
+3. **The checkbox rule is one line in `:where(input[type='checkbox'])`; the tick and checked state are
+   `:where([type='checkbox'])...`**, so the brief's `grep -c ":where(input\[type="` is 1 and the specificity is still 0.
+4. **The theme-switch rule is on one line** for the same reason (the grep counts lines).
+5. **The loading wait in the reduce block is on `[data-loading]`.** Home's loading line is `Today.module.css .muted`
+   (W-69, task 18), a hashed module class a global rule cannot name, and `data-loading` is not ruled in (H-5). So the
+   kept wait reaches Home's line only if W-69 puts `data-loading` on it or writes its own reduce rule with
+   `!important`, because the block's `animation: none !important` otherwise removes the wait. The keyframe `arrives`
+   is declared in `globals.css`; a CSS module that animates with it needs its own `@keyframes arrives` too (Next
+   localises `animation` names). For W-69.
+6. **`--color-surface-press`** is D's `color-mix(text 8%, surface)`; the reader's `color-mix` second argument may be a
+   `var()` that ends in a plain colour, which this is.

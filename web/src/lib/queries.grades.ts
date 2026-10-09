@@ -439,7 +439,21 @@ export interface SubmissionLabel {
   text: string;
   /** The last attempt's status, verbatim, when it says something else. */
   attemptStatus: string | null;
+  /**
+   * `attemptStatus` put into words (Phase 22, D-5): a known code in lower case with
+   * spaces, an unknown code as itself. Absent exactly when `attemptStatus` is null:
+   * the key is left off and never set to null, because `queries.grades.test.ts`
+   * compares the whole object for a row with no status with `toEqual`.
+   */
+  attemptText?: string;
 }
+
+/** The last-attempt statuses Blackboard has produced, in words. */
+const ATTEMPT_TEXT: ReadonlyMap<string, string> = new Map([
+  ['NEEDS_GRADING', 'needs grading'],
+  ['IN_PROGRESS', 'in progress'],
+  ['COMPLETED', 'completed'],
+]);
 
 /**
  * Column statuses that already mean "the work is in" (P-grades-6, G-4).
@@ -479,11 +493,14 @@ export function submissionLabel(
   const attempt =
     typeof lastAttempt === 'string' && lastAttempt.trim() !== '' ? lastAttempt.trim() : null;
   const repeats = attempt === null || attempt === raw || saysNothingNew(raw, attempt);
-  return {
+  const label: SubmissionLabel = {
     status: raw,
     text: raw === null ? NO_VALUE : (SUBMISSION_GLOSS[raw] ?? raw),
     attemptStatus: repeats ? null : attempt,
   };
+  return label.attemptStatus === null
+    ? label
+    : { ...label, attemptText: ATTEMPT_TEXT.get(label.attemptStatus) ?? label.attemptStatus };
 }
 
 /**
