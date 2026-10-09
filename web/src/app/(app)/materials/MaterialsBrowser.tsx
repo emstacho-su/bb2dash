@@ -152,7 +152,7 @@ function ReadingRowView({
             target="_blank"
             rel="noreferrer"
           >
-            {route.action}
+            <MarkedLabel label={route.action} />
           </a>
         </span>
       ) : route.syllabus ? (
