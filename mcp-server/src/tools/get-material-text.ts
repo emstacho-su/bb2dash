@@ -8,6 +8,7 @@
 import type { z } from 'zod';
 import { describeError } from '../errors.js';
 import { formatMaterialText, formatTextNotFound } from '../format.js';
+import { takeRead } from '../limits.js';
 import type { ToolDeps } from './search-materials.js';
 import type { ToolResult } from './schemas.js';
 import { errorResult, formatZodIssues, getMaterialTextSchema, getMaterialTextShape, textResult } from './schemas.js';
@@ -38,6 +39,9 @@ export async function handleGetMaterialText(deps: ToolDeps, rawArgs: unknown): P
   }
 
   const { text_id: textId } = parsed.data;
+
+  const refusal = takeRead(deps);
+  if (refusal) return refusal;
 
   try {
     const unit = await deps.client.getText(textId);

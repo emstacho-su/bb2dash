@@ -1,6 +1,7 @@
 /** Shared fakes. No test touches the network or needs a key. */
 
 import type { Config } from '../src/config.js';
+import { NO_LIMITS } from '../src/limits.js';
 import type {
   CourseRow,
   MaterialHit,
@@ -19,6 +20,7 @@ export function makeConfig(overrides: Partial<Config> = {}): Config {
     serviceKey: TEST_KEY,
     timeoutMs: 30_000,
     search: { defaultLimit: 10, maxLimit: 50, minSimilarity: 0.78 },
+    limits: NO_LIMITS,
     ...overrides,
   };
 }
