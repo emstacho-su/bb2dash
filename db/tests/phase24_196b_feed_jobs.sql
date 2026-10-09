@@ -412,7 +412,7 @@ begin
   update workspace_document_text set embedded_at = now() - interval '1 hour' where id = v_unit;
   insert into workspace_text_embeddings (text_id, part_no, model, embedding) values (v_unit, 1, 'gte-small', pg_temp.w76_basis(1));
   update workspace_documents set state = 'indexed' where id = v_doc;
-  update workspace_conversation_state set job_claimed_by = c_r1, job_claimed_at = now() where conversation_id = v_cm;
+  update workspace_conversation_state set job_claimed_by = 'memory:' || c_r1, job_claimed_at = now() where conversation_id = v_cm;
   v_out := pg_temp.w76_call(c_role, null, format('public.workspace_job_finish(%L, %L, ''memory'', ''done'', %L, %L::timestamptz)', c_r1, v_cm, 'Synthetic remembered summary.', v_through));
   if (v_out->>'stored')::boolean is not false or (v_out->>'document_id')::bigint <> v_doc
      or (select d.state from workspace_documents d where d.id = v_doc) <> 'indexed'
@@ -425,7 +425,7 @@ begin
 
   -- A new summary from indexed: the new text, the vectors gone, embedded_at null, text_ready, attempts 0.
   update workspace_documents set attempts = 2 where id = v_doc;
-  update workspace_conversation_state set job_claimed_by = c_r1, job_claimed_at = now() where conversation_id = v_cm;
+  update workspace_conversation_state set job_claimed_by = 'memory:' || c_r1, job_claimed_at = now() where conversation_id = v_cm;
   v_out := pg_temp.w76_call(c_role, null, format('public.workspace_job_finish(%L, %L, ''memory'', ''done'', %L, %L::timestamptz)', c_r1, v_cm, 'A different summary.', v_through));
   select d.state, d.attempts, d.error_code into v_row from workspace_documents d where d.id = v_doc;
   if (v_out->>'stored')::boolean is not true or (v_out->>'document_id')::bigint <> v_doc
@@ -441,7 +441,7 @@ begin
   -- A new summary from failed.
   select t.id into v_unit from workspace_document_text t where t.document_id = v_doc;
   update workspace_documents set state = 'failed', attempts = 3, error_code = 'embed_failed' where id = v_doc;
-  update workspace_conversation_state set job_claimed_by = c_r1, job_claimed_at = now() where conversation_id = v_cm;
+  update workspace_conversation_state set job_claimed_by = 'memory:' || c_r1, job_claimed_at = now() where conversation_id = v_cm;
   v_out := pg_temp.w76_call(c_role, null, format('public.workspace_job_finish(%L, %L, ''memory'', ''done'', %L, %L::timestamptz)', c_r1, v_cm, 'A third summary.', v_through));
   select d.state, d.attempts, d.error_code into v_row from workspace_documents d where d.id = v_doc;
   if (v_out->>'stored')::boolean is not true or v_row.state <> 'text_ready' or v_row.attempts <> 0 or v_row.error_code is not null
@@ -450,7 +450,7 @@ begin
   end if;
 
   -- An opted-out conversation writes nothing and frees the lease.
-  update workspace_conversation_state set job_claimed_by = c_r1, job_claimed_at = now() where conversation_id = v_cq;
+  update workspace_conversation_state set job_claimed_by = 'memory:' || c_r1, job_claimed_at = now() where conversation_id = v_cq;
   v_out := pg_temp.w76_call(c_role, null, format('public.workspace_job_finish(%L, %L, ''memory'', ''done'', ''Should not be stored.'', now())', c_r1, v_cq));
   if v_out <> '{"stored": false, "document_id": null}'::jsonb
      or exists (select 1 from workspace_documents d where d.conversation_id = v_cq)
@@ -473,12 +473,12 @@ begin
   end if;
   update workspace_requests set state = 'cancelled', error_code = 'cancelled', finished_at = now() where id = v_qq;
   v_out := pg_temp.w76_call(c_role, null, format('public.workspace_job_claim(%L, array[''rolling''])', c_r1));
-  select max(m.created_at) into v_through from workspace_messages m where m.conversation_id = v_cl and m.content = repeat('E', 4000);
+  select max(m.created_at) into v_through from workspace_messages m where m.conversation_id = v_cl and m.content = repeat('D', 4000);
   if v_out->>'kind' <> 'rolling' or (v_out->>'conversation_id')::uuid <> v_cl or v_out->'previous_summary' <> 'null'::jsonb
-     or jsonb_array_length(v_out->'messages') <> 6
-     or v_out#>>'{messages,0,content}' <> 'question w76 196 L' or v_out#>>'{messages,5,content}' <> repeat('E', 4000)
+     or jsonb_array_length(v_out->'messages') <> 5
+     or v_out#>>'{messages,0,content}' <> 'question w76 196 L' or v_out#>>'{messages,4,content}' <> repeat('D', 4000)
      or (v_out->>'through')::timestamptz is distinct from v_through then
-    raise exception 'FAIL 5d: the rolling job reads kind [%], % messages, through [%] (expected the question and A to E, through E)',
+    raise exception 'FAIL 5d: the rolling job reads kind [%], % messages, through [%] (expected the question and A to D, through D: the 199 rule keeps E, the fourth newest, verbatim)',
       v_out->>'kind', jsonb_array_length(v_out->'messages'), v_out->>'through';
   end if;
   if pg_temp.w76_call(c_role, null, format('public.workspace_job_claim(%L, array[''rolling''])', c_r2)) is not null then
@@ -509,7 +509,7 @@ begin
     from generate_series(1, 4) g;
   v_out := pg_temp.w76_call(c_role, null, format('public.workspace_job_claim(%L, array[''rolling''])', c_r1));
   if (v_out->>'conversation_id')::uuid is distinct from v_cl or v_out->>'previous_summary' <> 'Synthetic rolling summary.'
-     or jsonb_array_length(v_out->'messages') <> 4 or v_out#>>'{messages,0,content}' <> repeat('F', 4000) then
+     or jsonb_array_length(v_out->'messages') <> 4 or v_out#>>'{messages,0,content}' <> repeat('E', 4000) then
     raise exception 'FAIL 5d: the second rolling job read previous [%] with % messages', v_out->>'previous_summary', jsonb_array_length(v_out->'messages');
   end if;
   -- The same summary again stores nothing but moves the through-point forward; 3001 characters are refused.

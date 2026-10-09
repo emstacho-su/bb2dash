@@ -476,6 +476,18 @@ begin
                     or v_row.error_code <> 'download_failed' or v_row.has_link) then
       raise exception 'FAIL 3d: the third retry returned [%] and the row reads %', v_got, row_to_json(v_row);
     end if;
+    -- 199: a retried document is not handed out again until 60 seconds times its attempts have passed
+    -- since the try (claimed_at); the clock is moved by setting claimed_at back.
+    if v_n < 3 then
+      if pg_temp.w76_call(c_role, format('public.workspace_ingest_claim(%L)', c_r1)) is not null then
+        raise exception 'FAIL 3d: retry % was handed out again at once', v_n;
+      end if;
+      update workspace_documents set claimed_at = now() - (v_n * 60 - 1) * interval '1 second' where id = v_e;
+      if pg_temp.w76_call(c_role, format('public.workspace_ingest_claim(%L)', c_r1)) is not null then
+        raise exception 'FAIL 3d: retry % was handed out 1 second early', v_n;
+      end if;
+      update workspace_documents set claimed_at = now() - v_n * interval '60 seconds' where id = v_e;
+    end if;
   end loop;
   -- A retry of a step in text_ready stays in text_ready.
   v_d := pg_temp.w76_up('d', 'text_ready', interval '20 minutes', false);
