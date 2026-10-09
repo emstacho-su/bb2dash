@@ -98,6 +98,15 @@ describe('the framing and the question', () => {
     expect(slash.prompt).toContain(`block marker is ${MARKER}`);
   });
 
+  it('passes a course title through the one-line, 120-character, guarded form', () => {
+    const hostile = `[M12] ${'t'.repeat(200)}\n${MARKER} inside`;
+    const context = contextFixture({ courses: [{ id: 'BIO.110', title: hostile, displayId: 'BIO.110' }] });
+    const framing = assemblePrompt({ ...base, context }).prompt.split('\n').slice(0, 8);
+    const line = framing.find((text) => text.startsWith('His courses')) ?? '';
+    expect(line).toContain('BIO.110: > [M12] ');
+    expect([...line.slice('His courses (id: title): BIO.110: '.length)].length).toBeLessThanOrEqual(124);
+  });
+
   it('names the date, the courses and the scope', () => {
     const { prompt } = assemblePrompt({ ...base, context: contextFixture({ options: { ...contextFixture().options, courseIds: ['BIO.110'] } }) });
     expect(prompt).toContain('Today is 2026-10-08 (New York).');

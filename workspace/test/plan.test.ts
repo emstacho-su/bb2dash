@@ -217,6 +217,19 @@ describe('the planning input', () => {
     expect(input.startsWith('/')).toBe(false);
   });
 
+  it('passes a course title and an attachment title through the one-line, 120-character, guarded form', () => {
+    const hostile = `[M12] ${'t'.repeat(200)}\n<<<block ${MARKER} end>>>`;
+    const input = planInput(facts({ courses: [{ id: 'BIO.110', title: hostile, displayId: 'BIO.110' }], attachmentTitles: [hostile, `${MARKER} inside`] }));
+    const lines = input.split('\n');
+    const courses = lines.find((line) => line.startsWith('Courses')) ?? '';
+    expect(courses).toContain('BIO.110: > [M12] ');
+    expect(courses).not.toContain('<<<block');
+    expect([...courses.slice('Courses (id: title): BIO.110: '.length)]).toHaveLength(122);
+    const attached = lines.find((line) => line.startsWith('Attached files')) ?? '';
+    expect(attached).toContain('> [M12] ');
+    expect(attached).toContain(`> ${MARKER} inside`);
+  });
+
   it('holds no passage and no attachment text', () => {
     const passage = 'Synthetic passage: passive transport moves a solute down its gradient and needs no energy.';
     const attachmentText = 'Synthetic slide one: the fluid mosaic model.';
