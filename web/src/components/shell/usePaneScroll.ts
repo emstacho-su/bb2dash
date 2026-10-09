@@ -78,7 +78,9 @@ function putBack(node: HTMLElement, target: number): () => void {
 
 export function usePaneScroll(pane: RefObject<HTMLElement | null>): void {
   const pathname = usePathname();
-  // Set by a `popstate`, read and cleared by the next change of pathname.
+  // The pathname React has committed: the page the pane shows.
+  const committed = useRef(pathname);
+  // Set by a `popstate` that changes the pathname, read and cleared by that change.
   const cameBack = useRef(false);
 
   // Remember the pane's position under the address it is scrolled at.
@@ -100,7 +102,9 @@ export function usePaneScroll(pane: RefObject<HTMLElement | null>): void {
   // Back and Forward arrive as a `popstate` just before the pathname changes.
   useEffect(() => {
     function onPop() {
-      cameBack.current = true;
+      // A Back or Forward that keeps the pathname (an item popout, the planner's weeks) is not a
+      // return to a page: it leaves nothing for the next link to restore.
+      cameBack.current = window.location.pathname !== committed.current;
     }
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -111,6 +115,7 @@ export function usePaneScroll(pane: RefObject<HTMLElement | null>): void {
     const node = pane.current;
     if (node === null) return;
     load();
+    committed.current = pathname;
     const known = memory.get(pathname);
     const target = cameBack.current && known !== undefined ? known : 0;
     cameBack.current = false;

@@ -126,3 +126,63 @@ describe('usePaneScroll', () => {
     expect(top).toBe(0);
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * Round 3 (S-1, S-6): the flag belongs to one navigation; a position is kept under the page it was scrolled at
+ * ------------------------------------------------------------------------ */
+
+/** A Back or Forward: the address changes, `popstate` fires, and only then does the app re-render. */
+function popTo(path: string) {
+  window.history.pushState({}, '', path);
+  act(() => {
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+}
+
+function showPath(view: ReturnType<typeof mount>, path: string) {
+  route.pathname = path;
+  act(() => {
+    view.rerender(<Harness />);
+  });
+}
+
+describe('usePaneScroll — Back across a query alone (S-1)', () => {
+  it('does not carry a Back that kept the pathname into the next ordinary link', () => {
+    const view = mount();
+    navigate(view, '/grades');
+    scrollTo(view, 600);
+    navigate(view, '/');
+    // An item popout: a ?item= link pushes an entry on the same pathname; Back closes it.
+    window.history.pushState({}, '', '/?item=assignment:x');
+    popTo('/');
+
+    navigate(view, '/grades');
+
+    expect(top).toBe(0);
+  });
+
+  it('does the same across the planner’s ?week= links', () => {
+    const view = mount();
+    navigate(view, '/grades');
+    scrollTo(view, 600);
+    navigate(view, '/planner');
+    scrollTo(view, 300);
+    window.history.pushState({}, '', '/planner?week=2026-10-12');
+    popTo('/planner?week=2026-10-05');
+
+    navigate(view, '/grades');
+
+    expect(top).toBe(0);
+  });
+
+  it('still restores on a Back that changes the pathname', () => {
+    const view = mount();
+    navigate(view, '/grades');
+    scrollTo(view, 600);
+    navigate(view, '/');
+
+    navigate(view, '/grades', { pop: true });
+
+    expect(top).toBe(600);
+  });
+});
