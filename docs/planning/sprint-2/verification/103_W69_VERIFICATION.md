@@ -444,3 +444,60 @@ element names only, and no run measured a rect.
 
 Both are under the 24px of `--size-target` in width, and the tall block's is also under it in height. A one-hour block's title has the rest of
 the block as its area.
+
+## Round 2
+
+### R2-c: the course-card stats wrap rule is out
+
+The `(max-width: 720px)` rule that let `.courseStats` wrap (`Today.module.css`) changed nothing, so it is removed (`fix(22-R2-c)`). What the runs printed
+for `route /` (page `scrollWidth`, the same in dark and light), where the only difference between consecutive runs was the rule named:
+
+| Run id | Stats wrap rule | Effort-cell wrap rule | `route /` |
+|---|---|---|---|
+| `20261009T013524Z` | no | no | 402 |
+| `20261009T013914Z` | yes | no | 402 |
+| `20261009T014205Z` | yes | yes | 390 |
+| `20261009T022831Z` (committed tree, `dirty` false, after the removal) | no | yes | 390 |
+
+So the stats rule moved the page by 0px (402 to 402, and 390 to 390), and the effort-cell rule is what takes Home from 402 to 390: the pair
+`013914Z` and `014205Z` differ by that rule alone, so its effect on the page's width is measured, 12px. What is not measured is the cell's own width: the
+specs print the page's width only, and I did not read the cell's rect. The cause is therefore "the page was 402 with the rule absent and 390 with it present",
+not a measured width of the effort cell. (An earlier run `20261009T022601Z` read 390 too but its tree held one untracked test file, `dirty` true; it is
+not counted.)
+
+### R2-4b: the switched-off look on a save
+
+Rule: a control one of the five switched-off rules can reach (`.input`, `StatusSelect`, `Popout` `.control`, `SearchPanel` `.courseSelect`,
+`PlannerItemPopover` `.control`), whose `disabled` holds a pending flag beside something else, carries `aria-busy` for that flag. Every `disabled=` in
+W-69's files:
+
+| Site | `disabled` | Element | Reached by one of the five? | Decision |
+|---|---|---|---|---|
+| `PlannerItemPopover.tsx:279` | `save.isPending \|\| plannerUnavailable` | the status `select`, `.control` | yes | **has** `aria-busy={save.isPending}` (since task 37); a new test file covers it |
+| `StatusSelect.tsx:77` | `pending` | `select`, `.statusSelect` | yes | `aria-busy={pending}` (task 37), a counted site |
+| `InboxCard.tsx:257` | `pending \|\| undoBlocked !== null` | `btnGhost` button | no | left: a button; the five rules do not style it |
+| `InboxCard.tsx:323` | `pending \|\| !onChoose \|\| sessionLabels === undefined` | `btnSecondary` button | no | left, same reason |
+| `InboxCard.tsx:338` | `pending \|\| !onChoose` | `btnGhost` button | no | left, same reason |
+| `InboxCard.tsx:357`, `:369` | `pending` | buttons | no | counted sites (task 37), `aria-busy={pending}` |
+| `InboxCard.tsx:385` | `pending \|\| answer.trim().length === 0` | `btnPrimary` button | no | left: a button |
+| `InboxCard.tsx:402` | `pending \|\| (kind === 'data_gap' && ...)` | button | no | left: a button |
+| `InboxApplyButton.tsx:148` | `busy \|\| lookingForOpen \|\| nothingToApply` | `.button` | no | left: a button, not a field; the brief names its three cases and gives it the one strength |
+| `PlannerEventWizard.tsx:214`, `:218` | `!stepValid`, `!stepValid \|\| pending` | `btnPrimary` buttons | no | left: buttons |
+| `PlannerEventBlock.tsx:74` | `isOptimisticEvent(event) \|\| actions.pendingDoneId === event.id` | the done box (a checkbox) | no | left: the drawn checkbox is not one of the five rules |
+| `PlannerEventBlock.tsx:90` | `isOptimisticEvent(event)` | the title button | no | left: a button, and no pending flag |
+| `PlannerEventForm.tsx:224`, `PlannerEventFormFields.tsx:385`, `:393`, `PlannerSeriesScopeDialog.tsx:145`, `:161`, `:170` | `pending` | buttons and radios | no | counted sites (task 37) |
+| `UpcomingTracker.tsx:472`, `:482` | `!view.canPageBack`, `!view.canPageForward` | pager buttons | no | left: no pending flag |
+
+No field of W-69 other than the two selects is disabled by a mixed expression: the Inbox answer and note fields (`tokens.input`) and the event form's fields
+carry no `disabled` at all. So no further site changed. The new test `web/test/PlannerItemPopover.busy.test.tsx` (new file, no pre-existing test edited)
+asserts the popover's select: at rest enabled and `aria-busy="false"`; with a save in flight disabled and `aria-busy="true"`; with the planner row unread
+disabled and `aria-busy="false"`. It passed the first time it ran, because the site was already changed in task 37; it is a regression guard, not a RED case.
+
+### Checks
+
+| Check | Printed |
+|---|---|
+| Busy sites (this branch) | `24 12`: the 24 controls disabled on exactly `pending`/`busy`/`controlsDisabled` are all in the tree, and the 12 `aria-busy` attributes present are W-69's 9 and W-67's 3. The other 12 are W-68's and W-70's, not merged here. This round added none and removed none, so the merged tree's `24 24` is unchanged by it |
+| `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0; exit 0; exit 0 |
+| `npx vitest run test/token-audit.test.ts`; Baseline sum for `screens-a.json` | exit 0; `0` |
+| `phone-width.spec.ts -g "route / "`, run `20261009T022831Z`, `dirty` false | exit 0, 2 passed, `page scrollWidth=390` dark and light |
