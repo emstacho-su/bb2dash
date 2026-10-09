@@ -279,3 +279,59 @@ count line `16 passed (52.9s)`, 0 failed. Printed widths: `page scrollWidth=390`
 `/course/IST.471/assignment/IST.471/a1-proposal`, `/grades`, `/materials`, `/workspace`). On `/course/IST.466/grades`
 the gradebook box prints `box scrollWidth=588 clientWidth=345` in both themes, so the table scrolls inside its box.
 No route is too wide with the new font; nothing owed from the harness. The line of task 26 is not started.
+
+## Round 2
+
+From the first `/code-review main high`. Merged `origin/feat/styling-22` first (already up to date).
+
+### R2-4 (MEDIUM): the card-note field flashed as switched off during a save
+
+Commit `4420f1a`. `CourseInfo.tsx` `CardNoteField`'s input (`tokens.input`) is `disabled={disabled || save.isPending}`;
+it now also carries `aria-busy={save.isPending}`, so `.input:disabled:not([aria-busy='true'])` does not reach it.
+
+* **RED** (`web/test/CourseInfo.busy.test.tsx`, new; `CourseInfo.test.tsx` unedited): `npx vitest run
+  test/CourseInfo.busy.test.tsx test/MaterialsBrowser.marks.test.tsx` → exit 1; the pending case failed (the field was
+  disabled and had no `aria-busy`), the idle case passed.
+* **GREEN:** the same file → both cases pass; with the old files, 6 files, 57 passed.
+* **Every `disabled=` in my files, read:**
+
+| Site | Expression | Element | Decision |
+|---|---|---|---|
+| `CourseInfo.tsx:168` | `disabled \|\| save.isPending` | `tokens.input` | **changed**: `aria-busy={save.isPending}` |
+| `CourseInfo.tsx:341` | `isQueryLoading(shellsQ) \|\| !noteShellId` | prop `disabled` into the same field | left: a query-loading or missing-shell state, not a pending save; the field is off then |
+| `LinkColumnControl.tsx:67`, `:85` | `pending` | `GradeModel` `.select` (composes `.input`); a ghost button | already `aria-busy={pending}` (task 37) |
+| `UploadDropZone.tsx:97` | `busy` | the hidden file input | already `aria-busy={busy}` |
+| `OpenStoredButton.tsx:58` | `pending` | a button | already `aria-busy={pending}` |
+| `ConversationList.tsx:78` | `busy` | a button | already `aria-busy={busy}` |
+| `Composer.tsx:104` | `disabled` | the textarea (`.box` composes `.input`) | left: `disabled` is `empty === 'missing'` (an unknown conversation), a real off state |
+| `Composer.tsx:115` | `busy \|\| disabled` | the Ask button (`.button` composes `btnPrimary`) | left: a button, not one of the five switched-off rules (`.input`, `StatusSelect`, `Popout` `.control`, `SearchPanel` `.courseSelect`, `PlannerItemPopover` `.control`) |
+| `Workspace.tsx:268` | `empty === 'missing'` | a prop for `Composer` | left: not a pending flag |
+
+* **Busy sites** (the command as written, which counts only `aria-busy={pending}` and `aria-busy={busy}`) prints
+  `24 8` on this branch: 8 are on it (W-67's 3 and mine, 5). It is unchanged by this fix (`aria-busy={save.isPending}`
+  is not in the command's pattern). The target `24 24` is the integrated branch's.
+
+### R2-6 (MEDIUM): the reading route links typed their arrow
+
+Commit `4719a7e`. `MaterialsBrowser.tsx`'s link `<a>` for a reading with an external or Blackboard route rendered
+`{route.action}` raw; it is now `<MarkedLabel label={route.action} />`. The strings in `lib/queries.materials.ts` do
+not change.
+
+* **RED** (`web/test/MaterialsBrowser.marks.test.tsx`, new): both cases (`Open ↗`, `In Blackboard ↗`) failed with "expected
+  null not to be null": no drawn `svg[aria-hidden]` in the link.
+* **GREEN:** both pass: the link's text content equals the label and it holds the drawn mark.
+* **The second look, strings from the `.ts` libraries reaching the page in my files:** `queries.materials.ts` actions:
+  the link branch (fixed), the `FileOpenAction` fallback and `action` (already `MarkedLabel`, task 31), the
+  `OpenStoredButton label` (`'Open'`, no arrow) and the disabled button (`'On Blackboard'`, `'No route'`, no arrow);
+  `STAGED_LABEL` (both renderings already `MarkedLabel`); `sync-request-phase.ts:115` and `inbox-row.ts:166,168` are
+  rendered in W-68's and W-69's files, none in mine. Nothing else found.
+
+### The gates
+
+| Command | Exit | Printed |
+|---|---|---|
+| `npx vitest run test/MaterialsCourseLinks.test.tsx test/FileOpenAction.test.tsx test/course-stream.history.test.tsx test/CourseInfo.test.tsx` and the two new files | 0 | 6 files, 57 passed; the old files unedited |
+| Mark characters | 0 | `23 11`: none of the remaining is in my files (they are the other workers') |
+| `cd web && npm test` | 0 | 171 files, 3311 passed |
+| `npm run typecheck`; `npx eslint . --max-warnings 0` | 0; 0 | no error; no output |
+| `cd web && npx vitest run test/token-audit.test.ts` | 0 | 89 passed; `screens-b.json` sums to 0 |
