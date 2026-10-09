@@ -1071,6 +1071,60 @@ and W-80 and W-84 build to this section where it differs from the text above.
   `data_gap` and the label `confirm` a `stack_must_confirm`; and a `data_gap` test row is still open
   after `close_cleared_gaps` runs.
 
+## Round 2, 2026-10-08: the review of the database branch (task 4), before anything is applied
+
+`/code-review` (high) and `/security-review` ran on `fix/phase23-followups-db`, and the code review
+also read W-81's and W-82's merged work (range `tmp/23f-pre-merge..480e4e2`). Neither 187 nor 188 is
+applied, so every fix is an edit to the file and no migration number is spent. The findings, the
+PM's ruling on each and the fixes' proof are in 110a ("Task 4"). Three rulings change the Contract;
+W-80 and W-82 build to this section where it differs from the text above.
+
+* **R3: a press of Apply answers tries held answers through its whole chain, not only its first
+  batch.** As built, `held` was empty only for the request the button filed. Its follow-up carries
+  `trigger: followup`, got the held list back and skipped the held answers the press had not reached
+  yet; and when only held answers were left, no follow-up was filed at all. So with more than six
+  answers waiting, a press did not do what O-1's default says. The rule now:
+  * A request is a **retry request** when its params carry no `trigger` (the button) or carry
+    `retry_held: true`. The follow-up that the close of a retry request files carries
+    `{trigger: followup, after, skip, retry_held: true}`.
+  * `inbox_apply_prepare` returns `held` as: empty for a request with no `trigger`; the request's own
+    `params.skip` for a follow-up with `retry_held`; `inbox_apply_held_items()` for every other
+    request. So inside a press's chain only what that chain itself already failed on is left alone,
+    which is 186's rule, and nothing loops.
+  * `inbox_apply_close` files the follow-up of a retry request when this run archived something and
+    a queue row outside this close's skip still waits. For every other request it also leaves out
+    the held rows, as built.
+  * A sync and a follow-up of a sync still never retry a held answer. A login that can insert a
+    request can at most ask for what a press does: it can make nothing held.
+* **R4: the failure notice keeps 186's second arm.** As built, the "still stuck" test read the holds
+  alone. Between 187's apply and the rebuild of `apply` the old worker sends no `skip_seen`, so no
+  hold exists, and the next done close would archive the failure notice with the answer still
+  waiting: a step back from 186 for as long as the old worker runs. The test is now: an id of this
+  close's skip still waits, **or** a waiting answer is held, **or** 186's arm as it stands (a
+  failed request of the worker listed the id in its skip and finished at or after the answer's
+  `resolved_at`). The third arm keeps a notice open and decides nothing else: what a sync files and
+  what a run skips still come from the holds table alone, so finding F2 stands. The standing unit
+  `phase23_186_notices.sql` is put back as it is on `main`; it passes against 187 unedited.
+* **A new hold is written by a failed close only** (the security review's one note, LOW). The worker
+  never closes done with an answer newly left behind (`apply/src/report.ts`: an item left is
+  `not_applied`, which is a failed close), and only a failed close raises the notice. So "no hold
+  without a notice" becomes a rule of the database. A done close still keeps the holds that stand
+  and still removes the stale ones.
+* **R5: a decision whose item has a logged write is never skipped.** The exporter skips a test
+  question by its ref, its entity and its missing course, and the worker's role can raise a row of
+  that shape (`181:597-600`). If Stack answered such a row and a run wrote for it, the decision
+  would get no note and no day-file entry, against the rule that every write reaches that day's
+  log. Now `inbox_decision_skipped` refuses (returns false, marks nothing) when
+  `inbox_apply_writes` holds a row for the item, and the exporter files a test-shaped row like any
+  other when the skip is refused. Item 3782 has a logged write (the cut-over's test row), and his
+  answer for it stands ("Mark it filed, no note"): 187 marks it by its own guarded statement, not
+  through the function.
+* **Not changed, and why** (110a has each in full): a held session answer that a later fold links
+  by the lecture-number rule stays held until a press, which records it at no cost (the code
+  review's finding 6); the fold still does not apply a superseded-file pick (O-2, his default);
+  migration 187 stays one file above 800 lines, because a migration is applied under one name and
+  splitting it would spend 189, while its longest unit is split in two.
+
 ## Session prompt
 
 > `/bb2dash-pm` Start the Phase 23 follow-ups. `main`'s STATUS and ORCHESTRATOR do not know this work and still call the session-answer fix unmerged (it merged as #81): the brief is the truth, and it is newer than the memories too. The worktree `C:/Users/stack/projects/bb2dash-wt-23f` and its branch `fix/phase23-followups` exist and are yours; the planning session has ended and writes nothing more there. If the worktree is not clean at `origin/fix/phase23-followups`, stop and tell me. Work there by full paths (a relative path from where you start lands in the shared checkout, which stays on `main`), and cut no new phase branch. Read `docs/planning/sprint-2/briefs/110_PHASE23_followups.md` there in full (it is not on `main`), then the two follow-ups rows at the end of that worktree's `project-state/DECISIONS.md` (not on `main`; the second corrects the first), then memories `phase23-state` and `phase24-state`. Then read `C:/Users/stack/projects/PARALLEL-SESSIONS-bb2dash-2026-10-08.md` in full: the rules the three sessions share and the ones that are yours alone. Follow them as mine, and pass on to each worker the ones that touch it. This replaces the skill's "skip nothing" rule: of ORCHESTRATOR read sections 0 to 5 (section 6 is old prompts); of STATUS read the first sentences of its header (the header is one very long line: do not read it whole) and the sections "Where the product is", "Acceptance run", "Phase 23", "What's next" and "Known issues"; take 91, 93, 94, 105 and 106 by their headings only. If the skill's untagged-session check is due, say so in your report and leave it: Session 1 does that review. The brief is the approved plan: give me the triage line and the short report, do not enter plan mode, and go on without waiting for an answer. I am not limiting plan usage right now. The seven answers in the brief are mine, given in the terminal on 2026-10-08, and O-1 to O-5 stand on the brief's defaults. First re-read its Seams against Phase 24's briefs at their branch's head (`C:/Users/stack/projects/bb2dash-wt-24`, read-only) and its Phase 22 row against `C:/Users/stack/projects/bb2dash-wt-22`: the line numbers the brief quotes are an older commit's, so find each row by its words. Then freeze: one commit on the branch, pushed before any worktree is cut, that takes out the "draft" and "not frozen" lines, records O-1 to O-5 as defaults, names the commits you read in the Seams rows and adds a DECISIONS row. Then follow the brief's task order: task 1's reads and the exporter's dry run first; then cut `bb2dash-stack-wt-23f` and the worker worktrees and spawn W-80 to W-83 (Opus) on their disjoint files, and W-84 once migration 187 is written and merged into `fix/phase23-followups` (cut its worktree then). Before W-80 starts, make the SQL runner answer `--ping` in its worktree and in yours: copy the root `.env.local` there from the shared checkout without opening it and run `npm --prefix scripts ci`; a fresh worktree has no `node_modules`, so each worker installs what its own tests need. Migrations stay inside 187 to 189. 187 goes on prod during the build only after the database branch's two reviews and my word: run its rolled-back dry run first, with no sync and no apply request open, then stop and ask me with the dry run's result. Phase 24a and Phase 22's visual build run beside you in their own sessions; 24a also changes what the `apply` image is built from: follow the brief's seams and write nothing on either branch. Build the test image under its own tag, as task 17 says, so that the live tag `bb2dash-apply:local` does not move before the cut-over; never rebuild or restart `sync`; never a whole-project `up`. Run `/code-review` and `/security-review` at both points the brief names, each from inside the worktree of the branch under review (from the shared checkout both would read `main`), with `/code-review main high` on the PRs and the second look at the fix round; point the Definition of done's `just accept 23 --check` at your worktrees, because pack 23 is not on `main` yet; update every document the brief lists, merge `origin/main` into the branch before opening the PRs, open both (bb2dash first) and stop at "ready when you say so". After my "merge" (bb2dash first), bring the shared checkout and bb2dash-stack's main checkout up to the merge commits with a fast-forward pull, with no sync open: `apply` is rebuilt from them. Then one more word from me covers all of task 20 in its order and stands for the brief's separate words for 188 and for the registration: the skills installed, the `.env` line, which I change myself (`COMPOSE_PROFILES=workspace,apply`; give it to me as one line with the "ready" message), `apply` rebuilt alone from `main`, 188 on prod, the scheduled task registered and the first export. Before `just accept 23 --check` and `just accept 23` from bb2dash-stack's `main`, look at `docker ps` for a Phase 22 walk box (`bb2dash-walk22-...`) and wait until none is running; a green run counts.
