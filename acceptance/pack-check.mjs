@@ -26,6 +26,8 @@ const PHASE_DIR = /^[0-9]{1,2}[a-z]?$/;
 /** `carry:<step or saved name>.<field>`: a value the host read earlier in the run. */
 const CARRY = /^carry:([a-z0-9][a-z0-9_-]*)\.([a-z][a-z0-9_]*)$/;
 const SAVE_NAME = /^[a-z][a-z0-9_]*$/;
+/** The host actions that read a proof: `db.proofUntil` reads it again until it passes (10 times, 10 s apart), with the same parameters. */
+const PROOF_ACTIONS = ['db.proof', 'db.proofUntil'];
 /** A step's id begins with a digit and a saved name with a letter, so a carried value says where it is from. */
 const FROM_A_STEP = /^[0-9]/;
 /** The one name the host keeps for itself, there in every run with no stage behind it, and what it offers under it. */
@@ -121,7 +123,7 @@ const sameValues = (left, right) => JSON.stringify(Object.entries(left).sort()) 
 /** Whether a host stage runs this proof with exactly these values. */
 function stageRunsProof(stage, proof) {
   return stage.actions.some((action) => {
-    if (action.action !== 'db.proof') return false;
+    if (!PROOF_ACTIONS.includes(action.action)) return false;
     const run = proofOfAction(action);
     return run.name === proof.name && sameValues(run.values, proof.with ?? {});
   });
@@ -259,7 +261,7 @@ function proofProblems({ manifest, proofs }) {
   const problems = [];
   const hostStages = stagesOfKind(manifest, 'host');
   for (const stage of hostStages) {
-    for (const action of stage.actions.filter((entry) => entry.action === 'db.proof')) {
+    for (const action of stage.actions.filter((entry) => PROOF_ACTIONS.includes(entry.action))) {
       const run = proofOfAction(action);
       if (run.save !== undefined && !SAVE_NAME.test(String(run.save))) problems.push(`stage ${stage.id}: "${run.save}" is not a name to save under`);
       if (run.save === RUN_SOURCE) problems.push(`stage ${stage.id}: "${RUN_SOURCE}" is the host's own name, and no proof is saved under it`);
@@ -330,7 +332,7 @@ function carryProblems({ manifest }) {
   manifest.stages.forEach((stage, index) => {
     for (const action of stage.actions ?? []) {
       problems.push(...problemsOf(`stage ${stage.id}`, action.with, index, false));
-      if (action.action === 'db.proof' && action.with?.save !== undefined) saved.add(String(action.with.save));
+      if (PROOF_ACTIONS.includes(action.action) && action.with?.save !== undefined) saved.add(String(action.with.save));
     }
     for (const step of autoSteps.filter((candidate) => candidate.stage === stage.id)) {
       for (const proof of step.proofs ?? []) problems.push(...problemsOf(`step ${step.id}`, proof.with, index, true));

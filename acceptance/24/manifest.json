@@ -1,0 +1,470 @@
+{
+  "schema": 1,
+  "phase": "24",
+  "base_url": "https://web-xi-ten-uy9xk6c6p0.vercel.app",
+  "stages": [
+    {
+      "id": "prepare",
+      "kind": "prepare"
+    },
+    {
+      "id": "go-live",
+      "kind": "host",
+      "actions": [
+        {
+          "action": "runner.record"
+        },
+        {
+          "action": "db.proof",
+          "with": {
+            "name": "planner-fingerprint",
+            "save": "planner_before"
+          }
+        },
+        {
+          "action": "workspace.ensureProfile"
+        },
+        {
+          "action": "workspace.start"
+        },
+        {
+          "action": "workspace.doctorRow"
+        },
+        {
+          "action": "ingest.start"
+        }
+      ]
+    },
+    {
+      "id": "walk",
+      "kind": "sandbox",
+      "tests": [
+        "2 open workspace",
+        "3 course question",
+        "4 lookup one turn",
+        "5 standard plan",
+        "6 planner feed",
+        "7 follow-up",
+        "8 nothing matches",
+        "9 stop then answer"
+      ]
+    },
+    {
+      "id": "walk-proofs",
+      "kind": "host",
+      "actions": [
+        {
+          "action": "db.proof",
+          "with": {
+            "name": "planner-unchanged",
+            "before": "carry:planner_before.fingerprint"
+          }
+        }
+      ]
+    },
+    {
+      "id": "upload",
+      "kind": "sandbox",
+      "tests": [
+        "11 upload file"
+      ]
+    },
+    {
+      "id": "indexed",
+      "kind": "host",
+      "actions": [
+        {
+          "action": "db.proofUntil",
+          "with": {
+            "name": "upload-indexed",
+            "nonce": "carry:11.nonce_id",
+            "document": "carry:11.document_id",
+            "since": "carry:run.started_at"
+          }
+        }
+      ]
+    },
+    {
+      "id": "find",
+      "kind": "sandbox",
+      "tests": [
+        "13 find upload",
+        "14 send twice"
+      ]
+    },
+    {
+      "id": "delete",
+      "kind": "sandbox",
+      "tests": [
+        "15 delete upload"
+      ]
+    },
+    {
+      "id": "store-proofs",
+      "kind": "host",
+      "actions": [
+        {
+          "action": "db.proof",
+          "with": {
+            "name": "store-extension"
+          }
+        },
+        {
+          "action": "db.proof",
+          "with": {
+            "name": "store-vector-columns"
+          }
+        },
+        {
+          "action": "db.proof",
+          "with": {
+            "name": "store-vector-indexes"
+          }
+        },
+        {
+          "action": "db.proof",
+          "with": {
+            "name": "store-counts"
+          }
+        },
+        {
+          "action": "db.proof",
+          "with": {
+            "name": "store-no-links"
+          }
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "0",
+      "kind": "host",
+      "text": "The workspace profile line is in place, the Workspace is started alone, its doctor row is green, and the two ingest services (the parser, then the worker) are started alone. Nothing else is stopped or started.",
+      "stage": "go-live",
+      "actions": [
+        "runner.record",
+        "workspace.ensureProfile",
+        "workspace.start",
+        "workspace.doctorRow",
+        "ingest.start"
+      ]
+    },
+    {
+      "id": "1",
+      "kind": "human",
+      "text": "Usage credits are off (claude.ai, Settings, Usage), and the plan's session and weekly percentages from /usage. Stack's to read: the run does not check it."
+    },
+    {
+      "id": "2",
+      "kind": "auto",
+      "text": "Open Workspace from the top bar on the live site.",
+      "stage": "walk",
+      "test": "2 open workspace",
+      "evidence": [
+        "2-open.png",
+        "2.json"
+      ]
+    },
+    {
+      "id": "3",
+      "kind": "auto",
+      "text": "A course question is answered with stored sources: the runner searched before the model started, so no model search was needed.",
+      "stage": "walk",
+      "test": "3 course question",
+      "evidence": [
+        "3-start.png",
+        "3-end.png",
+        "3.json"
+      ],
+      "proofs": [
+        {
+          "name": "turn-found",
+          "with": {
+            "request": "carry:3.request_id",
+            "since": "carry:run.started_at",
+            "question_md5": "fdcf22c80c0f1bbe98dedb149d968bd6"
+          }
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "kind": "auto",
+      "text": "A lookup takes one turn: no planning turn, the lowest tier.",
+      "stage": "walk",
+      "test": "4 lookup one turn",
+      "evidence": [
+        "4-start.png",
+        "4-end.png",
+        "4.json"
+      ],
+      "proofs": [
+        {
+          "name": "turn-lookup",
+          "with": {
+            "request": "carry:4.request_id",
+            "since": "carry:run.started_at",
+            "question_md5": "29d2ec32a4d75ea731d789d95dd37bc4",
+            "after": "carry:3.request_id"
+          }
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "kind": "auto",
+      "text": "A Standard-depth question takes a planning turn (the wording sends it to the middle tier, as the page can only send Auto).",
+      "stage": "walk",
+      "test": "5 standard plan",
+      "evidence": [
+        "5-start.png",
+        "5-end.png",
+        "5.json"
+      ],
+      "proofs": [
+        {
+          "name": "turn-planned",
+          "with": {
+            "request": "carry:5.request_id",
+            "since": "carry:run.started_at",
+            "question_md5": "0bf4dfbbee378a2cbdc562eb337a8f49",
+            "after": "carry:4.request_id"
+          }
+        }
+      ]
+    },
+    {
+      "id": "6",
+      "kind": "auto",
+      "text": "A planner question stores a feed source; the planner is as it was (step 10 reads that).",
+      "stage": "walk",
+      "test": "6 planner feed",
+      "evidence": [
+        "6-start.png",
+        "6-end.png",
+        "6.json"
+      ],
+      "proofs": [
+        {
+          "name": "turn-feed",
+          "with": {
+            "request": "carry:6.request_id",
+            "since": "carry:run.started_at",
+            "question_md5": "6bd90cceb00748983fdff3985e20a787",
+            "after": "carry:5.request_id"
+          }
+        }
+      ]
+    },
+    {
+      "id": "7",
+      "kind": "auto",
+      "text": "A follow-up in step 3's conversation is answered with a null session id. The step archives that conversation.",
+      "stage": "walk",
+      "test": "7 follow-up",
+      "evidence": [
+        "7-start.png",
+        "7-end.png",
+        "7.json"
+      ],
+      "proofs": [
+        {
+          "name": "turn-followup",
+          "with": {
+            "request": "carry:7.request_id",
+            "since": "carry:run.started_at",
+            "question_md5": "7d443575b61a0ef60c542cd0cfaacfe3",
+            "first_request": "carry:3.request_id"
+          }
+        }
+      ]
+    },
+    {
+      "id": "8",
+      "kind": "auto",
+      "text": "A question nothing matches stores retrieval empty, and the answer's first line is the fixed sentence.",
+      "stage": "walk",
+      "test": "8 nothing matches",
+      "evidence": [
+        "8-start.png",
+        "8-end.png",
+        "8.json"
+      ],
+      "proofs": [
+        {
+          "name": "turn-empty",
+          "with": {
+            "request": "carry:8.request_id",
+            "since": "carry:run.started_at",
+            "question_md5": "bbd460706fe9985493106ad8cda77831",
+            "after": "carry:7.request_id"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9",
+      "kind": "auto",
+      "text": "A Stop reaches the runner (stored as cancelled), and the next answer in that conversation is done.",
+      "stage": "walk",
+      "test": "9 stop then answer",
+      "evidence": [
+        "9-stopped.png",
+        "9-after.png",
+        "9.json"
+      ],
+      "proofs": [
+        {
+          "name": "turn-stopped",
+          "with": {
+            "request": "carry:9.request_id",
+            "since": "carry:run.started_at",
+            "question_md5": "874ee7b1aa472bd1600d36c04e6ef850"
+          }
+        },
+        {
+          "name": "turn-done-after-stop",
+          "with": {
+            "request": "carry:9.next_request_id",
+            "since": "carry:run.started_at",
+            "question_md5": "ac94de5a971f702a2a24d1f355e9ba4f",
+            "stopped": "carry:9.request_id"
+          }
+        }
+      ]
+    },
+    {
+      "id": "10",
+      "kind": "host",
+      "text": "The planner is as it was before the walk. If it changed and a sync or Inbox apply ran in between, the run is blocked and is repeated.",
+      "stage": "walk-proofs",
+      "proofs": [
+        {
+          "name": "planner-unchanged",
+          "with": {
+            "before": "carry:planner_before.fingerprint"
+          }
+        }
+      ]
+    },
+    {
+      "id": "11",
+      "kind": "auto",
+      "text": "A synthetic file that is new in this run is uploaded through the page's own session: the object under u/<hash>, a signed link of 7 days, and the register call.",
+      "stage": "upload",
+      "test": "11 upload file",
+      "evidence": [
+        "11.json"
+      ]
+    },
+    {
+      "id": "12",
+      "kind": "host",
+      "text": "The file is indexed: one upload row holds its hash, in state indexed, made in this run. Read up to 10 times, 10 seconds apart.",
+      "stage": "indexed",
+      "proofs": [
+        {
+          "name": "upload-indexed",
+          "with": {
+            "nonce": "carry:11.nonce_id",
+            "document": "carry:11.document_id",
+            "since": "carry:run.started_at"
+          }
+        }
+      ]
+    },
+    {
+      "id": "13",
+      "kind": "auto",
+      "text": "A question the file answers is answered, and the stored sources hold a row of kind upload that names the file. The step archives its conversation.",
+      "stage": "find",
+      "test": "13 find upload",
+      "evidence": [
+        "13-start.png",
+        "13-end.png",
+        "13.json"
+      ],
+      "proofs": [
+        {
+          "name": "turn-upload-found",
+          "with": {
+            "request": "carry:13.request_id",
+            "since": "carry:run.started_at",
+            "question_md5": "8f658fbdb0d2122d3829dcbf3b02a309",
+            "document": "carry:11.document_id"
+          }
+        }
+      ]
+    },
+    {
+      "id": "14",
+      "kind": "auto",
+      "text": "The same file is sent a second time: nothing is uploaded, the register call says it exists, and one row holds the hash.",
+      "stage": "find",
+      "test": "14 send twice",
+      "evidence": [
+        "14.json"
+      ],
+      "proofs": [
+        {
+          "name": "upload-one-row",
+          "with": {
+            "nonce": "carry:11.nonce_id",
+            "document": "carry:11.document_id",
+            "since": "carry:run.started_at"
+          }
+        }
+      ]
+    },
+    {
+      "id": "15",
+      "kind": "auto",
+      "text": "The file is deleted in its two steps, leaving no row in deleting, and every conversation the run opened is archived.",
+      "stage": "delete",
+      "test": "15 delete upload",
+      "evidence": [
+        "15.json"
+      ],
+      "proofs": [
+        {
+          "name": "upload-gone",
+          "with": {
+            "nonce": "carry:11.nonce_id",
+            "document": "carry:11.document_id"
+          }
+        },
+        {
+          "name": "conversations-unarchived",
+          "with": {
+            "since": "carry:run.started_at",
+            "min_conversations": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "16",
+      "kind": "host",
+      "text": "The store's five reads (task 49, proofs 1, 2, 3, 6 and 7) pass. Proofs 1, 2, 3 and 7 are the part of the catalog reads that the proofs script can make; proof 6 is whole.",
+      "stage": "store-proofs",
+      "proofs": [
+        {
+          "name": "store-extension"
+        },
+        {
+          "name": "store-vector-columns"
+        },
+        {
+          "name": "store-vector-indexes"
+        },
+        {
+          "name": "store-counts"
+        },
+        {
+          "name": "store-no-links"
+        }
+      ]
+    }
+  ]
+}
