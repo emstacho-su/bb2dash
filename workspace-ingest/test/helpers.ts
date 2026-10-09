@@ -17,6 +17,7 @@ export function fixture<T = any>(name: string): T {
   return JSON.parse(fs.readFileSync(path.join(FIXTURES, name), 'utf8')) as T;
 }
 
+export const FAKE_POLL_MS = 30_000;
 export const NOW_MS = Date.parse('2026-10-10T12:00:00Z');
 export const PROJECT_URL = 'https://goultdzqcavefcgnifdy.supabase.co';
 export const RUNNER = 'workspace-ingest@a1b2c3d4e5f6';
@@ -157,6 +158,8 @@ export function harness(opts: {
     exchangeDir: dir,
     now: time.now,
     sleep: time.sleep,
+    // A coarse tick: a 330 s wait is 11 ticks on the fake clock, not 660 rounds of real file work.
+    exchangePollMs: FAKE_POLL_MS,
     log: (line) => logs.push(line),
   };
   return { deps, rpc, dir, logs, fetch: fetchFn, embed, requests };
