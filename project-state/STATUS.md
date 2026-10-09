@@ -1591,6 +1591,49 @@ merged `skills/inbox-apply/SKILL.md` over the installed copy, `cmp` 0). Task 2's
 next answered Inbox item or sync. The two harness follow-ups in 101a (the Session facts newline, the superseded Status
 row) go to the harness backlog, not this phase.
 
+## Phase 23 acceptance runs, 2026-10-09: two counting runs blocked, trial runs from `fix/accept23-step1`; NOT accepted yet
+
+After the follow-ups' cut-over Stack put in his `.env` line and signed in to Blackboard, and the PM started
+`just accept 23` from bb2dash-stack's `main`. Nothing is accepted. What each run did, in order (the run folders
+are under `~/.bb2dash-accept/23/`):
+
+| Run | From | Verdict | What it showed |
+|---|---|---|---|
+| `20261009T122103Z` | `main` (counts) | blocked | The sign-in had started a sync of its own (request 5071); the run refuses to start with a request open. As built. |
+| `20261009T122218Z` | `main` (counts) | blocked | **Pack defect 1.** Step 1 raised its four questions, then looked for its own run tag in a facts file that is written only when the test ends. It could never pass. |
+| `20261009T122929Z` | the fix branch | red | Step 1's test passed. **Pack defect 2:** its picture had the card scrolled under the top bar and the row of tabs out of sight, and the `confirm` card is not first in its list, so the operator was unsure. |
+| `20261009T123422Z` | the fix branch | killed | Steps 1 and 2 passed. **Pack defect 3:** the sync filed apply request 5073 and the worker closed it five seconds later, both answers archived; the Inbox looks for a request it did not file every 30 seconds, so the button never left its resting label and step 3 waited out its nine minutes. The laptop then slept, and the session's low-memory guard stopped the run. |
+| `20261009T180141Z` | the fix branch | red | **Steps 1, 2, 3, 4 and 6, the host's proofs after the walk, and the stop of `apply` all passed.** Step 7a's test passed too, and the operator was unsure: **a defect of the product**, below. `apply` was started again by the run's cleanup, and request 5077 was then taken and closed. |
+
+**The four fixes, all on `fix/accept23-step1` (one PR):**
+
+1. `stepId()` in `web/e2e/accept.env.ts`: an id a step left is read from the running test first, then the
+   stage's folder, then the carry-over. Five unit tests.
+2. `shootCard()`: a card's picture has the card whole, clear of the top bar and the footer, and the page
+   moves no further than that takes; the tab that was selected is checked by the test and written as
+   `tab_at_<shot>`, and the playbook judges the tab by that fact. Seven shots.
+3. Step 3 has a third way to pass: the footer reads `0 answered` with the button at rest, and both answers
+   stand under Archived. The host's proof still reads the request itself.
+4. **The product.** The Apply answers button sits in the Inbox footer, which is sticky at the bottom of
+   the window, and its toast hung 38px UNDER the button (it was written for a button in a page header). So
+   the "Requested…" line was cut mid-sentence and the fallback command, the one thing a person needs when
+   the apply worker is down, was below the window. The toast now opens above the button, at its right edge
+   (`InboxApplyButton.module.css`; `web/test/InboxApplyButton.css.test.ts`). **Visual: Stack looks at the
+   PR's preview before the merge.** Step 7a also brings the command into the window before its picture.
+
+**Seen in the trials and not changed:**
+
+* An open Inbox shows no `done` and no result line for an apply request the sync filed when that request
+  closes within the page's 30-second look. The answers do move to Archived and the count drops. Stack's to
+  want otherwise.
+* While a request waits for a worker that is down, an answered card reads "Apply answers is running; undo
+  after it finishes." The request is queued, not running.
+* The run's own clean-up works: each run's first question archived the cards an earlier run had left, and
+  the exporter skipped the test decisions (0 filed, 2 skipped at 18:01Z).
+
+**Next:** Stack's look at the toast on the preview and his "merge"; then a counting `just accept 23` from
+`main`, with no Phase 22 walk box running, the laptop awake and memory to spare.
+
 ## Sprint 1 record — Requirements v2 (`docs/planning/sprint-1-hub/60_REQUIREMENTS_v2.md`)
 
 Stack confirmed the post-Phase 7 direction on 2026-09-10 after five rounds of clarification;
