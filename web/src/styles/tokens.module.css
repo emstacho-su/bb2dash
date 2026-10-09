@@ -310,5 +310,9 @@
 }
 .tip[data-tip]:focus-visible::after { opacity: 1; }
 /* No label while its own button is open: the panel covers that spot, and a label behind or beside it
-   says nothing. Last, so it wins over the hover and focus rules above (same weight). */
-.tip[data-tip][aria-expanded='true']::after { display: none; }
+   says nothing. After the hover and focus rules, and heavier than both (the :not() takes the weight
+   of its argument), so it wins on each.
+   The Courses sidebar toggle is left out on purpose: its aria-expanded means "the rail is open", the
+   rail does not open over the toggle, and the toggle's label must still show then (on main it always
+   had its title). It is the one trigger with aria-controls="course-sidebar". */
+.tip[data-tip][aria-expanded='true']:not([aria-controls='course-sidebar'])::after { display: none; }
