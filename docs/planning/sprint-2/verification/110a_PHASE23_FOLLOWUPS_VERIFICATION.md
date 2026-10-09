@@ -566,3 +566,21 @@ equal the schema's enum).
   `apply` is never started when it was not running before the run and never left stopped when it
   was. It found that nothing in either repository validates `verdict.json`, so the new `services`
   key cannot turn a run red.
+
+## Task 19: the Seams once more, just before the PRs (2026-10-09, about 02:15Z)
+
+`origin/main` has not moved since the branch was cut (a58be34), so there is nothing to merge in.
+Phase 24's branch moved from e365153 to 3bcedec (46 commits) and Phase 22's from 8b92ac6 to ca52b96.
+Read again by their words, with the diff of briefs 109 and 111 since the freeze:
+
+* **One seam grew, no rule changed.** Phase 24a's W-85 now also edits
+  `scripts/lib/accept-docker.mjs` and `scripts/lib/accept-constants.mjs` in bb2dash-stack, the two
+  files where this phase's W-83 gave `apply` its place in the run's command door. The rule in both
+  briefs already covers it: this phase's PR there merges first, and W-85 then merges that `main`
+  and keeps both sets. W-85's two new host actions name two ingest services, each by name.
+* Brief 111 did not change in any row this phase cites.
+* On its branch so far Phase 24a touches one file this phase also touches, `DATA_SYNTAX.md` (its
+  Workspace section; this phase's is "Inbox apply: holds, two-step filing, acceptance objects"): the
+  second to merge keeps both. Phase 22 touches the test line of `scripts/package.json` (the seam
+  found at the freeze) and its own `web/test/walk22-lib.test.ts`, which must learn
+  `web/e2e/accept23.spec.ts` in Phase 22's merge of `main`.
