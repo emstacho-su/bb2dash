@@ -144,3 +144,48 @@ That repository has no planning folder, so its record is here, from the worker's
   the tenth); `.env.example` keeps its one `COMPOSE_PROFILES=workspace` line and gives
   `workspace,apply` in a comment; when compose itself cannot answer, apply's row repeats the words
   and does not count a second problem.
+
+## Task 4: the review of the database branch, before anything is applied (2026-10-08)
+
+Both commands were run by the PM from inside `bb2dash-wt-23f-db`. The code review ran at effort
+"high" on the range `tmp/23f-pre-merge..480e4e2`, so it read W-80's branch and, with it, W-81's and
+W-82's merged work. Both read code only; neither ran a test or touched a database.
+
+**Before the reviews, the bodies.** The six functions 187 and 188 re-create were compared with prod
+by the md5 of their source (one SELECT on `pg_proc`; the repo side computed from the newest
+migration that creates each): `inbox_apply_close` (186), `inbox_apply_prepare` (185),
+`inbox_decision_filed` (182), `sync_request_inbox_apply` (180), `supersede_replaced_files` (160) and
+`link_file_sessions` (163) are each the same on prod as in the repository. So each new body starts
+from the live one.
+
+**`/security-review`: no HIGH and no MEDIUM finding.** It read every new and re-created object's
+grants and mode, the owner check of `inbox_accept_question` (first statement, both nulls handled),
+both argument patterns (anchored; a trailing newline does not pass), the clean-up's reach, every
+jsonb path of `inbox_apply_close`, the view (security invoker; a reader still needs
+`agent_requests`, which is owner-only), and 188's stamp and backfill. One LOW note, taken:
+
+| # | finding | ruling |
+|---|---|---|
+| S-1 (LOW) | a `done` close can write new holds, and only a `failed` close raises a notice. Somebody holding the role's login itself could hold every answered row with no notice. The same role can already archive rows outright, so nothing new is reachable | **fixed in 187**: a new hold is written by a failed close only (Round 2) |
+
+Left by its own exclusions and noted: `inbox_accept_question`'s used-once check includes the entity
+and the open-row index of 041 does not, so an open row with the same kind and ref under another
+entity makes the insert fail on the index. It fails closed.
+
+**`/code-review` (high): ten findings.**
+
+| # | where | finding | ruling |
+|---|---|---|---|
+| C-1 | `187`, `prepare` and `close` | a press retries only the held answers that fit its first batch of six: its follow-up carries `trigger: followup`, gets the held list back and skips them, and held rows alone file no follow-up | **fixed, R3**: a press's whole chain is a retry chain |
+| C-2 | `187`, `close` | the "still stuck" test read the holds alone; the old worker sends no `skip_seen`, so between 187's apply and the rebuild the failure notice would close with the answer still waiting. The 186 unit only stayed green because it was edited | **fixed, R4**: 186's second arm is kept for the notice; the 186 unit goes back to `main`'s text |
+| C-3 | `scripts/register-exports.ps1` | the task starts `node.exe` directly under an Interactive logon, so a console window opens on his desktop at logon and every six hours | **fixed**: the action is `powershell -WindowStyle Hidden`, as the logon task's |
+| C-4 | `188` and the exporter | 188 lets `applied_at` change after a row is archived; the note embeds it and the exporter refuses a note that differs from a fresh render, so a row whose note was written, whose mark failed and which was then stamped could never be filed | **fixed in the exporter**: for an unfiled row a difference in `applied_at` alone is written again; any other difference is refused as today. No note is filed today (0 of 17), and the cut-over runs the first export after 188, so no filed note goes stale at the backfill |
+| C-5 | exporter, `isTestQuestion` | ref, entity and the missing course can all be set by the worker's role through `raise_attention`, so a real decision with a write could be skipped and miss the day's log | **fixed, R5**: `inbox_decision_skipped` refuses an item with a logged write, and the exporter then files the row |
+| C-6 | `187`, `inbox_apply_held_items` | a held session answer that a later fold links by the lecture-number rule (which does not stamp) stays held, though the worker could record it at no cost | **not changed**. It needs a held session answer and a later lecture-number link to the same session. A press records it without a run. Mirroring the worker's whole free-record rule in SQL would put the rule in two places. Named in STATUS, Known issues |
+| C-7 | `188` | the fold stops asking again but still does not apply a superseded-file pick | **not changed**: open item O-2, on its default |
+| C-8 | `187` (854 lines), held-answers unit (823) | over the 800-line limit | **unit split in two; 187 stays one file.** A migration is applied under one name, byte-identical, and a split would spend 189, the one number held for a fix after 187 is on prod. Stack's to overrule |
+| C-9 | exporter helpers | three helpers push into a result object handed in (the immutability rule) | **fixed**: each returns its own result |
+| C-10 | STATUS, root `CLAUDE.md` | not updated yet | task 19, with the PRs |
+
+The fixes are W-80's and W-82's round 2, each test first. The second look at the fix round is
+recorded below when it is done.
