@@ -13,10 +13,17 @@
  * a second colour would be a guess. `test/unit/window-background.test.ts` pins
  * `DARK` to the stylesheet. No Electron import here, so the test loads it as
  * plain Node.
+ *
+ * `LIGHT` (task 27) is the light block's `--color-bg`. It is never painted behind
+ * a page; it is how `title-bar.ts` tells which theme the page's `theme-color`
+ * meta belongs to, `test/unit/title-bar.test.ts` pins it to the stylesheet.
  */
 
 /** `:root`'s `--color-bg`, the dark block. */
 export const DARK = '#050505';
+
+/** The light block's `--color-bg`: the `theme-color` the page writes on Light. */
+export const LIGHT = '#f4f4f4';
 
 /** What `BrowserWindow`'s `backgroundColor` is given. Takes no argument. */
 export function windowBackground(): string {
