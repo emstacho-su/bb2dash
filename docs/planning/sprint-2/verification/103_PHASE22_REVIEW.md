@@ -68,17 +68,17 @@ wrong theme, none was unreadable, and red was never the colour of words. What th
 | V-2 | the popout's submission line | The "seen" time had grown to about 15 px when `tokens.mono` came off it (task 28) | W-68 | fixed, 73b9fb2 |
 | V-3 | the bar at 800 px | The Account icon is cut off: the idle bar is 815 px | W-68 | measured, nothing changed: the document is 815 wide in an 800 window and still scrolls sideways, as on `main`. Brief 103 records the band as not fixed. Put to Stack as taste call T-12 |
 | V-4 | the assignment popout | Its foot is below the window's edge | W-68 | not a defect: the backdrop scrolls, as on `main`, and the foot is reached |
-| V-5 | `theme-walk.spec.ts` rows 19 and 23 | The shot was taken while the panel still read "Loading…" | W-67 | sent |
+| V-5 | `theme-walk.spec.ts` rows 19 and 23 | The shot was taken while the panel still read "Loading…" | W-67 | fixed, f1f6dee: every surface case waits until no loading line is its content; rows 19, 23 and 25 wait for what they show |
 | V-6 | the Inbox footer | "Apply answers" was not a pill and its switched-off look was a faint outline | W-69 | fixed, c8c2d84 |
 | V-7 | Home's today list at 820 px and under | The status select shows only its caret | W-69 | not this phase: `main` has the same grid rule (four tracks for five children). Known, not this phase |
 | V-8 | the planner wizard | The step markers had lost their pill | W-69 | fixed, 956a554: direction D halved the radius token they used |
-| V-9 | the series scope dialog | Native radio buttons, checked in blue | W-67 | sent |
+| V-9 | the series scope dialog | Native radio buttons, checked in blue | W-67 | fixed, 6ff03af: radios take the ink through `accent-color`. The task-8 count of `:where(input[type=` in `globals.css` is 2 from here, the checkbox rule and this one |
 | V-10 | the Grades report-card strip | The strip's scroll box clipped the card's new edge | W-70 | fixed, d0e0c59 |
 | V-11 | the Stream | The "scroll up for weeks" button was in the browser's own face | W-70 | fixed, 516a07d (`main`'s rule set no face) |
 | V-12 | the Stream | The tentative and attendance tags had gone square: their own `calc` on `--radius-md` | W-70 | fixed, c1ac1a3; the dashes are `main`'s and stay |
 | V-13 | the gradebook's Seen column | The stamp had lost its size and tone with `tokens.mono` | W-70 | fixed, be4e30e |
-| V-14 | the bar's icon labels | A drawn label stays up behind its own open panel | W-67 | sent |
-| V-15 | the popouts | The focus ring is drawn round the whole dialog when it opens from a link | W-67 | sent |
+| V-14 | the bar's icon labels | A drawn label stays up behind its own open panel | W-67 | fixed, 9d4e2a1: no label while the trigger says `aria-expanded="true"` |
+| V-15 | the popouts | The focus ring is drawn round the whole dialog when it opens from a link | W-67, W-68, W-69 | fixed. PM ruling: a dialog container that takes focus by script draws no ring; the first Tab shows it on a control. fc1a7ee: the one ring rule of `globals.css` leaves out `role="dialog"`; 33519ca and 3439d0e: three module rules that drew it on a panel are deleted, with no `outline: none` in their place. Runs 20261009T062419Z and 20261009T062423Z: the dialog's `outline-style` reads `none`, the first tabbed control's `solid` |
 
 Same on `main`, or not chosen by Stack, so not built here; each goes under "Known, not this phase" in
 `WALK.md`: the blank gap under the wizard's title field and its fields stopping short of the panel; the first
