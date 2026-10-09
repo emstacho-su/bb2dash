@@ -989,3 +989,62 @@ in `desktop/` (the binary was not there: the earlier `npm ci` used `--ignore-scr
    bar under the three buttons; out of flow and first in the body it is still earlier in document order than the bar's `no-drag` controls.
 6. **Not seen, because no test can:** that the three Windows buttons really match a 52 px bar and clear the idle bar at 960 px, and that a menu row and the popout's
    close button press in the real window. That is acceptance step 5.
+
+## Visual round
+
+From the PM's full walk with shots (run `20261009T034707Z`) judged against tile D. The branch was merged with `origin/feat/styling-22` first. Skill:
+`ui-ux-pro-max` was loaded for the session and `design-system/bb2dash/MASTER.md` read (Focus, Fields, Chrome); no search was run. Nothing from a shot is
+copied into the repository. One commit per item.
+
+| Item | Commit | What |
+|---|---|---|
+| V-5 | `f1f6dee` | every surface case waits for its content before its shot; rows 19, 23 and 25 specifically |
+| V-9 | `6ff03af` | `:where(input[type='radio']) { accent-color: var(--color-accent); }` beside the checkbox rule |
+| V-14 | `9d4e2a1` | `.tip[data-tip][aria-expanded='true']::after { display: none; }` |
+| V-15 | `fc1a7ee` | the one ring rule is `:focus-visible:not(:where([role='dialog'], [role='alertdialog']))`; the box proof in `17 assignment-popout [dark]` |
+
+**V-5.** The loop in `theme-walk.spec.ts` now calls `contentIsThere` after every surface's `reach`: it waits up to 20 s until no visible element reads
+`Loading ...` or `Searching ...` (`/^(Loading|Searching)\b[^\n]*…\s*$/`) and names the line if one stays. Row 19 also waits for the popover to hold the item's own content
+(`not.toContainText('Loading')`, not the one-line "Loading assignment…" it opens with). Row 23 waits for the dropdown to stop reading "Loading…" and for a row
+(`menuitem`) or the real empty line ("No announcements have been posted yet."); `mark_announcements_seen` is still answered by `guardWrites22` and nothing writes. Row 25
+[light] now goes back to Home after the R2-3 navigation (a client navigation, URL `/`) and waits for that page too, so both themes are shot over a settled page. I read the
+other panel cases (17, 18, 20, 21, 22, 24, 25, 28, 30): each now passes through the same guard; the full run below shows none stuck on a loading line.
+
+**V-9.** `globals.css` has one weightless rule for radios, tokens only, next to the checkbox rule. `grep -c ":where(input\[type="` in `globals.css` now prints 2 (it printed
+1); the PM records the change. Pinned in `theme-tokens.test.ts`. RED against the old stylesheets: the radio, ring and tip cases failed (4 of 55), GREEN after.
+
+**V-14.** The rule is after the hover and the focus rules, which weigh the same, so it wins on both; pinned in `foundation-round2.test.ts` (rule exists, and comes after both).
+
+**V-15.** `globals.css`: the ring rule excludes a dialog container, with its declarations as they were and no second `outline: none` (the file still has exactly one,
+`:focus { outline: none; }`, pinned in `theme-tokens.test.ts`). Ring check: `38 0 0`.
+
+*The proof in the box, and what keeps it from passing.* `17 assignment-popout [dark]` opens the popout, reads the dialog's computed `outline-style`, presses Tab once, reads the
+focused control's, and puts focus back on the container so the shot shows no ring on a control.
+
+| Run | Tree | Readings (dialog, first control) | Result |
+|---|---|---|---|
+| `20261009T043057Z` | `fc1a7ee` | `solid`, `solid` | `17 [dark]` failed on the dialog; `17 [light]`, `18` and `21` in both themes passed |
+| `20261009T043238Z` | `fc1a7ee` plus a local, uncommitted probe that took the three `.panel:focus-visible` rules out of the module files (restored with `git checkout` before any commit; `dirty` true, so it does not count) | **`none`, `solid`** | `17 [dark]` passed |
+
+The dialog still draws its ring because three module rules, not the global one, draw it, and they are other workers' files, so I did not touch them:
+
+* `web/src/components/popout/Popout.module.css:60` `.panel:focus-visible` (W-68), the popout of rows 17 and 18;
+* `web/src/components/planner/PlannerItemPopover.module.css:46` `.panel:focus-visible` (W-69), row 19;
+* `web/src/components/planner/PlannerSeriesScopeDialog.module.css:33` `.panel:focus-visible` (W-69), row 21.
+
+Each is `outline: var(--size-focus) solid var(--color-accent); outline-offset: var(--size-focus-gap);` on the container the script focuses. Deleting the three rules is the whole fix; the
+global rule then covers every dialog. **Case owed: `17 assignment-popout [dark]`** (its element is `Popout.module.css` `.panel`).
+I kept the assertion in the spec rather than weaken it, so the case fails until the rule goes. The other readings: `17 [light]` has no ring assertion (the check runs in dark only,
+as the PM asked), and `18 session-popout` and `21` pass because they assert only that they are open. Row 18 shares `Popout.module.css`; row 21 has its own rule in `PlannerSeriesScopeDialog.module.css`.
+
+### Checks
+
+| Check | Result |
+|---|---|
+| `npx vitest run test/theme-tokens.test.ts test/foundation-round2.test.ts test/token-audit.test.ts test/desktop-drag-strip.test.ts` | exit 0, 148 passed |
+| `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0 (187 files, 3426 passed); exit 0; exit 0 |
+| Direction check; the audit | `125 0 77 0 true`; `foundation.json` is `{}` |
+| Ring check | `38 0 0` |
+| the whole spec, `node scripts/walk-box.mjs web/e2e/theme-walk.spec.ts`, `fc1a7ee`, `dirty` false | run `20261009T043459Z`: `exit_code` 1, **63 passed, 1 failed**: `17 assignment-popout [dark]`, owed as above |
+
+No `WALK_SHOTS`; no `bb2dash-walk22-` or `bb2dash-accept-` container and no `accept.lock` before either run.
