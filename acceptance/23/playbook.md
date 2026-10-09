@@ -132,7 +132,7 @@ Pass when all of this is true:
 
 The test answers the card labelled `note` with a word and a reason, saves it, and presses
 `Apply answers`. The request runs by itself: the apply worker takes it, starts one Claude run,
-and closes it. The test watches the label for nine minutes at the most. A Claude run can take
+and closes it. The test watches the label for eight and a half minutes at the most. A Claude run can take
 longer than that, and one command of yours is limited to ten minutes, so the test does not wait
 for it.
 

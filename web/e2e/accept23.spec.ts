@@ -28,7 +28,7 @@
  *
  * TIME. The shared limit of `acceptStep()` is 9.75 minutes a test, and a test may set its own inside
  * its body (`test.setTimeout`): steps 3, 6 and 7a do. Step 3 watches for nine minutes, step 6 for
- * nine as well (the operator's own limit on one command is ten), and step 7a waits out the button's 75 second
+ * eight and a half (the operator's own limit on one command is ten), and step 7a waits out the button's 75 second
  * grace and presses a second time.
  *
  * Everything is found by role and visible text, and nothing by a class name: another phase restyles
@@ -108,10 +108,11 @@ const SYNC_WATCH_TEST_MS = 9.75 * MINUTE_MS;
 /**
  * Step 6 waits for the request to close no longer than the operator can: one command of the operator is
  * ten minutes at most (acceptance/OPERATOR.md), and the test spends about half a minute before the wait
- * (open, save, press). The worker's own Claude limit is 14 minutes, so a slow run can still be open when
+ * (open, save, press). The wait is 8.5 minutes inside a 9.75 minute test limit, which leaves about 45 seconds
+ * after the half minute, so a wait that ends open throws `inconclusive:` before Playwright's own timeout can fire. The worker's own Claude limit is 14 minutes, so a slow run can still be open when
  * the wait ends; the test then says so (`inconclusive:`) and the host's proof is blocked, not failed.
  */
-const APPLY_WATCH_MS = 9 * MINUTE_MS;
+const APPLY_WATCH_MS = 8.5 * MINUTE_MS;
 const APPLY_WATCH_TEST_MS = 9.75 * MINUTE_MS;
 /** Step 7a waits out the button's 75 second grace, and the label turns at the next 5 second tick of the page's clock. */
 const UNCLAIMED_WAIT_MS = 3 * MINUTE_MS;
@@ -460,7 +461,7 @@ acceptStep('6 note and apply', { shots: ['saved', 'done'] }, async ({ page, cont
 
   const watch = await watchApplyButton(page, APPLY_WATCH_MS);
   if (watch.endedAs === null) rec.note({ labels_seen: watch.labels });
-  if (watch.endedAs === null) throw new Error('inconclusive: the apply request was still open after nine minutes');
+  if (watch.endedAs === null) throw new Error(`inconclusive: the apply request was still open after ${APPLY_WATCH_MS / MINUTE_MS} minutes`);
   if (watch.endedAs === APPLY_UNCLAIMED) throw new Error('the apply worker did not take the request: the button read waiting on the worker');
   await expectClosedClean(page, rec, watch);
   await openTab(page, TAB_ARCHIVED);
