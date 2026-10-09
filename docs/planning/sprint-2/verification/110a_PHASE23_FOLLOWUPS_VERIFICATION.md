@@ -607,3 +607,27 @@ Read again by their words, with the diff of briefs 109 and 111 since the freeze:
   (`gh api repos/emstacho-su/bb2dash` answers `stack-dev-personal/bb2dash`, public;
   `bb2dash-stack` private). The old `emstacho-su` addresses still resolve for git, for raw files and
   for the pull requests, and no remote was changed by this session. Told to Stack.
+
+## Task 20: the cut-over (2026-10-09, 04:26Z to 04:35Z)
+
+On Stack's word of 2026-10-09 ("Once these are complete merge 87 and cut over"). Before each step that
+touches prod or a container: no request queued or claimed in `agent_requests`, the answered queue
+empty, no acceptance lock, no `bb2dash-walk22-...` box in `docker ps`.
+
+| Step | What was done | What was read back |
+|---|---|---|
+| The merges | bb2dash #85 `696d35e`, bb2dash-stack #6 `0fd659f`, then the units PR #87 `c19cd9a` | Both main checkouts fast-forwarded and clean. `main` had also moved by #86 (Phase 24a's test port): `git diff 696d35e c19cd9a` names nothing under `apply`, `workspace`, `mcp-server`, `docker`, `skills` or `compose.yaml` |
+| Skills | `node scripts/install-skills.mjs` from the shared checkout | `bb-sync/SKILL.md`, `inbox-apply/SKILL.md`, `inbox-apply/writer.md` updated; a second run reports them in sync |
+| His `.env` line | **Not done: his file.** | `docker compose config --services` from bb2dash-stack lists `harness-jobs`, `sync`, `workspace` |
+| `apply` | `docker compose --profile apply up -d --build --no-deps apply` from bb2dash-stack's `main` | Image `535b7075cb79`, healthy since 04:28:44Z, log line "db: connected as inbox_apply_runner". `sync` is the same container as before (started 2026-10-08 15:15:32Z) |
+| 188 | `apply_migration`, name `188_transform_archived_answers`, the file's text | Version `20261009043022`. SHA-256 of the recorded statement = the file's, `b4cbfaaabc36f4c997d6f8c4359bfa3c5838d5957082bd49ffe083607c4ac387`. 14 session answers carry `applied_at`, all 14 stamped by this apply. `phase23_188_archived_answers` PASS; the whole suite 81 of 82 (`phase18_post_embed_checks` fails on file 2851's nine units, which are not embedded) |
+| The task | `scripts/register-exports.ps1`, first with `-SecretsDir` naming a folder that does not exist, then with the real folders | First: exit 2, "is not an existing folder", no task. Then: `Bb2dash-Exports` registered, 2 triggers (logon; every 6 h), action is `powershell.exe` hidden running `node scripts/exports-run.mjs` from the shared checkout |
+| The first export | `Start-ScheduledTask` | `LastTaskResult` 0. `state.json`: started 04:34:34Z, ended 04:34:55Z, exit 0, `inbox-decisions` filed 16, skipped 0, not filed 0. On prod: 0 archived decisions unfiled, 16 with a note path, 16 listed by `inbox_decisions_unlogged` (no day file yet, which is `just file-decisions`), item 3782 skipped |
+| `just doctor` | from bb2dash-stack's `main` | `exports` "last run 13s ago, exit 0, 16 filed". `apply` is a problem: "off, but a container of apply is running", which is the missing `.env` line. The three other problems are the vaults' uncommitted entries and the harness doctor, not this phase's |
+| `just accept 23 --check` | from bb2dash-stack's `main` | Passes: bb2dash at `c19cd9a` (origin/main), "a green run would count as acceptance", ten stages listed, five rows not done by a run |
+| `just accept 23` | **Not started.** | Its `ready` stage reads `apply.doctorRow`, which is a problem until the `.env` line is in |
+
+Seen on the way: Vercel's production is still the build of `a58be34` (#83), because its GitHub App is not
+installed on `stack-dev-personal`. `git diff a58be34 c19cd9a -- web` outside the tests names two files:
+`queries.grade-model.ts` (four lines) and the generated types. The run's `base_url` therefore serves the
+Inbox the pack expects.

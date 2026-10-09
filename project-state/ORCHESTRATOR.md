@@ -259,10 +259,12 @@ Learned in the Phase 23 follow-ups (2026-10-09; each from `verification/110a_PHA
 
 ## 4. Open items that are Stack's, not the PM's
 
-* **Phase 23 follow-ups (built and reviewed 2026-10-09; 187 on prod on your word).** Yours, in order:
-  1. **Your word for the cut-over** (task 20), after the merge. It covers the skills, `apply` rebuilt alone from
-     `main`, 188 on prod, the scheduled task `Bb2dash-Exports` and the first export. The one line in
-     bb2dash-stack's `.env` is yours to change: `COMPOSE_PROFILES=workspace,apply`.
+* **Phase 23 follow-ups (merged and cut over 2026-10-09 on your word; 187 and 188 on prod).** Yours, in order:
+  1. **The one line in bb2dash-stack's `.env`: `COMPOSE_PROFILES=workspace,apply`.** Everything else of the
+     cut-over is done (the skills, `apply` rebuilt alone from `main`, 188 on prod, the task `Bb2dash-Exports`,
+     the first export: 16 filed). Until the line is in, `just doctor` shows `apply` as a problem and
+     `just accept 23` is not started; `--check` passes. After it, the PM runs `just accept 23` from `main`
+     with no Phase 22 walk box running, and a green run counts.
   2. **`just doctor`, now and then.** It is the only place a failed scheduled export shows.
   3. **Three rows of pack 23 that a run cannot do for you:** one real answer of yours applied after a sync and
      read in the app; one decision note in the vault read; and `just file-decisions` when you want the day
