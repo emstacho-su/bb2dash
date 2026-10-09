@@ -631,3 +631,36 @@ Seen on the way: Vercel's production is still the build of `a58be34` (#83), beca
 installed on `stack-dev-personal`. `git diff a58be34 c19cd9a -- web` outside the tests names two files:
 `queries.grade-model.ts` (four lines) and the generated types. The run's `base_url` therefore serves the
 Inbox the pack expects.
+
+## Task 21: the acceptance runs, and the pause (2026-10-09, 12:21Z to 18:30Z)
+
+Stack put in his `.env` line and signed in to Blackboard; the doctor read `apply` "running, healthy" and
+`users/me 200`. `just accept 23 --check` had passed at `c19cd9a`.
+
+| Run | Commit | Counts | Verdict | What it showed |
+|---|---|---|---|---|
+| `20261009T122103Z` | `c19cd9a` (`main`) | yes | blocked | Stage `ready`: request 5071 open, a sync the sign-in had started itself. It closed done at 12:22:01Z |
+| `20261009T122218Z` | `c19cd9a` (`main`) | yes | blocked | Step 1: `carry.json holds no 1.run_tag_id`. The test raised items 6297 to 6300 and then read its own tag from a facts file written only at the test's end |
+| `20261009T122929Z` | `2486c10` (branch) | no | red | Step 1's test passed (6301 to 6304); the operator was unsure: `1-raised.png` had the card's title under the top bar and no tab row, and `confirm` was second in the list |
+| `20261009T123422Z` | `e2aec6f` (branch) | no | killed | Steps 1 and 2 passed. Sync 5072 done 12:38:03Z; request 5073 filed 12:38:03Z, claimed 12:38:08Z, done 12:38:08Z, "2 recorded only", items 6305 and 6306 archived by it. Step 3's button never left `Apply answers` and its count went to `0 answered`. The laptop slept from about 12:39Z; the facts were written at 14:44Z; the session's low-memory guard stopped the run |
+| `20261009T180141Z` | `fa8d535` (branch) | no | red | Stages `prepare`, `ready`, `walk` (steps 1, 2, 3, 4, 6 and their five proofs), `walk-proofs` and `stop` passed. Stage `offline`: step 7a's test passed (request 5077, `queued`, then `waiting on the worker…`, the command shown and naming 5077); the operator was unsure, because `7a-command.png` has the toast cut by the bottom of the window. The cleanup started `apply`; 5077 then closed done |
+| `20261009T182502Z` | `a7b2216` (branch) | no | stopped | Stopped by the PM at the pause, in stage `prepare`. Its container and volume were removed by hand; `apply`, `sync` and `workspace` were not touched |
+
+What each run left on prod was cleaned by the next, as 187 has it: the first question of a run archives
+every test row of another run tag (`archived_by = inbox_accept_question`, `closed_itself`). Read at the pause
+(18:35Z): no request is open, no test row is left open or answered, and four test decisions of run
+`20261009T180141Z` are archived and not yet marked: the next scheduled export marks them skipped.
+
+**The fixes (branch `fix/accept23-step1`, PR #91), each red first where a unit can hold it:**
+`d91b797`/`2486c10` `stepId()`; `e2aec6f` `shootCard()` and the playbook's seven shots; `fa8d535` step 3's
+third way; `01c4ce3`/`4a7e4a0` the toast above the button (`web/test/InboxApplyButton.css.test.ts`);
+`f52728e` step 7a brings the command into the window. Checks at `f52728e`: `accept-env` 23 tests,
+the toast's 4 with the button's 28, `acceptance.test.mjs` 41, `tsc` and eslint clean.
+
+**Also built on Stack's word that day:** the scheduled export's retry (bb2dash #90, bb2dash-stack #7), after
+two scheduled runs failed on "fetch failed" at 11:56Z and 17:24Z. Its review found one MEDIUM, open: no
+overall deadline across the tries.
+
+**Not done:** a green counting run; stages `back` and `file` in any run; the accepted record. The list of
+what is owed, requirement by requirement, is in STATUS, "Phase 23 follow-ups", "Where it stands at the
+pause".

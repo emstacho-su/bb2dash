@@ -1454,7 +1454,86 @@ items each, 122 s, 169 s and 117 s, reported cost 0.30, 0.43 and 0.39 USD.
   sentence, reused with its check.
 * The Vercel preview of the button has not been looked at by Stack.
 
-## Phase 23 follow-ups, 2026-10-08 to 2026-10-09: built, reviewed, merged, cut over; the acceptance run waits for the line in Stack's `.env`
+## Phase 23 follow-ups, 2026-10-08 to 2026-10-09: built, reviewed, merged, cut over; NOT ACCEPTED; development paused 2026-10-09 18:30Z
+
+### Where it stands at the pause (2026-10-09, 18:30Z, on Stack's word: "pause development")
+
+**Live and working.** Migrations 187, 188 and 107 are on prod, byte-identical. `apply` runs the image built
+from `main` at the cut-over and its profile is in Stack's `.env` (his line, about 12:15Z); the doctor's `apply`
+row reads "running, healthy". The task `Bb2dash-Exports` is registered and has filed 16 decisions. The SQL
+suite reads 82 of 82. Vercel deploys again and production is `main`. In the trial runs the product did what
+the follow-ups are for: a sync filed its apply request and the worker closed it in five seconds (requests
+5072 and 5073, then 5074 and 5075), a press of Apply answers ran by itself (5076), and a request filed while
+`apply` was stopped was taken when it came back (5077).
+
+**Not accepted.** No counting run of `just accept 23` has got past step 1. The pack that would accept the
+phase had three defects of its own, and the trials found one defect of the product. All four are fixed on a
+branch and none is on `main`.
+
+**Open pull requests of this work, each waiting for Stack's "merge"**
+
+| PR | What | State at the pause |
+|---|---|---|
+| bb2dash [#88](https://github.com/stack-dev-personal/bb2dash/pull/88) | This record: the cut-over, the embed of file 2851, the GEO.103 check, the pause | Docs only. `main` (with #89) is merged in. Ready |
+| bb2dash [#91](https://github.com/stack-dev-personal/bb2dash/pull/91) | Three fixes to pack 23 and the Apply answers toast, which opened below the window | **Visual: Stack looks at the preview first.** A read-only review was running at the pause; its findings are to be added here. Stages `back` and `file` are unproven |
+| bb2dash [#90](https://github.com/stack-dev-personal/bb2dash/pull/90) | The scheduled export tries again when there is no network yet (Stack's ask of 2026-10-09) | Tests green. **Reviewed, one MEDIUM open** (below). Not ready |
+| bb2dash-stack #7 | The doctor prints the reason word `no_network` | 346 tests green. Goes with #90 |
+
+Each of #90 and #91 appends a row to DECISIONS and will conflict with whichever merged before it; the later
+merge keeps every row.
+
+**Requirements of brief 110 still to be fulfilled** (its "Definition of done" and its acceptance script)
+
+| Requirement | State |
+|---|---|
+| SOP gates, the Contract, the reviews, the docs (tasks 1 to 19) | Fulfilled at the merge of #85 and bb2dash-stack #6 |
+| The cut-over in its order; the doctor's `apply` and `exports` rows green (task 20) | Fulfilled 2026-10-09 (the `.env` line about 12:15Z) |
+| **`just accept 23` from `main` is green (task 21)** | **NOT fulfilled.** Needs #91 on `main` and deployed, then a counting run |
+| The accepted record, naming what the run did not exercise, and the `Phase 23 accepted` DECISIONS row | Not written: there is no green run |
+
+| Step of pack 23 | Done by | State |
+|---|---|---|
+| 0, nothing open; 8, the doctor's two rows | host | Passed in every run that reached them |
+| 1, raise four questions, confirm one, dismiss one | sandbox | Passed in trial `20261009T180141Z`, with #91's fixes only |
+| 2, press Sync; the container takes it | sandbox | Passed in that trial |
+| 3, the sync's apply request closes with nothing pasted | sandbox | Passed in that trial (the page saw `done`); the new third way is unproven by a run |
+| 4, both answers under Archived | sandbox | Passed in that trial |
+| 6, a note, a press of Apply answers, it runs by itself | sandbox | Passed in that trial |
+| 9, the transform's answers (session stamps) | host | Passed in that trial |
+| `apply` stopped by the host | host | Passed in that trial |
+| 7a, a press while `apply` is stopped: waiting, then the command | sandbox | The test passed; the picture could not be judged (the toast was below the window). Fixed in #91, unproven |
+| 7b, the waiting request is taken after `apply` is back | sandbox | **Never run.** Request 5077 was in fact taken and closed, but no run has judged it |
+| 5, the export started now; the test decisions skipped; none unfiled | host | **Never run.** A run by hand at 18:01Z skipped two test decisions, which is the behaviour, not the proof |
+| 1-real, 5-note, 5-log | Stack | Not done: one real answer applied after a sync and read in the app; one vault note read; `just file-decisions` |
+| 9-supersede, 10-held | nobody (waived) | Stand on their units, as planned |
+
+None of the passes above counts: they came from a branch, and only a run from `main` accepts.
+
+**Open findings, not acted on because of the pause**
+
+* **#90, MEDIUM (review, confirmed by reading):** the retry has no overall deadline. Each start of the
+  exporter keeps its full 14-minute limit, so waits followed by one slow start can pass the task's
+  15-minute limit; the task is then killed before `state.json` is written, and the doctor shows the run
+  before it. Fix when work resumes: give each start what is left of one deadline, and stop trying when too
+  little is left. Three LOW: every fetch rejection counts as "unreachable" (a certificate error too); the
+  runner trusts a bare exit 3 without the result line; one test's name promises more than it checks.
+* **#91:** its review had not reported at the pause.
+* **A fourth trial run** (`20261009T182502Z`) was stopped at the pause while it was still cloning: nothing
+  on the live site was touched, and its container and volume were removed.
+* **Two things the product does that Stack has not been asked about:** an open Inbox shows no `done` and
+  no result line for an apply request the sync filed when it closes inside the page's 30-second look; and
+  an answered card reads "Apply answers is running" while its request only waits for a worker that is down.
+* **The machine:** the second trial ended when the laptop slept and the session's low-memory guard stopped
+  it. A counting run needs the laptop awake for about 40 minutes and memory to spare.
+
+**To resume, in order:** (1) the #91 review's findings, fixed test-first; (2) #90's MEDIUM; (3) one more
+trial from `fix/accept23-step1` to reach stages `back` and `file`, with no Phase 22 walk box running;
+(4) Stack's look at the toast on #91's preview and his "merge" for #88, #91, #90 and bb2dash-stack #7;
+(5) the shared checkouts fast-forwarded, production deployed; (6) a counting `just accept 23` from `main`;
+(7) on green the accepted record and its DECISIONS row; (8) the worktrees, the test image and the two
+`tmp/23f-*` branches removed on his word.
+
+### The build, the reviews and the cut-over
 
 Stack chose all four open follow-ups of Phase 23 on 2026-10-08, and an automated acceptance run for the
 phase. The plan is brief `docs/planning/sprint-2/briefs/110_PHASE23_followups.md` (frozen 2026-10-08, with
@@ -1555,9 +1634,10 @@ under `db/tests` only).
   `phase18_post_embed_checks` (file 2851's nine units). **82 of 82 since 2026-10-09 about 12:00Z**, when
   the embed ran on Stack's word (Known issues, below).
 
-**Not done, and why.** The line in bb2dash-stack's `.env` (`COMPOSE_PROFILES=workspace,apply`) is his and is
-not changed, so `just doctor` shows the `apply` row as a problem ("off, but a container of apply is
-running") and `just accept 23` has not been started: its first host stage reads that row. `just accept 23
+**What was not done at the cut-over.** The line in bb2dash-stack's `.env` (`COMPOSE_PROFILES=workspace,apply`)
+is his; until he put it in (about 12:15Z the same day) `just doctor` showed the `apply` row as a problem ("off, but
+a container of apply is running") and `just accept 23` was not started: its first host stage reads that row.
+What followed is at the top of this section. `just accept 23
 --check` passes (bb2dash at `c19cd9a`; "a green run would count as acceptance"). Once his line is in and no
 Phase 22 walk box is running: `just accept 23` from bb2dash-stack's `main`; a green run counts as Phase
 23's acceptance.
