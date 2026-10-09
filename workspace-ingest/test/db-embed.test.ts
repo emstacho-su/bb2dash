@@ -128,3 +128,76 @@ describe('the embed call', () => {
     expect(JSON.stringify(result)).not.toContain('SENTINEL');
   });
 });
+
+describe('a large document is embedded in one try (Phase 24a round 3)', () => {
+  const jwt = 'eyJ.synthetic.anon';
+  const PARTS_PER_CALL = 3;
+
+  /** A function that stores 3 parts a call and says how many are left; every call is counted. */
+  function storing(total: number, over: { perCall?: number } = {}) {
+    let left = total;
+    const perCall = over.perCall ?? PARTS_PER_CALL;
+    const calls: number[] = [];
+    const fetchFn = vi.fn(async () => {
+      const stored = Math.min(perCall, left);
+      left -= stored;
+      calls.push(left);
+      return new Response(JSON.stringify({ ...embedFixture.answer, inserted_rows: stored, remaining_parts: left, failed: [] }), { status: 200 });
+    });
+    return { fetchFn: fetchFn as unknown as typeof fetch, calls, left: () => left };
+  }
+
+  it('400 parts take 134 calls and end embedded (the loop alone stopped at 60 calls)', async () => {
+    const s = storing(400);
+    const r = await embedDocument({ documentId: 17, jwt, fetch: s.fetchFn, sleep: async () => undefined });
+    expect(r).toMatchObject({ exitCode: 0, stop: null });
+    expect(s.calls.length).toBe(134);
+    expect(s.left()).toBe(0);
+  });
+
+  it('1,500 parts take 500 calls and end embedded', async () => {
+    const s = storing(1500);
+    const r = await embedDocument({ documentId: 17, jwt, fetch: s.fetchFn, sleep: async () => undefined });
+    expect(r.exitCode).toBe(0);
+    expect(s.calls.length).toBe(500);
+  });
+
+  it('a pass that stores nothing and leaves parts is a failed try, after that one call', async () => {
+    const s = storing(10, { perCall: 0 });
+    const r = await embedDocument({ documentId: 17, jwt, fetch: s.fetchFn, sleep: async () => undefined });
+    expect(r).toMatchObject({ exitCode: 1, stop: 'no_progress', progressed: false });
+    expect(s.calls.length).toBe(1);
+  });
+
+  it('a pass whose remaining count does not go down is no progress either', async () => {
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify({ ...embedFixture.answer, inserted_rows: 3, remaining_parts: 9, failed: [] }), { status: 200 }));
+    const r = await embedDocument({ documentId: 17, jwt, fetch: fetchFn as unknown as typeof fetch, sleep: async () => undefined });
+    expect(r).toMatchObject({ exitCode: 1, stop: 'no_progress', progressed: true });
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('past the document time bound it stops with progress made, and says so', async () => {
+    const s = storing(1500);
+    let now = 0;
+    const r = await embedDocument({
+      documentId: 17,
+      jwt,
+      fetch: s.fetchFn,
+      sleep: async () => undefined,
+      deadlineMs: 10_000,
+      now: () => {
+        now += 1000;
+        return now;
+      },
+    });
+    expect(r).toMatchObject({ exitCode: 1, stop: 'timed_out', progressed: true });
+    expect(s.left()).toBeGreaterThan(0);
+    expect(s.left()).toBeLessThan(1500);
+  });
+
+  it('a non-200 is a failed try with no progress claimed', async () => {
+    const fetchFn = vi.fn(async () => new Response('no', { status: 401 }));
+    const r = await embedDocument({ documentId: 17, jwt, fetch: fetchFn as unknown as typeof fetch, sleep: async () => undefined });
+    expect(r).toMatchObject({ exitCode: 1, stop: 'error', progressed: false });
+  });
+});

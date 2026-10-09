@@ -35,7 +35,7 @@ describe('a parsed file', () => {
     const state = await processDocument(claimFor(body, 'application/pdf'), h.deps);
     expect(state).toBe('indexed');
     expect(h.rpc.puts).toEqual([{ documentId: 17, units: TWO_PAGES }]);
-    expect(h.embed).toHaveBeenCalledWith(17);
+    expect(h.embed).toHaveBeenCalledWith(17, NOW_MS + 540_000);
     expect(h.rpc.finishes).toEqual([{ documentId: 17, outcome: 'indexed', code: null }]);
     expect(h.requests).toEqual([{ document_id: 17, file: 'doc-17.pdf' }]);
   });
@@ -360,7 +360,7 @@ describe('the claim itself', () => {
     });
     expect(await processDocument(claim, h.deps)).toBe('indexed');
     expect(h.fetch).not.toHaveBeenCalled();
-    expect(h.embed).toHaveBeenCalledWith(17);
+    expect(h.embed).toHaveBeenCalledWith(17, NOW_MS + 540_000);
     expect(h.rpc.puts).toEqual([]);
     expect(h.rpc.finishes).toEqual([{ documentId: 17, outcome: 'indexed', code: null }]);
   });
@@ -380,6 +380,14 @@ describe('the embed and the end', () => {
     const h = harness({ body, embedExit: 1 });
     await processDocument(claimFor(body, 'text/plain'), h.deps);
     expect(h.rpc.finishes).toEqual([{ documentId: 17, outcome: 'retry', code: 'embed_failed' }]);
+  });
+
+  it('an embed that stops with progress made is a retry too, and the stop is logged by name', async () => {
+    const h = harness({ body });
+    (h.embed as unknown as { mockResolvedValueOnce: (v: unknown) => void }).mockResolvedValueOnce({ exitCode: 1, stop: 'timed_out', progressed: true });
+    await processDocument(claimFor(body, 'text/plain'), h.deps);
+    expect(h.rpc.finishes).toEqual([{ documentId: 17, outcome: 'retry', code: 'embed_failed' }]);
+    expect(h.logs.some((l) => l.includes('embed stopped (timed_out, progress made)'))).toBe(true);
   });
 
   it('a finish that refuses indexed becomes a retry of embed_failed', async () => {
