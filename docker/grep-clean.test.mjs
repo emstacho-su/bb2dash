@@ -12,8 +12,8 @@
 //
 // The ignore file is the one BuildKit reads: `<Dockerfile>.dockerignore` beside the Dockerfile when
 // there is one (the workspace image, brief 102 task 12), else the context's own `.dockerignore`. The
-// workspace image also builds the harness `rag` server, which arrives through a named build context
-// (`COPY --from=harness-mcp`): another repo's source, not scanned here.
+// workspace images take the pinned CA from a named build context (`COPY --from=harness-certs`):
+// another repo's file, not scanned here.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,6 +29,7 @@ export const IMAGES = Object.freeze([
   { name: 'bb2dash-mcp', dockerfile: 'mcp-server/Dockerfile', context: 'mcp-server' },
   { name: 'workspace', dockerfile: 'docker/workspace/Dockerfile', context: '.' },
   { name: 'apply', dockerfile: 'docker/apply/Dockerfile', context: '.' },
+  { name: 'workspace-ingest', dockerfile: 'docker/workspace-ingest/Dockerfile', context: '.' },
 ]);
 
 /** What BuildKit appends to a Dockerfile's name to find that Dockerfile's own ignore file. */
@@ -64,7 +65,7 @@ export const CLAUDE_CODE_PIN = '2.1.289';
 const CLI_INSTALL = 'npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"';
 const CLI_HANDOVER = 'chown -R root:root /usr/local/share/npm-global';
 /** The scripts the workspace image runs, and a line of one that runs iproute2's `ip` (not iptables, ipset or ip6tables). */
-const WORKSPACE_SCRIPTS = Object.freeze(['docker/workspace/entrypoint.sh', 'docker/workspace/init-firewall.sh', 'docker/workspace/mcp-rag.sh']);
+const WORKSPACE_SCRIPTS = Object.freeze(['docker/workspace/entrypoint.sh', 'docker/workspace/init-firewall.sh']);
 const CALLS_IP = /(^|[\s;&|(`])ip\s+-?[a-z0-9]/m;
 /** What the image runs out of the runner package, as the package's own source paths (brief 102, Seams, "W-64 and W-65"). */
 const RUNNER_SOURCES = Object.freeze(['src/runner.ts', 'src/healthcheck.ts', 'src/hooks/tool-gate.ts', 'claude/settings.json', 'prompts/system.md']);
@@ -77,9 +78,6 @@ export const DB_CA_FILE = '/app/certs/prod-ca.crt';
 const DB_CA_COPY = `COPY --from=harness-certs prod-ca.crt ${DB_CA_FILE}`;
 const DB_CA_CHMOD = `chmod 0444 ${DB_CA_FILE}`;
 const DB_CA_SETTING = `WORKSPACE_DB_CA_FILE: ${DB_CA_FILE}`;
-/** The rag launcher reads the same file: where it looks, the check it keeps, and how the path reaches the server. */
-const RAG_CA_LINES = Object.freeze([`readonly CA_CERT=${DB_CA_FILE}`, '[ -r "$CA_CERT" ] || fail ', 'DATABASE_CA_CERT="$CA_CERT"']);
-const RAG_CA_OF_ITS_OWN = /\/app\/mcp-rag\/certs|\$HERE\/certs/;
 /** Ruling V2: the working directory of every turn, root's, and the one mode it may be given. */
 export const TURN_DIR = '/app/turn';
 const TURN_DIR_OWNER = 'root:root';
@@ -91,8 +89,9 @@ const readRepo = (relative) => fs.readFileSync(path.join(REPO, relative), 'utf8'
 /** The `workspace:` service block of compose.yaml, up to the top-level `volumes:` key. */
 function workspaceService(compose) {
   const start = compose.indexOf('\n  workspace:\n');
-  const end = compose.indexOf('\nvolumes:\n', start);
-  return start === -1 || end === -1 ? '' : compose.slice(start, end);
+  // To the next service (Phase 24a added two after it) or the top-level volumes, whichever comes first.
+  const rest = start === -1 ? -1 : compose.slice(start + 1).search(/\n {2}[a-z][a-z0-9-]*:\n|\nvolumes:\n/);
+  return rest === -1 ? '' : compose.slice(start, start + 1 + rest);
 }
 
 /** 102a, PM rulings T1, "the pin cannot move by itself": every way the image's CLI could still change under its pin. */
@@ -152,8 +151,8 @@ function commandsNaming(instructions, target) {
     .filter((words) => words.some((word) => word === target || word.startsWith(`${target}/`)));
 }
 
-/** Ruling V2: every way the image, the service or the rag launcher could miss the one pinned CA. */
-export function caFileProblems(dockerfile, compose, launcher) {
+/** Ruling V2: every way the image or the service could miss the one pinned CA. */
+export function caFileProblems(dockerfile, compose) {
   const problems = [];
   const runtime = runtimeInstructions(dockerfile);
   // A plain COPY from the named context is root's; any flag (a --chown among them) makes it another line.
@@ -168,11 +167,6 @@ export function caFileProblems(dockerfile, compose, launcher) {
   if (copiedAt !== -1 && commandsNaming(runtime.slice(0, copiedAt), DB_CA_FILE).length > 0) problems.push('the CA is given its mode before it is copied');
   const service = stripComments('compose.yaml', workspaceService(compose));
   if (!service.split(/\r?\n/).includes(`      ${DB_CA_SETTING}`)) problems.push(`compose.yaml does not set ${DB_CA_SETTING} for the workspace service`);
-  const code = stripComments('mcp-rag.sh', launcher);
-  for (const line of RAG_CA_LINES) {
-    if (!code.includes(line)) problems.push(`the rag launcher does not hold: ${line.trim()}`);
-  }
-  if (RAG_CA_OF_ITS_OWN.test(code)) problems.push('the rag launcher still names a CA file of its own');
   return problems;
 }
 
@@ -380,37 +374,33 @@ test('the workspace Dockerfile pins the CLI, builds the materials server in a st
   assert.deepEqual(runnerStageMismatches(dockerfile, compose), []);
 });
 
-test("ruling V2: one pinned CA at /app/certs/prod-ca.crt, root's and read-only, named by the service and read by the rag launcher", () => {
+test("ruling V2: one pinned CA at /app/certs/prod-ca.crt, root's and read-only, named by the service", () => {
   const dockerfile = readRepo(imageNamed('workspace').dockerfile);
-  assert.deepEqual(caFileProblems(dockerfile, readRepo('compose.yaml'), readRepo('docker/workspace/mcp-rag.sh')), []);
+  assert.deepEqual(caFileProblems(dockerfile, readRepo('compose.yaml')), []);
   // The check can fail: the image as it was before the ruling (the CA under the rag server alone, no setting).
   const before = caFileProblems(
     'FROM base\nCOPY --from=harness-certs prod-ca.crt /app/mcp-rag/certs/prod-ca.crt\n',
     '\n  workspace:\n    environment:\n      DISABLE_AUTOUPDATER: "1"\nvolumes:\n',
-    'readonly HERE=/app/mcp-rag\nreadonly CA_CERT="$HERE/certs/prod-ca.crt"\n[ -r "$CA_CERT" ] || fail "no"\nDATABASE_CA_CERT="$CA_CERT" exec node x\n',
   );
   assert.deepEqual(before, [
     `the runtime stage does not hold: ${DB_CA_COPY}`,
     'another copy of the CA: COPY --from=harness-certs prod-ca.crt /app/mcp-rag/certs/prod-ca.crt',
     `the runtime stage does not run: ${DB_CA_CHMOD}`,
     `compose.yaml does not set ${DB_CA_SETTING} for the workspace service`,
-    `the rag launcher does not hold: readonly CA_CERT=${DB_CA_FILE}`,
-    'the rag launcher still names a CA file of its own',
   ]);
   // Nor is a copy that is node's, a mode or an owner changed afterwards, a mode set too early, or a
   // setting that is only a comment, let through.
   const tight = `FROM base\n${DB_CA_COPY}\nRUN ${DB_CA_CHMOD}\n`;
   const set = `\n  workspace:\n    environment:\n      ${DB_CA_SETTING}\nvolumes:\n`;
-  const reads = RAG_CA_LINES.join('\n');
-  assert.deepEqual(caFileProblems(tight, set, reads), []);
-  assert.deepEqual(caFileProblems(tight.replace('COPY ', 'COPY --chown=node:node '), set, reads), [
+  assert.deepEqual(caFileProblems(tight, set), []);
+  assert.deepEqual(caFileProblems(tight.replace('COPY ', 'COPY --chown=node:node '), set), [
     `the runtime stage does not hold: ${DB_CA_COPY}`,
     `another copy of the CA: COPY --chown=node:node --from=harness-certs prod-ca.crt ${DB_CA_FILE}`,
   ]);
-  assert.deepEqual(caFileProblems(`${tight}RUN chmod 0666 ${DB_CA_FILE}\n`, set, reads), [`another command names the CA or its folder: chmod 0666 ${DB_CA_FILE}`]);
-  assert.deepEqual(caFileProblems(`${tight}RUN chown -R node:node /app/certs\n`, set, reads), ['another command names the CA or its folder: chown -R node:node /app/certs']);
-  assert.deepEqual(caFileProblems(`FROM base\nRUN ${DB_CA_CHMOD}\n${DB_CA_COPY}\n`, set, reads), ['the CA is given its mode before it is copied']);
-  assert.deepEqual(caFileProblems(tight, set.replace(`      ${DB_CA_SETTING}`, `      # ${DB_CA_SETTING}`), reads), [
+  assert.deepEqual(caFileProblems(`${tight}RUN chmod 0666 ${DB_CA_FILE}\n`, set), [`another command names the CA or its folder: chmod 0666 ${DB_CA_FILE}`]);
+  assert.deepEqual(caFileProblems(`${tight}RUN chown -R node:node /app/certs\n`, set), ['another command names the CA or its folder: chown -R node:node /app/certs']);
+  assert.deepEqual(caFileProblems(`FROM base\nRUN ${DB_CA_CHMOD}\n${DB_CA_COPY}\n`, set), ['the CA is given its mode before it is copied']);
+  assert.deepEqual(caFileProblems(tight, set.replace(`      ${DB_CA_SETTING}`, `      # ${DB_CA_SETTING}`)), [
     `compose.yaml does not set ${DB_CA_SETTING} for the workspace service`,
   ]);
 });

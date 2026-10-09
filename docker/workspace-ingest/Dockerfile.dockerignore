@@ -1,0 +1,29 @@
+# The ingest image's build context is the repo root (docker/workspace-ingest/Dockerfile, Phase 24a).
+# BuildKit reads this file, and not the root .dockerignore, because it sits beside that Dockerfile
+# under the Dockerfile's own name.
+#
+# An allow-list: only the folders that Dockerfile copies from are sent. Every node_modules, dist,
+# coverage and .venv folder and every .env file stay out, so nothing host-built and nothing secret
+# reaches a layer. `workspace/src` is bundled into the worker (config, db, alive); `ingest/` holds the
+# locked Python set and the helpers both services import.
+*
+!docker/workspace-ingest/
+!workspace-ingest/
+!workspace/src/
+!ingest/pyproject.toml
+!ingest/uv.lock
+!ingest/extract_text.py
+!ingest/pull_files.mjs
+!ingest/fetch_signed.mjs
+!ingest/embed_corpus.mjs
+workspace-ingest/test
+workspace-ingest/node_modules
+workspace-ingest/dist
+workspace-ingest/coverage
+**/node_modules
+**/dist
+**/coverage
+**/.venv
+**/__pycache__
+**/.env
+**/.env.*

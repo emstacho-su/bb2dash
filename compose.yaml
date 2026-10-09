@@ -158,7 +158,8 @@ services:
 
   # The Workspace runner (brief 102 task 12; P-85, P-88): it takes queued questions through the five
   # `workspace_runner` functions and answers each with one `claude -p` turn on Stack's subscription
-  # token, with the materials and rag MCP servers beside it. Read-only: no tool it offers can write.
+  # token, with the materials MCP server beside it (Phase 24a: the rag server is gone). Read-only: no
+  # tool it offers can write.
   #
   # Profile `workspace`, so a plain `up` never builds, starts, waits on or restarts it: the desktop's
   # sign-in task runs this file with no profile. bb2dash-stack's .env sets COMPOSE_PROFILES=workspace,
@@ -175,13 +176,11 @@ services:
     build:
       context: .
       dockerfile: docker/workspace/Dockerfile
-      # The harness rag server is built from the harness checkout, never copied from the host's
-      # node_modules or dist. HARNESS_DIR is the umbrella's setting; unset, the sibling folder.
+      # The pinned CA comes from the harness checkout's certs/ folder (Phase 24a: the rag server's
+      # build context harness-mcp is gone). HARNESS_DIR is the umbrella's setting; unset, the sibling folder.
       additional_contexts:
-        harness-mcp: ${HARNESS_DIR:-../agentic-harness}/mcp-server
         harness-certs: ${HARNESS_DIR:-../agentic-harness}/certs
     image: bb2dash-workspace:local
-    # Intel only: the rag server's tokenizer has no linux-arm64 build.
     platform: linux/amd64
     # Passes SIGTERM to the runner and reaps the MCP server children a killed CLI leaves behind.
     init: true
@@ -194,8 +193,10 @@ services:
     # with an empty bounding set, so the runner and everything it starts hold neither.
     cap_add: [NET_ADMIN, NET_RAW]
     environment:
-      # The CLI's config and transcripts live on the workspace-claude-home volume.
+      # The CLI's config lives on a tmpfs (freeze amendment F-4): no session persists.
       CLAUDE_CONFIG_DIR: /home/node/.claude
+      # Memory jobs (the rolling summary and the remembered items) are off until Stack turns them on.
+      WORKSPACE_MEMORY_JOBS: "off"
       # No telemetry, error reports or update checks: the firewall allows api.anthropic.com only.
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
       # The CLI never updates itself: the image pins one version, and its install folder is root's.
@@ -212,18 +213,20 @@ services:
     # Its own network, never `default`: it shares none with `sync`. No port is published.
     networks:
       - workspace-net
-    volumes:
-      # The CLI's transcripts (kept 30 days), so a conversation can be resumed. Not a credential.
-      - workspace-claude-home:/home/node/.claude
+    # The CLI's ~/.claude is a tmpfs owned by node (freeze amendment F-4; probe P-2): with
+    # --no-session-persistence nothing is kept, and nothing survives a restart. The named volume
+    # workspace-claude-home is no longer mounted by anyone; its entry below stays so that this file
+    # removes no volume from a machine. /run/workspace stays the entrypoint's own 0700 node folder:
+    # the runner writes mcp-none.json at start and mcp-<request id>.json for each answer there.
+    tmpfs:
+      - /home/node/.claude:uid=1000,gid=1000,mode=0700,size=64m
     # Files, never values. The runner reads workspace_runner_db_url and claude_oauth_token at their
-    # fixed paths; the materials server reads bb2dash_mcp_service_key, and the rag launcher
-    # harness_database_url. No variable names a secret's file (the one `*_FILE` variable above
-    # names the public CA) and no DATABASE_URL is set for this service.
+    # fixed paths; the materials server reads bb2dash_mcp_service_key. No variable names a secret's
+    # file (the one *_FILE variable above names the public CA) and no DATABASE_URL is set.
     secrets:
       - workspace_runner_db_url
       - claude_oauth_token
       - bb2dash_mcp_service_key
-      - harness_database_url
     # Passes while /run/workspace/alive is under 90 s old: the runner touches it after each
     # heartbeat (every 30 s), so healthy means the loop is alive and reached the database.
     healthcheck:
@@ -238,15 +241,111 @@ services:
         max-size: 10m
         max-file: "3"
 
+  # The ingest worker (Phase 24a, brief 109, freeze amendment F-3): it claims uploads and remembered items
+  # through the four workspace_ingest_runner functions, downloads a signed link, hands a parsed file to
+  # workspace-extract through the exchange volume, puts the units and embeds them. It holds no model, no
+  # Claude token and no service key; its firewall (docker/workspace-ingest/init-firewall.sh) allows the
+  # project host on tcp/443 and its pooler on tcp/5432 and nothing else. The root is NOT read-only: the
+  # firewall pins names in /etc/hosts. Profile workspace: a plain up never starts it.
+  workspace-ingest:
+    profiles: [workspace]
+    build:
+      context: .
+      dockerfile: docker/workspace-ingest/Dockerfile
+      additional_contexts:
+        harness-certs: ${HARNESS_DIR:-../agentic-harness}/certs
+    image: bb2dash-workspace-ingest:local
+    platform: linux/amd64
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    mem_limit: 1g
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    # For the entrypoint's firewall alone; it then drops to node with an empty bounding set.
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      - ingest-net
+    volumes:
+      - ingest-exchange:/exchange
+    secrets:
+      - workspace_ingest_db_url
+      - supabase_anon_jwt
+    healthcheck:
+      test: ["CMD", "node", "/app/workspace-ingest/dist/healthcheck.js", "worker"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  # The parser's loop (Phase 24a, F-3): the same image as workspace-ingest, another command. It reads one
+  # request at a time from /exchange and runs the locked extractor. No network, no secret, a read-only
+  # root, every capability dropped, the user extract; no root entrypoint, since there is no firewall to
+  # raise. A hostile file can take it over and return wrong text; it can reach nothing else.
+  workspace-extract:
+    profiles: [workspace]
+    image: bb2dash-workspace-ingest:local
+    platform: linux/amd64
+    init: true
+    restart: unless-stopped
+    user: extract
+    entrypoint: ["node", "/app/workspace-ingest/dist/parser-main.js"]
+    command: []
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    pids_limit: 128
+    environment:
+      # uv and Python write their scratch here (the root is read-only); the tmpfs below is theirs.
+      HOME: /tmp
+      UV_CACHE_DIR: /tmp/uv-cache
+    tmpfs:
+      - /tmp:mode=1777,size=256m
+    volumes:
+      - ingest-exchange:/exchange
+    healthcheck:
+      test: ["CMD", "node", "/app/workspace-ingest/dist/healthcheck.js", "parser"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
 volumes:
   bb-profile:
   course-files:
-  # The Workspace CLI's ~/.claude: transcripts only.
+  # The Workspace CLI's old ~/.claude volume. No service mounts it since Phase 24a (a tmpfs took its
+  # place); the entry stays so that no file removes the volume from a machine.
   workspace-claude-home:
+  # The exchange between the ingest worker and the parser (Phase 24a, F-3): tmpfs, 96 MB, mounted by
+  # workspace-ingest and workspace-extract and no other service. Owner root, group 1100 (exchange, which
+  # node and extract both belong to), mode 0770 and no sticky bit, so either user can remove what the
+  # other wrote (a sticky 1777 would not let the worker remove the parser's file).
+  ingest-exchange:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=96m,uid=0,gid=1100,mode=0770"
   # The apply worker's CLI ~/.claude: transcripts only.
   apply-claude-home:
 
 networks:
+  # The ingest worker's own bridge: it shares none with the sync or the Workspace.
+  ingest-net:
   # The Workspace's own bridge, so it is on no network another service is on.
   workspace-net:
   # The apply worker's own bridge, for the same reason: never the network `sync` is on.
@@ -264,14 +363,16 @@ secrets:
   # The bb2dash service key; this file is its only home (brief 100, Local surfaces).
   bb2dash_mcp_service_key:
     file: ${SECRETS_DIR:-./secrets}/bb2dash_mcp_service_key
-  # The Workspace's three (brief 102): the runner's own database login through the session pooler
-  # (role workspace_runner, port 5432), the `claude setup-token` token, and the harness store's URL.
+  # The Workspace's two (brief 102): the runner's own database login through the session pooler
+  # (role workspace_runner, port 5432) and the `claude setup-token` token.
   workspace_runner_db_url:
     file: ${SECRETS_DIR:-./secrets}/workspace_runner_db_url
   claude_oauth_token:
     file: ${SECRETS_DIR:-./secrets}/claude_oauth_token
-  harness_database_url:
-    file: ${SECRETS_DIR:-./secrets}/harness_database_url
+  # The ingest worker's own database login through the session pooler (role workspace_ingest_runner,
+  # port 5432; Phase 24a, migration 193). It also mounts supabase_anon_jwt above.
+  workspace_ingest_db_url:
+    file: ${SECRETS_DIR:-./secrets}/workspace_ingest_db_url
   # The apply worker's own database login through the session pooler (role inbox_apply_runner, port
   # 5432; Phase 23, migration 181). It shares claude_oauth_token and bb2dash_mcp_service_key above.
   inbox_apply_db_url:

@@ -4,9 +4,9 @@
 #
 # An allow-list: only the three folders that Dockerfile copies from are sent. Every node_modules,
 # dist and coverage folder and every .env file stay out, so nothing host-built (a Windows
-# node_modules has the wrong native binaries) and nothing secret reaches a layer. The harness `rag`
-# server does not come from this context at all: compose.yaml hands its folder to the build as the
-# named contexts `harness-mcp` and `harness-certs`.
+# node_modules has the wrong native binaries) and nothing secret reaches a layer. The pinned CA
+# does not come from this context: compose.yaml hands its folder to the build as the
+# named context `harness-certs`.
 *
 !docker/workspace/
 !workspace/
