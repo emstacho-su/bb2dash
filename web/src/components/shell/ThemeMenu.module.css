@@ -1,0 +1,77 @@
+/* ============================================================================
+   ThemeMenu — Dark / Light / Auto, inside the account menu (Phase 22, task 10).
+
+   The rows are drawn like the account menu's own rows (TopNav .ddRow) and are
+   written here so this module does not reach into another worker's file. Tokens
+   only: no colour, size or time of its own.
+   ========================================================================= */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--space-1);
+  box-shadow: inset 0 -1px 0 var(--color-divider);
+}
+
+/* a small-capital label: it names the group and is not a control */
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--size-10) var(--size-12) var(--size-6);
+  font-family: var(--font-body);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+  user-select: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-10);
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--size-8) var(--size-12);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--text-13);
+  text-align: left;
+  text-decoration: none;
+  color: var(--color-text);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: var(--motion-control);
+}
+.row:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+.row:active { background: var(--color-active); }
+.row:focus-visible {
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: calc(var(--size-focus) * -1);
+}
+
+/* the picked theme: a tick in the ink, so the choice is a shape and not a colour */
+.row::after {
+  content: '';
+  width: var(--size-10);
+  height: var(--size-10);
+  margin-left: auto;
+  background: var(--color-accent);
+  clip-path: polygon(10% 52%, 0 66%, 38% 100%, 100% 22%, 86% 8%, 37% 72%);
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity var(--motion-state) var(--ease-out),
+    transform var(--motion-state) var(--ease-out);
+}
+.row[aria-checked='true']::after {
+  opacity: 1;
+  transform: none;
+}

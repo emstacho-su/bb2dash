@@ -552,3 +552,78 @@ nothing beyond the two `--text-*` names above.
    localises `animation` names). For W-69.
 6. **`--color-surface-press`** is D's `color-mix(text 8%, surface)`; the reader's `color-mix` second argument may be a
    `var()` that ends in a plain colour, which this is.
+
+## Task 9: theme-preference, the boot script, the root layout (P-76, P-78, R-53)
+
+Files: `web/src/lib/theme-preference.ts` (new), `web/src/app/layout.tsx`, `web/test/theme-preference.test.ts` (new),
+`web/test/raw-html.audit.test.ts` (the three parts the brief names: the header sentence, the allow-list constants, the
+two cases that read them; the scanner, its fixtures and `OTHER_SINKS` are as they were),
+`web/test/token-audit.baseline/foundation.json` (`layout.tsx` 1 to 0, in this commit).
+
+| Step | Command | Exit | Result |
+|---|---|---|---|
+| RED: the new test with `theme-preference.ts` moved aside | `npx vitest run test/theme-preference.test.ts test/raw-html.audit.test.ts` | 1 | the new file failed to load (no module); `raw-html.audit` 6 passed |
+| GREEN | same | 0 | 2 files, 43 passed (43) |
+| the token audit after the root layout lost its literal | `npx vitest run test/token-audit.test.ts` | 1, then 0 | "layout.tsx counts 0, below its baseline of 1"; passes once the baseline is lowered |
+| `npm test` | | 0 | 165 files, 3275 passed (3275) |
+| `npm run typecheck` | | 0 | no error |
+| `npx eslint . --max-warnings 0` | | 0 | no output |
+| `grep -c "#161826" web/src/app/layout.tsx` | | | 0 |
+| `grep -c "__html: THEME_BOOT_SCRIPT" web/src/app/layout.tsx` | | | 1 |
+| `git grep -c "dangerouslySetInnerHTML=" -- web/src` | | | `web/src/app/(app)/layout.tsx:1`, `web/src/app/layout.tsx:1` |
+
+What the test proves: the nine rows of `resolveTheme` (and the same nine through the real script in jsdom with a
+stubbed `matchMedia`, each stamping the expected `data-theme` and writing and removing no storage); no `matchMedia`
+stamps dark and does not throw; a stored `dark` or junk value is left where it is; a resolved light sets every
+`theme-color` meta; a `change` event with `auto` stored re-stamps the attribute and the metas and sets
+`data-theme-switching`, gone two frames later, and with nothing, `light`, `dark` or junk stored it changes neither;
+the boot stamp never sets the switching mark; the listener is registered whatever is stored and reads storage again on
+each change; `THEME_BG` equals the blocks' `--color-bg` read by the reader; `THEME_COLOR` equals `THEME_BG.dark`.
+
+Defaults taken:
+
+1. **`suppressHydrationWarning` on `<html>`.** The boot script stamps `data-theme` before React hydrates and React never
+   renders it, so the attribute is the one thing the server HTML and the client may disagree on. The brief does not name
+   it; it is the standard form for this and affects only that element's own attributes.
+2. **`resolveTheme(stored, systemPrefersLight)`** takes `null` for "no `matchMedia`", so the nine rows are the function's
+   own table and the script's behaviour is tested against the same rows.
+3. **`stampTheme(theme, switching)`** and the storage helpers are exported for `ThemeMenu` (task 10). The script does the
+   same work in its own text because it cannot import.
+4. **The listener falls back to `addListener`** where `addEventListener` is missing on the query (an old engine); the
+   test stubs only `addEventListener`.
+
+## Task 10: ThemeMenu, the component (P-77, R-53)
+
+Files: `web/src/components/shell/ThemeMenu.tsx`, `web/src/components/shell/ThemeMenu.module.css` (tokens only),
+`web/test/ThemeMenu.test.tsx` (new). The mount in `TopNav.tsx` is W-68's (`grep -c "<ThemeMenu"` is theirs to bring to 1).
+Skill: loaded for this task (the Skill tool, at the start of task 8, stays loaded in this session); `MASTER.md` and the
+tile's account-menu fragment (`tile-d.html`, the `ddGroup` block and `.ddRow[role="menuitemradio"]`) were read first.
+No search was run. The look is the tile's: a "Theme" small-capital head, three rows like the account menu's own rows,
+the picked row marked by a tick in the ink (a shape, not a colour).
+
+| Step | Command | Exit | Result |
+|---|---|---|---|
+| RED: the new test with `ThemeMenu.tsx` moved aside | `npx vitest run test/ThemeMenu.test.tsx test/TopNav.update.test.tsx` | 1 | the new file failed to load; `TopNav.update` 8 passed |
+| GREEN | same | 0 | 2 files, 23 passed (23) |
+| `npm test` | | 0 | 166 files, 3290 passed (3290) |
+| `npm run typecheck` | | 0 | no error |
+| `npx eslint . --max-warnings 0` | | 0 | no output |
+| Time check over `web/src/components/shell/ThemeMenu.module.css` (the file read directly, as it was not yet tracked) | | 1 (no match) | prints nothing |
+
+The test proves: exactly three `menuitemradio` rows named Dark, Light, Auto in DOM order, no `menuitem`; Dark checked
+with no key, and under a stubbed light system; a stored `light` or `auto` checks its row; a stored `dark`, junk or
+empty value shows Dark; Light writes `light`, stamps the attribute and every meta; Auto follows a stubbed light or dark
+system and, with no `matchMedia`, stamps dark; Dark removes the key and stamps dark; a throwing storage still stamps
+and the checked row follows the pick; a pick sets `data-theme-switching`, gone two animation frames later.
+
+Defaults taken:
+
+1. **The rows sit in a `role="group"` named "Theme"**, with a "Theme" head, as the tile draws it. The group is a child
+   of the account menu's `role="menu"`, which ARIA allows for `menuitemradio`.
+2. **Same-tab refresh of the checked row**: `useSyncExternalStore` is notified by a module-level listener set after the
+   component's own write (the `storage` event only fires in other tabs). The picked value is also kept in state so a
+   throwing storage still shows the pick.
+3. **The mount is W-68's.** `ThemeMenu` takes no props; W-68 places `<ThemeMenu />` between the identity block and the
+   Update row, as the tile does. Its rows are `menuitemradio`, so the Update row's `menuitem` list does not change.
+4. **Keyboard**: the rows are buttons, so Tab reaches them; the arrow-key behaviour of the account menu is W-68's task 32
+   (the theme rows "are in the order").
