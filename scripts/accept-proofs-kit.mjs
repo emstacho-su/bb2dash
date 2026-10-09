@@ -47,8 +47,12 @@ const MIGRATIONS = path.join(REPO, 'db', 'migrations');
 const NOT_A_COLUMN = new Set(['constraint', 'check', 'unique', 'primary', 'foreign', 'references', 'exclude', 'like']);
 const WORD_CHARACTER = /[A-Za-z0-9_]/;
 
-const migrationTexts = () =>
-  fs.readdirSync(MIGRATIONS).filter((name) => name.endsWith('.sql')).sort().map((file) => fs.readFileSync(path.join(MIGRATIONS, file), 'utf8'));
+let migrationTextsRead = null;
+/** Every migration's text, in order; read once, because a test asks for the columns of several tables. */
+const migrationTexts = () => {
+  migrationTextsRead ??= fs.readdirSync(MIGRATIONS).filter((name) => name.endsWith('.sql')).sort().map((file) => fs.readFileSync(path.join(MIGRATIONS, file), 'utf8'));
+  return migrationTextsRead;
+};
 
 /** The end of the string literal that opens at `from` (just past its closing quote); doubled quotes stay inside. */
 function endOfLiteral(sql, from) {
