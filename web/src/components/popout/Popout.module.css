@@ -57,10 +57,6 @@
     opacity var(--motion-exit-lg) var(--ease-in),
     transform var(--motion-exit-lg) var(--ease-in);
 }
-.panel:focus-visible {
-  outline: var(--size-focus) solid var(--color-accent);
-  outline-offset: var(--size-focus-gap);
-}
 .close {
   all: unset;
   position: absolute;
