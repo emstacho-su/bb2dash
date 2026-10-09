@@ -425,3 +425,8 @@ Two findings in W-67's files, not fixed by me:
 `SubmissionBlock.tsx:175` prints `submission.attemptText` (inside the `submission.attemptStatus &&` it had), and `SubmissionBlock.test.tsx:146` reads `'last attempt: needs grading'`, the one line the brief lets me edit
 (the test and the component were changed together, so there is no separate RED run for this one). `grep -c "submission.attemptText"` prints 1, `grep -c "last attempt: needs grading"` prints 1,
 `git diff --numstat origin/main...HEAD -- web/test/SubmissionBlock.test.tsx` prints `1 1` (after the commit; see below). `npx vitest run test/SubmissionBlock.test.tsx test/status-vocabulary.test.ts`: 2 files, 29 passed.
+
+### Task 36, larger click targets (my part)
+
+`web/test/shell-targets.css.test.ts` first: RED 3 failed, 2 passed; GREEN 5 passed. `Popout.module.css` `.close::after` and, inside `(max-width: 480px)`, `TopNav.module.css` `.brand::after` are `--size-target` square, centred, absolutely positioned;
+neither rule gains a `min-width`, `min-height` or padding. `npx vitest run test/shell-targets.css.test.ts test/ItemPopout.test.tsx test/TopNav.fold.test.tsx` plus the audit and `shell-motion`: 128 passed, exit 0.

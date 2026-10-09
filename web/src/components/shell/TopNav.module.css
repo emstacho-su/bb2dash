@@ -425,7 +425,20 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .brand { margin-right: 0; }
+  .brand {
+    position: relative;
+    margin-right: 0;
+  }
+  /* The mark alone is a small target: the press area reaches --size-target both ways, and no box moves. */
+  .brand::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--size-target);
+    height: var(--size-target);
+    transform: translate(-50%, -50%);
+  }
   /* While the search field is open on a phone, the activity, bell and account
      icons (everything right of ☰) step aside for it; Sync, search, ☰ and
      Home stay. */

@@ -74,6 +74,16 @@
   user-select: none;
   transition: var(--motion-control);
 }
+.close::after {
+  /* The press area reaches --size-target both ways; the button's own box does not move. */
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--size-target);
+  height: var(--size-target);
+  transform: translate(-50%, -50%);
+}
 .close:hover {
   background: var(--color-hover);
   color: var(--color-text);
