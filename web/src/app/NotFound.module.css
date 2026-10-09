@@ -1,0 +1,17 @@
+/* The not-found page: one centred block on the ground. These rules replaced the
+   three inline style attributes of not-found.tsx (Phase 22, task 16). */
+.screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.title {
+  margin-bottom: var(--space-3);
+}
+
+.lede {
+  color: var(--color-muted);
+}

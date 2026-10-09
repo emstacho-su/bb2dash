@@ -99,6 +99,7 @@ export function LoginForm() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           disabled={pending}
+          aria-busy={pending}
           required
         />
       </div>
@@ -114,11 +115,17 @@ export function LoginForm() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           disabled={pending}
+          aria-busy={pending}
           required
         />
       </div>
 
-      <button type="submit" className={`${tokens.btnPrimary} ${styles.submit}`} disabled={pending}>
+      <button
+        type="submit"
+        className={`${tokens.btnPrimary} ${styles.submit}`}
+        disabled={pending}
+        aria-busy={pending}
+      >
         {pending ? 'Signing in…' : 'Sign in'}
       </button>
     </form>

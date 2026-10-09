@@ -454,6 +454,10 @@ Required by the brief's working rules (amendment 3, H-1). One row per task that 
 | Task | Skill loaded | Files read first | Searches run | Advice set aside, and the rule that won |
 |---|---|---|---|---|
 | 8 | yes (Skill tool, `ui-ux-pro-max`, at the start of the task) | `design-system/bb2dash/MASTER.md` (all of it); `docs/planning/sprint-2/evidence/103_style_tiles/direction-d.json` for every value | none. The design system was generated and hand-edited to direction D, the brief names every rule task 8 writes and `direction-d.json` holds every value, so a query would only have returned advice the brief already overrides. No `--persist` was passed and no script ran | the skill's `touch-target-size` (44 px) loses to `--size-target`, 24 px, the brief's WCAG 2.2 AA target for desktop web (task 36); `readable-font-size` (16 px body) loses to the seven pinned `--text-*` sizes (the 18 layout tokens do not move); `spring-physics` loses to the `--ease-out` / `--ease-in` curves the brief declares; `toast-dismiss` (3 to 5 s) loses to the app's `TOAST_MS`; the icon-package advice loses to "no new dependency" |
+| 10 | yes (the skill stays loaded for the session; named again at the start of the task) | `design-system/bb2dash/MASTER.md` (read at task 8, read again for the menu rules); the tile's account-menu fragment in `tile-d.html` (`ddGroup`, `.ddRow[role="menuitemradio"]`) | none | `nav-hierarchy` and `destructive-nav-separation` (keep the theme rows apart from Sign out) are met by the group; the skill's `state-clarity` is met by a tick shape, not colour alone (`color-not-only`) |
+| 16 | yes | `design-system/bb2dash/MASTER.md` (Buttons, Cards, Fields, Focus, Chrome), the tile's shared-primitives block, `component-changes.json` entries for W-67's files | none; the tile and MASTER carry every value the sweep writes | the skill's `disabled-states` 0.38 to 0.5 loses to the one strength 0.5 (entry `disabled-one-look`); `touch-target-size` 44 px loses to the 24 px `--size-target` (task 36); the generated `transition: all 200ms` and a hover lift lose to `--motion-control` and no lift (MASTER anti-patterns); `input outline: none` with a glow loses to the one 2 px ring |
+| 33 | yes | `design-system/bb2dash/MASTER.md` (Colour: the ink and the ground), `component-changes.json` entry `app-mark` | none | the skill's icon advice (Phosphor, outline or filled families) does not apply to a launcher icon; the square is two greys from the tokens, no gradient, glow or second hue |
+| 37 | yes | MASTER.md "Busy is not off" and the entries `busy-says-busy` and `disabled-one-look` | none | the skill's `loading-buttons` (disable and show a spinner) is met by the button's own label ("Signing in…"); a spinner would be a new loop, which MASTER's anti-patterns forbid |
 
 ## Task 8: the token set for direction D (P-78, R-53)
 
@@ -627,3 +631,159 @@ Defaults taken:
    Update row, as the tile does. Its rows are `menuitemradio`, so the Update row's `menuitem` list does not change.
 4. **Keyboard**: the rows are buttons, so Tab reaches them; the arrow-key behaviour of the account menu is W-68's task 32
    (the theme rows "are in the order").
+
+## Task 11: the desktop window background from the tokens (R-53, G-3)
+
+Files: `desktop/src/main/window-background.ts` (new, no Electron import), `desktop/src/main/window.ts` (the one literal
+`'#12131a'` becomes `windowBackground()` and one import), `desktop/test/unit/window-background.test.ts` (new). No old
+desktop test is edited. `desktop/node_modules` did not exist in this worktree; `npm ci --ignore-scripts` ran in
+`desktop/` (336 packages, no lock file change, Electron's binary download skipped because the unit suite mocks it).
+
+| Step | Command | Exit | Result |
+|---|---|---|---|
+| RED: the new test with no module | `cd desktop && npx vitest run test/unit/window-background.test.ts test/unit/window.test.ts test/unit/deeplink.test.ts` | 1 | the new file failed to load; the other two 53 passed |
+| GREEN | same | 0 | 3 files, 58 passed (58) |
+| whole unit suite | `cd desktop && npx vitest run` | 0 | 43 files, 829 passed (829) |
+| `npm run typecheck` | | 0 | no error |
+| `grep -c "12131a" desktop/src/main/window.ts` | | | 0 |
+| `git grep -c "nativeTheme" -- desktop/src` | | 1 (no match) | prints nothing |
+| `git diff --quiet origin/main...HEAD -- desktop/test/unit/window.test.ts` | | 0 | unchanged |
+
+The test pins `DARK` to `:root`'s `--color-bg` read from `../web/src/app/globals.css` (`#050505`), `windowBackground()`
+to `DARK` with no argument, and `window.ts` to no longer holding the old ground.
+
+**Can the change break the launch? No.** `window-background.ts` imports nothing, so it cannot fail at load; its one
+export is a constant six-digit hex, which is what `BrowserWindow`'s `backgroundColor` takes; `window.ts` already built
+the window with a hex there and only the value changed (`#12131a` to `#050505`). The one visible effect is that the
+frame before the page paints is the new dark ground, and a person who chose Light sees that dark frame at each open
+(accepted, DECISIONS 2026-10-08). `desktop/test/e2e/fixture-server.ts:36` still holds `#12131a` in a fixture page's
+inline style; it is test scaffolding, not the shell, and is not edited. The Playwright suite
+(`npm run test:e2e`, which builds and launches the real shell) was not run in this task: it is a gate of tasks 27 and 20.
+
+## Task 16: the foundation sweep, the theme walk, the public routes (R-53, R-46)
+
+Files: `web/src/styles/tokens.module.css`, `web/src/app/login/Login.module.css`, `web/src/app/NotFound.module.css` (new),
+`web/src/app/not-found.tsx` (its three inline style attributes become classes), `web/test/token-audit.baseline/foundation.json`
+(now `{}`), `web/e2e/theme-walk.spec.ts` (new), and, found on the way, `web/src/lib/fonts-href.ts`, `web/src/app/layout.tsx`,
+`web/test/fonts-href.test.ts`. `privacy` and `terms` hold no literal: they use `Login.module.css`, so the sweep reached them
+through it. `ThemeMenu.module.css` was written with tokens only at task 10.
+
+### Checks, each run by itself
+
+| Check | Printed |
+|---|---|
+| Baseline sum, `F=/^foundation\.json$/` | `0` |
+| Weight check over `web/src/styles web/src/app/login` | prints nothing |
+| Time check over the foundation paths (`web/src/styles/*.css`, `web/src/app/login/*.css`, `NotFound.module.css`, `ThemeMenu.module.css`) | prints nothing |
+| Field check | before the sweep `5 0 0`, after `5 1 1` (its one rule, `.input`) |
+| No-select check over `web/src/styles/tokens.module.css` | `1 0 0` |
+| Strength check | before the sweep `7 7`, after the sweep `8 6` (`.btn:disabled` at 0.5, and `.btnPrimary:disabled` at 1), `9 6` after task 37's busy rule |
+| `grep -c "transition: var(--motion-control)" web/src/styles/tokens.module.css` | 2 |
+| `grep -c "linear-gradient" web/src/styles/tokens.module.css` | 0 |
+| `grep -c "reducedMotion: 'reduce'" web/e2e/theme-walk.spec.ts`; `grep -c "setViewportSize" web/e2e/theme-walk.spec.ts` | 1; 4 |
+| Notice files over `web/src/app/login` | `web/src/app/login/Login.module.css` |
+| `grep -c "var(--radius-control)"`; `grep -c "var(--radius-chip)"` in `tokens.module.css`; `grep -c "var(--shadow-mark)"` in `Login.module.css` | 1; 2; 1 |
+| `cd web && npm test` | exit 0, 168 files, 3296 passed |
+| Spec list for `theme-walk.spec.ts` | `Total: 64 tests in 1 file` |
+| `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0; exit 0 |
+
+What the sweep changed, by entry of `component-changes.json`: `card-edge` (`.card` is `--shadow-sm`), `tag-pill`,
+`tag-accent-is-filled`, `tag-outline-is-grey`, `button-pill-sans` (body face, `--font-weight-semibold`),
+`button-fills` (filled ink primary with a flat grey switched-off pill at full strength; secondary on neutral 900 inside
+neutral 600; ghost with the thin grey underline), `input-well`, `glyph-round` (`--font-weight-bold`),
+`decoration-out` (`.rule` is a plain hairline), `brand-mark` (`.mark` in `Login.module.css`: `--radius-xs`,
+`--shadow-mark`), `error-notice-composed` (`.error` in `Login.module.css` composes `errorNotice`), `select-as-field`
+(`.input`'s edge, hover edge, and `cursor: pointer` on a select), `chrome-no-select` (`.btn`, `.kicker`, `.glyph`, and the
+login brand), `focus-ring-one` (`.input:focus-visible` keeps the one ring and moves it onto the hairline),
+`state-transitions` and `press-states` (`transition: var(--motion-control)` on `.btn` and `.input`; `.btn` scales to 0.98;
+the quiet button takes the `--color-active` wash).
+
+Defaults taken:
+
+1. **The ghost button's hover is `--color-hover`**, not the tile's `color-mix(accent 10%)`, because the audit counts every
+   `color-mix()` in a module and the entry `hover-grammar` says a row takes the hover wash. The tile's mix and the wash are
+   within a few percent of each other.
+2. **`.field > label` takes `--color-muted`** (64% text) in place of its own 70% mix, for the same reason.
+3. **`not-found.tsx` keeps its structure**; its `style` attributes are the classes `.screen`, `.title`, `.lede` of
+   `NotFound.module.css`, which is why the file's baseline went from 7 to 0.
+4. **The theme-walk spec's reach for rows 19 to 21, 30 and `planner targets`** is written from the brief's inventory words
+   and from the components' source, not from a run: none of the five has been exercised. Rows 21 and `planner targets`
+   intercept `planner_events` with one fixture row each (`kind`, `series_id`, `done` as the app's column list has them);
+   row 21 presses the form's Delete and, if the scope dialog is not open, the confirmation. Expect the PM's first run to
+   adjust one or two selectors.
+5. **The spec reaches `html[data-theme]` the way acceptance step 1 does**: a `[light]` case puts `light` in
+   `localStorage['bb2dash.theme']` before the first load and every case asserts the attribute, so a case fails if the
+   theme mechanism did not stamp.
+
+### A finding the PM needs: the fonts did not load in the build
+
+The first harness run of the four public routes failed all 8 cases on the font assertion ("a face of Source Sans 3 with
+status loaded"), not on width. A probe spec in the walk box (not committed) showed `document.fonts` empty, no `@import`
+rule in the page's two stylesheets, and no request to `fonts.googleapis.com`. Reproduced twice on this machine:
+
+* `next build` (Turbopack): the built CSS chunk holds no `googleapis`. The same build with `main`'s Inter `@import`
+  keeps it.
+* `next dev`: five variants of the `@import` line on the same file. The full `fontsHref` is dropped; the same URL with
+  `Source+Serif+4:wght@600` (no range) stays; a URL with only the range `opsz,wght@8..60,600` is dropped; the `url("...")`
+  form, the string form, a `layer(...)` and a media condition are all dropped. So the cause is `..` in the URL.
+
+So direction D's `fontsHref`, as written, never loads in a Next 16.3.4 build: every page would have shown the fallback
+faces (`Segoe UI`, `Georgia`). The Direction check (`globals.css` holds `fontsHref` as written) still passes and the
+`@import` stays, but it is dead. The fix in `2a29b5e`: `web/src/lib/fonts-href.ts` holds the string once, the root
+layout links it (`<link rel="stylesheet">` plus a `preconnect` for each host), and `fonts-href.test.ts` pins the JSON,
+the `@import` and the constant equal. Two other ways were left alone on purpose: dropping the range
+(`wght@600`) changes the face the tile showed, and `next/font` is ruled out by name.
+
+### The public routes, in the walk box
+
+`node scripts/walk-box.mjs web/e2e/phone-width.spec.ts -- -g "route /login |route /privacy |route /terms |route /no-such-page "`
+from the worktree root, with a plain `|` in the pattern.
+
+| Run | Commit | `run.json` | Result |
+|---|---|---|---|
+| `20261009T004202Z` | `9f96ecf` (before the fonts fix) | `exit_code` 1, `tests failed` | 8 failed: every case on the font assertion, none on width |
+| `20261009T011138Z` | `a5b3db2` (after the fonts fix `2a29b5e`; the spec file was not yet committed) | `exit_code` 0, `passed` | **8 passed, 0 failed**: the four public routes in both themes, `page scrollWidth=390` on each |
+
+The first run is kept here because its failure is the finding below. Both runs started with no `bb2dash-walk22-` container,
+no `bb2dash-accept-` container and no `accept.lock`; no `WALK_SHOTS`. The walk box was the only container started.
+
+### Owed
+
+`node scripts/walk-box.mjs web/e2e/theme-walk.spec.ts -- --grep-invert "31 frame-scrolled\|planner targets"` →
+exit 0, 61 passed, 0 failed. It needs W-68's mount of `<ThemeMenu />` in `TopNav.tsx` (the row 25 cases look for the group
+named Theme and three `menuitemradio` rows) and waits for it, as the brief says. Not run. The other cases of the spec
+(rows 01 to 24 and 26 to 30) do not need the mount and have not been run either: they were not asked for before the
+mount, and several reach states in other workers' components.
+
+## Task 33: the app's icon (D-5, named exception 11)
+
+Files: `desktop/scripts/draw-mark.mjs` (new, no dependency; reads the ground and the ink from the dark block of
+`globals.css`), `desktop/build/icon.png`, `icon.ico`, `tray-16.png`, `web/src/app/favicon.ico`, `web/src/app/apple-icon.png`
+(the five binary files), `desktop/test/unit/app-mark.test.ts` (new, 7 cases). `make-icons.mjs` and `desktop/package.json`
+are unchanged.
+
+| Step | Command | Exit | Result |
+|---|---|---|---|
+| RED: the new test against the old lavender ring | `cd desktop && npx vitest run test/unit/app-mark.test.ts` | 1 | 4 failed, 3 passed (7) |
+| draw | `cd desktop && node scripts/draw-mark.mjs` | 0 | `120x120, 60px square, ground rgb(5,5,5), ink rgb(250,250,250)` |
+| derive | `cd desktop && npm run icons` | 0 | `wrote build/icon.ico (16, 32, 48, 256)`, `wrote build/tray-16.png` |
+| GREEN | `cd desktop && npx vitest run test/unit/app-mark.test.ts` | 0 | 7 passed (7) |
+| whole desktop unit suite | `cd desktop && npx vitest run` | 0 | 44 files, 836 passed |
+| `git status --short desktop/build` after both scripts, committed | | | prints nothing |
+| `cmp desktop/build/icon.ico web/src/app/favicon.ico`; `cmp desktop/build/icon.png web/src/app/apple-icon.png` | | 0; 0 | |
+| `git diff --name-only origin/main...HEAD -- desktop/build web/src/app/favicon.ico web/src/app/apple-icon.png` | | | exactly five lines |
+| `git diff --name-only --diff-filter=A origin/main...HEAD -- "*.png"` | | | prints nothing |
+| `git diff --quiet origin/main...HEAD -- desktop/scripts/make-icons.mjs desktop/package.json` | | 0 | |
+
+The square is 60 px on the 120 px canvas, centred (taste call T-10, the default taken). `favicon.ico` is copied by hand
+after `npm run icons`, because `make-icons.mjs` may not be edited; the test holds both web files byte for byte.
+
+## Task 37, W-67's part: busy says busy (H-5)
+
+`LoginForm.tsx` carries `aria-busy={pending}` on the two fields and the submit button, and `tokens.module.css` `.input`
+has its switched-off look on `:disabled:not([aria-busy='true'])` (fill `--color-neutral-900`, edge `--color-neutral-800`,
+words `--color-neutral-600`, `cursor: not-allowed`) and its busy look on `:disabled[aria-busy='true']` (half strength,
+`cursor: progress`). `web/test/LoginForm.busy.test.tsx` (2 cases): `aria-busy="false"` at rest, and `true` on the three
+together while the request is in flight, each disabled. `git grep -c -E "aria-busy=\{(pending|busy)\}" -- web/src/app/login`
+prints `web/src/app/login/LoginForm.tsx:3`. `npm test` 168 files, 3296 passed; `git grep -c -E ":disabled:not\(\[aria-busy=.true.\]\)" -- web/src`
+prints `web/src/styles/tokens.module.css:1` (the other four rules are the other workers').

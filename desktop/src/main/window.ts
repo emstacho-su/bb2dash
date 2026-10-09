@@ -21,6 +21,7 @@ import { app } from 'electron';
 import { log, logError } from './log';
 import { resourcePath } from './resources';
 import { recordEvent } from './test-hook';
+import { windowBackground } from './window-background';
 
 const STATE_FILE = 'window-state.json';
 const SAVE_DEBOUNCE_MS = 500;
@@ -253,7 +254,7 @@ export function createWindow(appUrl: string, initialUrl?: string): BrowserWindow
     minWidth: 900,
     minHeight: 600,
     show: false,
-    backgroundColor: '#12131a',
+    backgroundColor: windowBackground(),
     title: 'bb2dash',
     // The default Electron menu stays installed — Reload and the devtools
     // accelerators keep working — but it is hidden until Alt is pressed, so the
