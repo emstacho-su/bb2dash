@@ -16,6 +16,11 @@
 --   4. the owner reads it, a stranger reads zeros, anon is refused
 --
 -- Synthetic rows only, written in this transaction. Nothing is committed.
+--
+-- AN `execute_sql` DRY RUN of this unit adds, inside its own transaction and before the unit,
+--     grant workspace_runner to postgres with inherit false, set true;
+-- because part 4 reads the view under `set local role workspace_runner`, and `postgres` cannot
+-- `set role` into a login role otherwise (the PM's dry run of 2026-10-08 raised 42501 there).
 -- RUN IT: `node scripts/db-test.mjs --only phase24_197_index_status.sql`.
 
 begin;
