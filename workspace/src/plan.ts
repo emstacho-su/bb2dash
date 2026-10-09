@@ -95,7 +95,10 @@ function dayNumber(date: string): number {
 
 /** A date inside 180 days of today, else the date clamped to the window; null for anything that is not a date. */
 function windowDate(value: unknown, today: string): string | null {
-  if (typeof value !== 'string' || !DATE_SHAPE.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return null;
+  if (typeof value !== 'string' || !DATE_SHAPE.test(value)) return null;
+  // Strict: V8 rolls 2026-11-31 over to the next month, so the date must round-trip to the same text.
+  const parsed = Date.parse(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed) || UTC_DATE_FORMAT.format(parsed) !== value) return null;
   const offset = dayNumber(value) - dayNumber(today);
   if (Math.abs(offset) <= FEED_WINDOW_MAX_DAYS) return value;
   const clamped = dayNumber(today) + Math.sign(offset) * FEED_WINDOW_MAX_DAYS;

@@ -93,6 +93,17 @@ const CASES: Case[] = [
     output: planJson([query('x')], { from: '2025-01-01', to: 'next friday' }),
     expectPlan: (plan) => expect(plan.feed).toEqual({ from: '2026-04-11', to: null }),
   },
+  ...['2026-11-31', '2027-02-29', '2026-13-01', '2026-00-10', '2026-04-31'].map((date) => ({
+    name: 'an impossible date (' + date + ') is the default end of the window, never an error',
+    output: planJson([query('x')], { from: date, to: '2026-10-20' }),
+    expectPlan: (plan: Extract<PlanParse, { ok: true }>['plan']) => expect(plan.feed).toEqual({ from: null, to: '2026-10-20' }),
+  })),
+  {
+    name: 'a real leap day stands',
+    output: planJson([query('x')], { from: '2028-02-29', to: null }),
+    limits: { today: '2028-03-01' },
+    expectPlan: (plan) => expect(plan.feed).toEqual({ from: '2028-02-29', to: null }),
+  },
   {
     name: 'a window inside 180 days stands',
     output: planJson([query('x')], { from: '2026-09-01', to: '2026-12-31' }),
