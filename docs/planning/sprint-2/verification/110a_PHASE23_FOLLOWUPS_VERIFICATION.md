@@ -432,3 +432,62 @@ file first (commit 267fe5c).
   they give on `main`.
 
 **187 is final and waits for Stack's word.** 188 waits for the cut-over.
+
+## Task 5: 187 on prod (2026-10-09, 01:32Z), on Stack's word
+
+Stack's word, in the terminal, in answer to the dry run's result: "apply/merge". The PM read it as
+187 now, and his merge word for both PRs once they are ready; the cut-over keeps its own word.
+
+* **Before the apply, one read (01:29Z):** no `agent_requests` row queued or claimed (the last is
+  2519), `v_inbox_queue` empty, no migration row named 187; the newest was `186_inbox_apply_notices`.
+* **Applied** with `apply_migration` as `187_inbox_apply_followups`, version `20261009013207`.
+* **Byte-identical.** The text the database recorded is one statement of 57,726 characters; its
+  SHA-256 is `e93d830d1e1143a2a533e3ee3a8e84d5a115d9ce30c55f9159cf7403561df622` and its md5
+  `33440b2a0ee8a457c3605b7ab021f048`, the same two as the file's
+  (`sha256sum` and `md5sum` of `db/migrations/187_inbox_apply_followups.sql`).
+* **Item 3782** reads `{"skipped": true, "why": "test item of the Phase 23 cut-over run: no note, no
+  day-file entry"}`; the unfiled list holds 16 rows and not 3782; `inbox_apply_holds` is empty.
+* **Runner on each (`node scripts/db-test.mjs --only <file>`, one process at a time): 13 PASS.**
+  `phase23_187_held_answers`, `phase23_187_held_answers_b`, `phase23_187_decision_filing`,
+  `phase23_187_accept_objects`, `phase23_180_inbox_apply_trigger`, `phase23_181_inbox_apply_runner`,
+  `phase23_182_inbox_decision_filing`, `phase23_183_one_open_inbox_feedback`,
+  `phase23_185_session_links`, `phase23_186_notices`, `phase14_091_queue`,
+  `phase14_093_review_fixes`, `phase14_095_storage_key`. `phase23_188_archived_answers` reads
+  "migration 188 is not applied", as it must until the cut-over.
+* **Supabase advisors (security), read after the apply:** two lines name a new object, both as
+  designed. `inbox_apply_holds` has row level security and no policy (INFO): that is the table's
+  whole point, only `inbox_apply_close` writes it. `inbox_accept_question` is a SECURITY DEFINER
+  function `authenticated` may call (WARN): its first statement is the owner check, and both
+  reviews read it. The other lines (`app_owner`, `calendar_push_now`, leaked-password protection)
+  are older than this phase.
+* **Types.** `web/src/lib/supabase/database.types.ts` regenerated (508060f): 236 lines added, none
+  removed. `main`'s copy had not been regenerated since 180, so the hunk holds Phase 23's objects of
+  180 to 187 (`decision_filed` and `decision_filed_at`, `inbox_apply_writes`, the worker's
+  functions, and 187's table, view and functions). No other phase's object is in it: prod's newest
+  migration is 187. `npm run typecheck` in `web/` exits 0, and
+  `git diff --name-only origin/main...HEAD -- sync/src web/src web/test workspace mcp-server desktop docker`
+  prints the one line.
+
+**187 is frozen from here.** The running `apply` worker is the old image: it ignores `held` and
+sends no `skip_seen`, so no hold is written until the cut-over rebuilds it.
+
+## The second look at task 18's fix round, bb2dash (2026-10-09)
+
+An independent reader, on `058bd21..HEAD` of the code, with the findings and the rulings. It ran
+the 79 script tests and the 41 acceptance tests (green) and no PowerShell and no SQL. Verdict:
+**ready for the PR; no CRITICAL, HIGH or MEDIUM; seven LOW.**
+
+| # | finding | ruling |
+|---|---|---|
+| T-1 | 188's `comment on function` and one heading still described the stamp as "an answer it applies" | **fixed before 188 is applied** (W-80, round 5: two comment hunks, the bodies untouched). One comment inside the body ("the one-time backfill's own predicate", though the fold's statement also takes dismissed answers) stays: the file's header says it right |
+| T-2 | 187's `comment on function inbox_apply_close` says the `not_applied` notice "says a sync does not try the answers again"; since round 4 that holds only when a hold stands | **not changed: 187 was applied before this finding came back, and a comment is not worth 189.** The function's own body comment is right. Named in STATUS, Known issues; folded into 189 if 189 is ever spent |
+| T-3 | the registration script tests the folder as typed for unsafe characters, not the resolved path | **fixed (W-82, round 4)** |
+| T-4 | if `node.exe` has moved since registration, the task's command ends with 0 and nothing shows until the doctor's 36-hour limit | **fixed (W-82)**: the command sets a failing exit code before it starts node |
+| T-5 | the script's byte test does not pin two more strings | **fixed (W-82)**; its tests are 76 pass |
+| T-6 | step 6 watches nine minutes inside a 9.75-minute test, about 15 seconds of slack | **fix (W-84, round 3)**: 8.5 minutes |
+| T-7 | a proof's "request still open" branch is not held to this run | **not changed**: it can only give blocked, never a pass |
+
+It walked the task's command line for the two real folders and for a path with a space and an
+apostrophe and found both parse in PowerShell 5.1; traced `--notes-only` and the default mode for
+an ordinary row, an accepted skip, a refused skip and a row another run took; and compared 188's
+`link_file_sessions` with 163's body (163's plus the one end statement).
