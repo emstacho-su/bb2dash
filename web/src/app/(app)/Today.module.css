@@ -275,3 +275,12 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Phone width (R-46, Phase 22 task 15): the section captions are one line on a
+   desktop and a sentence on a phone. `nowrap` made the Courses caption 410px
+   wide, past a 390px window, so the page scrolled sideways. */
+@media (max-width: 720px) {
+  .sub {
+    white-space: normal;
+  }
+}

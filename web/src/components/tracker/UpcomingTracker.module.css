@@ -271,3 +271,11 @@
     display: none;
   }
 }
+
+/* Phone width (R-46, Phase 22 task 15): the tracker's captions wrap rather
+   than run past the window. */
+@media (max-width: 720px) {
+  .sub {
+    white-space: normal;
+  }
+}
