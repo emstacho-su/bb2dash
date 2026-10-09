@@ -316,7 +316,7 @@ Export §6 questions for this course: Q2 (participation link) is row IST.323-27;
   decided_by: Stack
   decided_on: 2026-09-29
   confidence_after: confirmed
-  recheck: "select count(*) from assignments where component_id = 11 and points_possible = 10"
+  recheck: "select count(*) from assignments where component_id = 11 and points_possible = 10 and id in ('IST.323/quiz-01', 'IST.323/quiz-02', 'IST.323/quiz-03', 'IST.323/quiz-04', 'IST.323/quiz-05')"
 - id: IST.323-12
   target:
     table: grade_components
