@@ -419,3 +419,9 @@ Two findings in W-67's files, not fixed by me:
    `direction-d.json`'s `fontsHref` and `globals.css`: `family=Source+Serif+4:wght@600` (the Direction check compares `fontsHref`). For my harness runs I applied that one-line change to the working tree only, ran, and restored the file; `git status` on `globals.css` is clean.
 2. **`tokens.module.css` `.tip` doubles the accessible name.** `content: attr(data-tip)` is part of the name Chromium computes, so "Courses sidebar" became "Courses sidebarCourses sidebar" and `getByRole('button', { name: 'Courses sidebar', exact: true })` found nothing. The clean fix is
    `content: attr(data-tip) / ''` (alt text for the generated content). Until then the four buttons carry an `aria-label` equal to their name (with the count: "Activity 3"), which wins over the generated content; Search already had one.
+
+### Task 34, captions and codes (my part)
+
+`SubmissionBlock.tsx:175` prints `submission.attemptText` (inside the `submission.attemptStatus &&` it had), and `SubmissionBlock.test.tsx:146` reads `'last attempt: needs grading'`, the one line the brief lets me edit
+(the test and the component were changed together, so there is no separate RED run for this one). `grep -c "submission.attemptText"` prints 1, `grep -c "last attempt: needs grading"` prints 1,
+`git diff --numstat origin/main...HEAD -- web/test/SubmissionBlock.test.tsx` prints `1 1` (after the commit; see below). `npx vitest run test/SubmissionBlock.test.tsx test/status-vocabulary.test.ts`: 2 files, 29 passed.

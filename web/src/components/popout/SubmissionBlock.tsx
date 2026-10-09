@@ -172,7 +172,7 @@ export function SubmissionBlock({
             {submission.text}
           </span>
           {submission.attemptStatus && (
-            <span className={styles.note}>last attempt: {submission.attemptStatus}</span>
+            <span className={styles.note}>last attempt: {submission.attemptText}</span>
           )}
           {grade.last_attempt_submitted && (
             <span className={styles.note}>

@@ -143,7 +143,7 @@ describe('SubmissionBlock — the status line', () => {
   it("shows Blackboard's status, the submitted time and which attempt this is", () => {
     renderBlock();
     expect(screen.getByText('submitted')).toBeInTheDocument();
-    expect(screen.getByText('last attempt: NEEDS_GRADING')).toBeInTheDocument();
+    expect(screen.getByText('last attempt: needs grading')).toBeInTheDocument();
     expect(screen.getAllByText('submitted Sep 11, 11:41 PM').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Attempt 1 of 3').length).toBeGreaterThan(0);
   });
