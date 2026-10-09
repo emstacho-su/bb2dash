@@ -142,8 +142,13 @@ begin
      'score double precision, passage text, has_notes boolean, written_at timestamp with time zone)' then
     v_fail := v_fail || format('workspace_search returns [%s]', pg_get_function_result(v_fns[2]::regprocedure));
   end if;
-  if pg_get_function_identity_arguments(v_fns[2]::regprocedure) is distinct from
-     'p_q text, p_query_embedding extensions.vector, p_kinds text[], p_courses text[], p_limit integer, '
+  -- The vector type prints as `extensions.vector` or as `vector`, by whether `extensions` is on the
+  -- session's search path: it is for the test login and for a paste into `execute_sql`, and it is
+  -- not everywhere. So the schema prefix is taken off before the comparison (the PM's dry run of
+  -- 2026-10-08 raised here; phase15_101 part (c) tells the same story for regprocedure).
+  if replace(pg_get_function_identity_arguments(v_fns[2]::regprocedure), 'extensions.vector', 'vector')
+     is distinct from
+     'p_q text, p_query_embedding vector, p_kinds text[], p_courses text[], p_limit integer, '
      'p_min_similarity double precision, p_model text' then
     v_fail := v_fail || format('workspace_search takes (%s)', pg_get_function_identity_arguments(v_fns[2]::regprocedure));
   end if;
