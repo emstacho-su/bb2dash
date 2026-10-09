@@ -467,3 +467,50 @@ GREEN: see the gates below.
 GREEN: the row's six files (`shell-keyboard`, `TopNav.search`, `Bell`, `TopNav.update`, `TopNav.workspace`, `TopNav.fold`): 6 files, 75 passed, 0 failed, the old files unedited. The existing Escape case for Bell and Activity now focuses each button before its press, as a real press does
 (in jsdom `fireEvent.click` does not move focus, and the second button's Escape would otherwise belong to the first). `cd web && npm test`: 174 files, 3351 passed; typecheck 0; eslint 0; `test/token-audit.test.ts` 89 passed.
 Recorded, no change: `Bell.module.css` `.panel` repeats `dd`'s arrive and leave rules because the brief's own checks pin Bell's copy; declined.
+
+## Last stage (tasks 26 and 27)
+
+First acts, on the tree after merging `origin/feat/styling-22` (5496140 and the Phase 23 follow-ups): Baseline sum `{F=/\.json$/}` prints `0`; Mark characters `0 0`; Busy sites `24 24`; Time check over `"web/src/*.css" ":(exclude)web/src/app/globals.css"` prints nothing (exit 1).
+`git grep -c "attr(data-tip) / ''" origin/feat/styling-22 -- web/src/styles/tokens.module.css` printed nothing (exit 1): W-67 has not made the drawn label silent, so the `aria-label` workaround on the icon buttons stays, and is owed (named below).
+
+### Task 26, the frame with scrolling panes (64f8d45)
+
+`web/test/pane-scroll.test.tsx` first: RED, `usePaneScroll` unresolved (1 file failed, no tests); GREEN, 6 passed (a new pathname puts the pane at 0; Back puts back the `scrollTop` the page had when it was left, and Forward the same;
+a page it has not kept starts at 0; nothing reaches `localStorage` and the only key written is `bb2dash.pane-scroll` in `sessionStorage`; with no pane the hook does nothing). The hook (`usePaneScroll.ts`) is used by a small client wrapper,
+`ContentPane.tsx`, which is the page's one `main` (`id="content"`, `tabIndex={-1}`, so "Skip to content" still lands on it). The key is the pathname, so a change of query alone (a tab, a week, `?item=`) neither resets nor is remembered apart;
+Back and Forward are told from a `popstate`; a restore keeps asking for up to 60 animation frames until the page's data makes it tall enough, and the reader's wheel or touch ends the wait. Default taken: per pathname, not per history entry.
+
+Printed checks: `grep -c "position: sticky"` on `TopNav.module.css` 0 and on `CourseSidebar.module.css` 0; `grep -c "min-height: 100dvh"` on `Shell.module.css` 0; `grep -c "height: 100dvh"` 1; `grep -c "scrollbar-gutter: stable"` 1; `grep -c "overscroll-behavior: contain"` 1.
+`cd web && npx vitest run test/pane-scroll.test.tsx test/CourseSidebar.test.tsx test/Workspace.layout.test.tsx test/TopNav.fold.test.tsx` passed (with the audit and `shell-motion`: 6 files, 160 passed), the old files unedited.
+`cd web && npm test`: 181 files, 3381 passed; typecheck 0; eslint 0 (after moving the scroll writes into a helper, because the React Compiler lint read `node.scrollTop = …` inside the hook as a change to the `pane` ref); audit 89 passed.
+`.main > * { flex-shrink: 0 }` is a default I added: in a pane of fixed height a column flex child that scrolls on its own (the planner board, a table's wrapper) would otherwise be squeezed to fit instead of making the pane scroll.
+
+Harness, `node scripts/walk-box.mjs web/e2e/phone-width.spec.ts`: run **20261009T031826Z**, commit 64f8d45, `"dirty": false`, exit 0, `"result": "passed"`, **`54 passed`**; `grep -c "pane scrollWidth=" <run>/stdout.log` prints **24**.
+The old layout specs, `node scripts/walk-box.mjs web/e2e/workspace-layout.spec.ts web/e2e/workspace-acceptance-helpers.spec.ts`: run **20261009T032456Z**, commit cebba3f (after task 27), clean, exit 0, `9 passed`.
+
+What the frame does in a real browser (a throwaway probe spec, not committed, run 20261009T032610Z, 1440 by 900, after the pane was scrolled to its end): on `/`, `/planner`, `/inbox`, `/grades`, `/materials`, `/workspace`, the Stream of IST.352, IST.466's Grades and the A1 popout URL the document is exactly the window,
+`scrollHeight` 900 = `innerHeight` 900 and no sideways scroll; the bar's top edge is at 0; the content pane starts at the bar's bottom (52.9) and ends at 900; the side panel fills the same height (847.1) and does not scroll with the pane. The pane scrolls by itself where there is more to see
+(Home by 502 px, Planner by 302, Grades by 4,074, Materials by 13,180, the Stream by 1,763); Inbox, Workspace and IST.466 Grades were short at that moment (0 to scroll). At 1440 px the planner board fits (1,103 of 1,103) and it scrolls sideways inside the pane at 390 px (the 764 of 368 line of the phone-width run).
+I did not look at pictures (no shots are allowed in a worker's run); these are measurements. Nothing was found in another worker's file.
+
+## Idle bar width for task 27
+
+`unfolded bar at 721: nav scrollWidth=815` (run 20261009T031826Z: 815 px, the idle label, search collapsed, in Source Sans 3; it was 851 in Inter). Also printed in that run: `bar at 390 longest label: nav scrollWidth=390`, `bar at 900 longest label: nav scrollWidth=900`.
+W-67: `BAR_IDLE_WIDTH` is 815, so `BAR_IDLE_WIDTH + CONTROLS_WIDTH` is 953 and `MIN_WIDTH` rounds up to 960.
+
+### Task 27, my part (cebba3f)
+
+`TopNav.module.css` `.bar` is `app-region: drag` with `padding-right: max(var(--size-28), calc(100vw - env(titlebar-area-width, 100vw)))` (a browser falls back to the 28 px); the bar's controls (`.brand`, `.link`, `.menu`, `.ic`) and the panels that open from it (`.dd`, `.navMenu`; Bell's and Activity's panels compose `dd`) are `no-drag`;
+`SyncButton.module.css` marks `.button` and the alert and toast box `.stack` `no-drag`, and `NavSearch.module.css` marks the pill, its field and its results popover (`.root`) `no-drag`; and `:global(body:has([aria-modal='true'])) .bar` takes the drag region off while a dialog is open. No `data-desktop` hook.
+Printed: `grep -c "app-region: drag"` 1; `grep -c "no-drag"` 3; `grep -c "aria-modal"` 2 (the comment names it too); `grep -c "titlebar-area-width"` 1. `cd web && npm test` 181 files, 3381 passed; typecheck 0; eslint 0; audit 89 passed.
+Not seen by any test, and for acceptance step 5: a menu row and the popout's close button pressed in the real window.
+
+## ui-ux-pro-max (tasks 26 and 27)
+
+The skill was loaded at the start; `MASTER.md` was in hand from the earlier tasks of this session (`:263` "the window waits" and `:216` the `scroll-padding-top` line are overtaken by D-1, brief lines 2376 and 2379). Search: `"scroll container fixed header focus not obscured" --domain ux -n 2` returned Focus Not Obscured (Minimum and Enhanced):
+"offset sticky UI with scroll-padding". Set aside: its `scroll-padding-top: var(--header-height)` example, because the frame removes the case it answers (the bar no longer lies over a scrolling page; `html`'s `scroll-padding-top` goes in W-67's line of task 26).
+
+## Owed
+
+* The `aria-label` workaround on the five icon buttons stays until W-67 changes `tokens.module.css` `.tip` to `content: attr(data-tip) / ''`.
+* `scroll-padding-top` in `globals.css` (W-67) and `CourseTimeline.module.css:29` (W-70) now wait for their lines of task 26.
