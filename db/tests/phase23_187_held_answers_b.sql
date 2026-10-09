@@ -1,7 +1,7 @@
 -- bb2dash :: db/tests/phase23_187_held_answers_b.sql
 -- Phase 23 follow-ups (brief 110, Item 1, with Round 2's R3, R4 and the failed-close rule).
 -- The SECOND of two units on migration 187, section 1 (the first is phase23_187_held_answers.sql).
--- THIS FILE HOLDS cases 0 and 10 to 17 and 19, and repeats the first file's installed check and setup:
+-- THIS FILE HOLDS cases 0, 10 to 17, 19 and 20, and repeats the first file's installed check and setup:
 --
 --   0. installed (as in the first file)
 --  10. anon, authenticated, inbox_apply_runner and sync_runner cannot execute
@@ -18,6 +18,8 @@
 --      request's follow-up is handed the held set and carries no retry_held; held rows alone file
 --      nothing after a sync-filed close and a retry follow-up after the button's
 --  19. a done close writes no hold, keeps the holds that stand
+--  20. round 3: the failed close of a retry follow-up writes no hold for an id in its own skip (an
+--      answer given again mid-chain, a hand-written request), and leaves a standing hold alone
 --
 -- RUN IT: `node scripts/db-test.mjs --only phase23_187_held_answers_b.sql`.
 -- NOTHING IS COMMITTED: the last statement is `rollback`.
@@ -293,8 +295,8 @@ begin
   v_r2 := pg_temp.t187_request();
   perform pg_temp.t187_close(v_r2, 'failed', pg_temp.t187_skip_result(array[v_w], jsonb_build_array(pg_temp.t187_seen(v_w))));
   select * into v_h2 from inbox_apply_holds where item_id = v_w;
-  if v_h2.request_id is distinct from v_r1 or v_h2.held_at is distinct from v_h1.held_at
-     or v_h2.resolved_at is distinct from v_h1.resolved_at
+  -- (held_at is not compared: now() is one value inside this transaction, so it could not differ.)
+  if v_h2.request_id is distinct from v_r1 or v_h2.resolved_at is distinct from v_h1.resolved_at
      or (select count(*) from inbox_apply_holds where item_id = v_w) <> 1 then
     raise exception 'FAIL 12: the hold for the same answer was not kept: first %, then %', row_to_json(v_h1), row_to_json(v_h2);
   end if;
@@ -357,8 +359,38 @@ begin
     raise exception 'FAIL 13: a refused close changed the holds';
   end if;
 
-  -- Well-formed variants are taken: a null time (the row has none), and a list that is empty.
+  -- Well-formed: a list that is empty.
   perform pg_temp.t187_close(v_r, 'done', pg_temp.t187_skip_result(array[v_w], '[]'::jsonb));
+end $$;
+
+-- A null time is a well-formed skip_seen: it holds a row whose answer has no resolved_at (an answered
+-- row can sit in the queue with none), and holds nothing for a row that has a time.
+do $$
+declare
+  v_w    bigint := (select id from _t187 where label = 'w');
+  v_nt   bigint;
+  v_r    bigint;
+  v_before bigint := (select request_id from inbox_apply_holds where item_id = (select id from _t187 where label = 'w'));
+begin
+  insert into attention_items (kind, entity, ref, question, state, resolved_at, resolution)
+  values ('stack_must_confirm', 'assignment', 'test187:nulltime', '187 nulltime', 'resolved', null, '{"value":"yes"}')
+  returning id into v_nt;
+  if not exists (select 1 from v_inbox_queue where id = v_nt and resolved_at is null) then
+    raise exception 'FAIL 13 (setup): the null-time row is not in the queue with no resolved_at';
+  end if;
+  v_r := pg_temp.t187_request();
+  perform pg_temp.t187_close(v_r, 'failed', pg_temp.t187_skip_result(
+    array[v_nt, v_w], jsonb_build_array(jsonb_build_object('id', v_nt, 'resolved_at', null),
+                                        jsonb_build_object('id', v_w, 'resolved_at', null))));
+  if not exists (select 1 from inbox_apply_holds where item_id = v_nt and request_id = v_r and resolved_at is null)
+     or not v_nt = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 13: a null time against a row with no resolved_at did not hold it';
+  end if;
+  -- A null time against W, which has a time: no hold written, the one that stands is untouched.
+  if (select request_id from inbox_apply_holds where item_id = v_w) is distinct from v_before
+     or (select resolved_at from inbox_apply_holds where item_id = v_w) is null then
+    raise exception 'FAIL 13: a null time against a row that has a time changed its hold';
+  end if;
 end $$;
 
 -- =============================================================================================
@@ -599,6 +631,85 @@ begin
   -- The standing hold (h1) survived that done close.
   if not (select id from _t187 where label = 'h1') = any (pg_temp.t187_held()) then
     raise exception 'FAIL 19: a done close removed a hold that stands';
+  end if;
+end $$;
+
+-- =============================================================================================
+-- 20. Round 3: the failed close of a retry follow-up writes no hold for an id in its own skip
+-- =============================================================================================
+select pg_temp.t187_archive_notices();
+update attention_items
+   set state = 'archived', archived_at = now(), archived_by = 'phase23_187 setup',
+       decision = '{"change": "test setup"}'::jsonb
+ where state in ('resolved', 'dismissed');
+
+do $$
+declare
+  v_a bigint := pg_temp.t187_item('test187:ra');
+  v_c bigint := pg_temp.t187_item('test187:rc');
+  v_d bigint := pg_temp.t187_item('test187:rd');
+  v_e bigint := pg_temp.t187_item('test187:re');
+  v_b bigint := pg_temp.t187_item('test187:rb');
+  v_r1 bigint;
+  v_f  bigint;
+  v_hold record;
+begin
+  -- (i) The button's request R1 fails on A: a hold on A at its time t1.
+  v_r1 := pg_temp.t187_request('{}'::jsonb);
+  perform pg_temp.t187_close(v_r1, 'failed', pg_temp.t187_skip_result(array[v_a], jsonb_build_array(pg_temp.t187_seen(v_a))));
+  if pg_temp.t187_held() <> array[v_a] then
+    raise exception 'FAIL 20 (setup): A is not held: %', pg_temp.t187_held();
+  end if;
+  -- He answers A again (t2). The retry follow-up is handed skip = [A]; it does not try A, fails on
+  -- C, and the worker reports both ids with their present times.
+  perform pg_temp.t187_reanswer(v_a);
+  v_f := pg_temp.t187_request(jsonb_build_object('trigger', 'followup', 'after', v_r1,
+                                                  'skip', jsonb_build_array(v_a), 'retry_held', true));
+  if pg_temp.t187_prepare(v_f)->'held' is distinct from jsonb_build_array(v_a) then
+    raise exception 'FAIL 20 (setup): the retry follow-up was not handed [A]';
+  end if;
+  perform pg_temp.t187_close(v_f, 'failed', pg_temp.t187_skip_result(
+    array[v_a, v_c], jsonb_build_array(pg_temp.t187_seen(v_a), pg_temp.t187_seen(v_c))));
+  if not exists (select 1 from inbox_apply_holds where item_id = v_c and request_id = v_f) or not v_c = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 20: C, which the follow-up tried, is not held';
+  end if;
+  if exists (select 1 from inbox_apply_holds where item_id = v_a) or v_a = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 20: A, answered again and never tried by the follow-up, was held on its new time';
+  end if;
+  -- A stays in the skip, so the notice stays open.
+  if pg_temp.t187_open() <> '1/0' then
+    raise exception 'FAIL 20: the notice is %, expected 1/0', pg_temp.t187_open();
+  end if;
+
+  -- (ii) A hand-written retry follow-up over two waiting, unheld ids, closed failed with both in its
+  -- skip and skip_seen: neither is held.
+  v_f := pg_temp.t187_request(jsonb_build_object('trigger', 'followup', 'after', 1,
+                                                  'skip', jsonb_build_array(v_d, v_e), 'retry_held', true));
+  perform pg_temp.t187_close(v_f, 'failed', pg_temp.t187_skip_result(
+    array[v_d, v_e], jsonb_build_array(pg_temp.t187_seen(v_d), pg_temp.t187_seen(v_e))));
+  if exists (select 1 from inbox_apply_holds where item_id in (v_d, v_e)) or v_d = any (pg_temp.t187_held()) or v_e = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 20: a hand-written retry follow-up made ids held';
+  end if;
+  -- The same request with retry_held as the text "true" is an ordinary request: the same close holds them.
+  v_f := pg_temp.t187_request(jsonb_build_object('trigger', 'followup', 'after', 1,
+                                                  'skip', jsonb_build_array(v_d), 'retry_held', 'true'));
+  perform pg_temp.t187_close(v_f, 'failed', pg_temp.t187_skip_result(array[v_d], jsonb_build_array(pg_temp.t187_seen(v_d))));
+  if not v_d = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 20: retry_held as text was read as a retry request (D was not held by an ordinary failed close)';
+  end if;
+
+  -- (iii) B was held by a button request and was not answered again: the follow-up's failed close
+  -- leaves that hold exactly as it was.
+  v_r1 := pg_temp.t187_request('{}'::jsonb);
+  perform pg_temp.t187_close(v_r1, 'failed', pg_temp.t187_skip_result(array[v_b], jsonb_build_array(pg_temp.t187_seen(v_b))));
+  select * into v_hold from inbox_apply_holds where item_id = v_b;
+  v_f := pg_temp.t187_request(jsonb_build_object('trigger', 'followup', 'after', v_r1,
+                                                  'skip', jsonb_build_array(v_b), 'retry_held', true));
+  perform pg_temp.t187_close(v_f, 'failed', pg_temp.t187_skip_result(array[v_b], jsonb_build_array(pg_temp.t187_seen(v_b))));
+  if (select request_id from inbox_apply_holds where item_id = v_b) is distinct from v_r1
+     or (select resolved_at from inbox_apply_holds where item_id = v_b) is distinct from v_hold.resolved_at
+     or not v_b = any (pg_temp.t187_held()) then
+    raise exception 'FAIL 20: the hold that stood for B was changed or lost by the follow-up''s failed close';
   end if;
 end $$;
 

@@ -306,3 +306,45 @@ stand-in (it needs 184's claim function). `phase23_186_notices.sql` is no longer
   every such row is held; the 3782 statement notices the row count rather than raising.
 * Not checked: 181's unit and the `phase14_*` / `phase18_*` units against round 2 on the stand-in; the
   `service_role` privilege above on prod (the guard reads it at apply).
+
+## Round 3 (the second look at round 2)
+
+Merged `origin/fix/phase23-followups` first. Units first (red), then the migration.
+
+### Runner results, line counts
+
+The four 187 units read "migration 187 is not applied" (held, held_b: "the hold table or
+inbox_apply_held_items() is missing"; filing and accept: "migration 187 is not applied"); `phase23_180`,
+`_181`, `_182`, `_183`, `_185`, `_186` PASS. Line counts: migration 187 **933**; `phase23_187_held_answers.sql`
+**605**; `phase23_187_held_answers_b.sql` **721**.
+
+### Per point (red = the new unit against round 2's 187 on the PGlite stand-in; green = against round 3's)
+
+1. **MEDIUM, no hold for a retry follow-up's own skip.** The hold insert's WHERE gains
+   `and (coalesce(v_params->>'trigger','') <> '' and v_params->'retry_held' = 'true'::jsonb and
+   jsonb_typeof(v_params->'skip') = 'array' and v_params->'skip' @> to_jsonb(q.id)) is not true`.
+   New case **20** in the second held file: (i) button R1 fails on A (hold at t1); A answered again;
+   the retry follow-up handed [A] closes failed with skip [A, C] and both times: C held, A not, no hold
+   row for A, the notice open; (ii) a hand-written retry follow-up over two waiting unheld ids: neither
+   held (and the same request with `retry_held` as the text "true" is ordinary: its failed close does
+   hold); (iii) A not answered again: the hold R1 wrote keeps its `request_id` and time. Red: "FAIL 20: A,
+   answered again and never tried by the follow-up, was held on its new time"; green: PASS.
+2. **LOW, the notice sentence.** The new sentence needs `p_result ? 'skip_seen'`. Case 18 now asserts the
+   old worker's notice reads 186's sentence ("... press Apply answers to run the rest.") and not the new
+   one. Case 9 sends `skip_seen` (its helper always does; `[]` counts) and still passes. Red: "FAIL 18: the
+   old worker's not_applied notice reads ... A sync does not try again ...".
+3. **LOW, guard (g2)** also requires `rolbypassrls` on `service_role` (stand-in's role has it, so the guard
+   passes there).
+4. **Markers.** `-- 187:` on the `v_held` declaration and `'held', v_held` in prepare, the three new
+   declarations in close, the `select ... into v_params` (with a line saying it replaces 186's `perform 1`),
+   and the stuck test's comment. No behaviour change.
+5. **Four weak assertions.** Case 4 now sets Y aside and asserts the queue is X alone before the sync must
+   file (the assertion is on X). Case 12 drops the `held_at` equality (one `now()` per transaction) and
+   keeps `request_id` and `resolved_at`. Case 13 gains the null-time case: a resolved row with no
+   `resolved_at` does sit in `v_inbox_queue` (nothing forbids it), so a `skip_seen` entry with a null
+   time holds it, and the same null time against a row that has a time holds nothing and leaves its
+   hold alone. The accept-objects unit compares the sentences of two runs for the same label for
+   equality (section 5) and drops the `is not null` check.
+
+Defaults: the case 20 (ii) text-variant check goes beyond the brief (it pins the strict `retry_held`
+on the close side); nothing was built other than as written.

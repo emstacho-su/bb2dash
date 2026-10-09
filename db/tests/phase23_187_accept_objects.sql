@@ -143,11 +143,7 @@ begin
   if v_n <> 5 then
     raise exception 'FAIL 1: the five cards do not have five different sentences (%)', v_n;
   end if;
-  -- A fixed sentence: the same label, the same text, whatever the run.
-  if (select question from attention_items where id = (select id from _t187a where label = 'confirm'))
-     is null then
-    raise exception 'FAIL 1: no question';
-  end if;
+  -- (The sentence is fixed whatever the run: section 5 compares two runs' rows for one label.)
 
   -- A ref is used once: the same run and label again is refused, in any state.
   if pg_temp.t187a_state(app_owner()::text, c_run, 'confirm') <> '22023' then
@@ -329,6 +325,12 @@ begin
 
   -- A new run asks: the old run's four rows are closed, open or answered.
   v_id := pg_temp.t187a_ask(c_new, 'confirm');
+  -- A fixed sentence: the same label gives the same text in another run.
+  if (select question from attention_items where id = v_id)
+     is distinct from (select question from attention_items where id = v_open_confirm) then
+    raise exception 'FAIL 5: the sentence for one label differs between two runs: "%" and "%"',
+      (select question from attention_items where id = v_open_confirm), (select question from attention_items where id = v_id);
+  end if;
   for v_row in
     select * from attention_items where id in (v_open_confirm, v_open_dismiss, v_answered, v_offline)
   loop
