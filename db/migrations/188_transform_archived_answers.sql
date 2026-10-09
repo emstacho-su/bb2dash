@@ -14,15 +14,17 @@
 --      applied_at stayed null, so the queue row read was_applied = false. The apply worker therefore
 --      carries a rule of its own that compares the file with the pick, the Inbox refuses Undo for
 --      every session answer by its ref, and a session answer that the apply worker had to skip stays
---      held (187) because nothing says it was applied. The fold now stamps applied_at on the answer
---      it applied. An answer of "none" wrote nothing and gets no stamp (the rule the apply side
---      keeps, 186:194-201).
+--      held (187) because nothing says it was applied. The fold now ends by stamping applied_at on
+--      every session answer whose pick is the session its file carries, however the file came by it
+--      (R6). An answer of "none", or a pick the file does not carry, gets no stamp (the rule the
+--      apply side keeps, 186:194-201).
 --
 -- WHAT
 --   1. supersede_replaced_files(uuid, bigint): 160's body; the settle test also reads a row that is
 --      archived and did not close itself. Nothing else changes.
---   2. link_file_sessions(bigint): 163's body; step c selects the answer's id and, when it writes
---      the pick onto the file, stamps applied_at on that answer row where it is still null.
+--   2. link_file_sessions(bigint): 163's body; the function ENDS with one statement (the backfill's
+--      own predicate, with dismissed as well): every session answer with no applied_at whose pick is
+--      the session its current file carries is stamped. Step c itself is unchanged.
 --   3. a backfill: every session answer (resolved or archived, not closed by itself, applied_at
 --      null) whose pick is the session its current file carries is stamped. The count is printed.
 --      The stamp's time is THIS MIGRATION'S, not the fold's that wrote the link: it says "applied
@@ -343,7 +345,7 @@ begin
 
     -- c. Several sessions. Settled already? (086's pattern.) An answer /inbox-apply has archived
     --    is still Stack's answer (163); a question that closed itself is not one.
-    select ai.id, ai.state, ai.resolution, ai.to_value   -- 188: the id, to stamp the answer
+    select ai.state, ai.resolution, ai.to_value
       into v_answer
       from attention_items ai
      where ai.kind = 'stack_must_confirm'
@@ -368,17 +370,7 @@ begin
                notes      = btrim(coalesce(notes || ' | ', '') ||
                             format('session_id %s set from Stack''s Inbox answer (123)', v_pick))
          where id = f.id and session_id is null;
-        get diagnostics v_n = row_count;
         v_linked := v_linked + 1;
-        -- 188: the answer was applied here, so it carries the stamp (applied_at) the apply side
-        -- reads: the worker records it as applied by link_file_sessions, and the Inbox refuses
-        -- Undo for it. An answer of "none", or a pick outside the week's sessions, wrote nothing
-        -- and gets none.
-        if v_n > 0 then
-          update attention_items
-             set applied_at = now()
-           where id = v_answer.id and applied_at is null;
-        end if;
       end if;
       continue;
     end if;
@@ -491,6 +483,27 @@ begin
       v_raised := v_raised + 1;
     end if;
   end loop;
+
+  -- 188: the stamp. Every session answer (resolved, dismissed, or archived and not self-closed) with
+  -- no applied_at whose pick is the session its current file carries NOW is stamped, however the
+  -- file came by it: step c above, the reading's date, the week dropping to one session, the lecture
+  -- number, 123's inheritance, or a file this loop never visits again. It is the one-time backfill's
+  -- own predicate (below), so the apply worker records the answer as applied by link_file_sessions,
+  -- the Inbox refuses Undo for it, and a held session answer of this kind is freed. An answer of
+  -- "none", and a pick the file does not carry, are never stamped.
+  -- (The alias is cf: f is this function's record variable.)
+  update attention_items ai
+     set applied_at = now()
+    from bb_files cf
+   where ai.kind = 'stack_must_confirm' and ai.entity = 'bb_file' and ai.field = 'session_id'
+     and ai.state in ('resolved', 'dismissed', 'archived')
+     and (ai.state <> 'archived' or ai.decision->>'closed_itself' is distinct from 'true')
+     and ai.applied_at is null
+     and cf.id = substring(ai.ref from '^session_link/([0-9]{1,18})$')::bigint
+     and cf.superseded_by is null
+     and cf.session_id is not null
+     and cf.session_id = case when ai.resolution->>'session_id' ~ '^[0-9]{1,18}$'
+                             then (ai.resolution->>'session_id')::bigint end;
 
   return jsonb_build_object('files_examined', v_examined, 'weeks_set', v_weeks,
                             'sessions_linked', v_linked, 'ambiguous', v_ambiguous,
