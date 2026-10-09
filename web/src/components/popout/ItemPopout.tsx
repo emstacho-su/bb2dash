@@ -64,6 +64,7 @@ export function ItemPopout() {
   return (
     <PopoutShell
       leaving={exit.leaving}
+      itemKey={shownRaw ?? undefined}
       onPanelNode={exitRef}
       label={target.kind === 'assignment' ? 'Assignment detail' : 'Session detail'}
       onClose={close}
