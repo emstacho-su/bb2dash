@@ -87,3 +87,60 @@ prompts:
 prod, no migration run on prod even rolled back, no `docker` command, no scheduled task, no `.env`,
 no secrets folder, no `git add -A`, no file outside its list, and no answer expected mid-run. W-80's
 only path to the database is the read-only runner, one process at a time.
+
+## The workers' hand-ins (2026-10-08)
+
+Each bb2dash worker's own record is beside this file: `110_W80_VERIFICATION.md` (database),
+`110_W81_VERIFICATION.md` (worker and skills), `110_W82_VERIFICATION.md` (exporter and schedule), and
+`110_W84_VERIFICATION.md` (the pack) when it lands. What the PM checked on each as it came in:
+
+* **W-81** (`fix/phase23-followups-apply`, 96e7050): `apply/` 136 tests, typecheck 0, lines 94.87 %
+  (94.78 % before). Only `batch.ts`, `report.ts`, `loop.ts`, two test files, three skill files and
+  its record changed; no lock file moved. Its bb-sync step reads
+  `id not in (select inbox_apply_held_items())`, which fits W-80's `setof bigint`.
+* **W-82** (`fix/phase23-followups-exports`, 533fb37): exporter, pr and render tests 41 pass; runner
+  tests 14 pass. It sends `p_id` and `p_filed`, `p_limit`, `p_id` and `p_log_path`, `p_id` and
+  `p_why`, and expects a boolean back from the three marks; W-80's 187 has exactly those names and
+  return types (read by the PM on the branch). The registration script was parsed, never run.
+  **Open for the review round:** the task starts `node.exe` directly, so a console window may show
+  every six hours; the existing logon task wraps its command in `powershell -WindowStyle Hidden`
+  (`desktop/launch/register-logon-task.ps1:145-146`).
+* **W-80** (`fix/phase23-followups-db`, 7330ee0): the runner reads "migration 187 is not applied" on
+  the three 187 units and "migration 188 is not applied" on 188's; units 180 to 186 pass today. One
+  standing unit was edited and named: `phase23_186_notices.sql`, case 3a, now also sends
+  `skip_seen` (186's close ignores the key, so it passes before and after). **Open for the review
+  round:** 187 is 854 lines and the held-answers unit 823, over the 800-line limit.
+* The three were merged into `fix/phase23-followups` (ecb796d, 7f51388, 480e4e2) and
+  `bb2dash-wt-23f-accept` was cut from that for W-84.
+
+### W-83, bb2dash-stack (`fix/phase23-followups` there, 527ecd5), as handed in
+
+That repository has no planning folder, so its record is here, from the worker's report.
+
+* **Tests.** `node --test <folder>` reads a folder as one failing test on this machine (Node 24), so
+  files are passed by name. `doctor/*.test.mjs`: 71 before, 88 after, 0 failures.
+  `scripts/*.test.mjs`: 225 before, 242 after, 241 pass, 1 skipped (the enum test, below).
+  `git diff --stat origin/main...HEAD -- doctor/workspace.test.mjs` prints nothing.
+* **Task 12.** One service-row function in `doctor/lib/checks-docker.mjs` makes both the Workspace's
+  and apply's rows. Apply with the profile off and a container still there is a problem whose text
+  holds `COMPOSE_PROFILES=workspace,apply`. New `doctor/lib/checks-exports.mjs` reads the state
+  file only. `doctor/apply.test.mjs` has four cases, `doctor/exports.test.mjs` nine.
+* **Task 13.** `just --list` holds `file-decisions`
+  (`node "{{bb2dash_dir}}/scripts/inbox-decisions-pr.mjs"`). `grep -c "Not in the doctor yet" README.md`
+  gives 0.
+* **Task 14.** Five actions with the brief's names. `apply.stop` is
+  `docker compose --profile apply stop apply`; `apply.startNoBuild` is
+  `--profile apply up -d --no-build --no-deps apply`, then a wait for healthy; `apply.doctorRow`
+  runs `config --services` and one `ps` of the service; `exports.doctorRow` starts nothing;
+  `exports.runNow` on Windows queries the task, starts it and waits up to five minutes for
+  `ended_at` to move, and fails with no fallback when the task is not registered. The run's
+  bookkeeping now carries the services it stopped and still owes a start, and the cleanup and the
+  sweep start them again.
+* **The test that compares action names with bb2dash's schema** did not exist in either repository.
+  W-83 added it (`scripts/accept-services.test.mjs`); it finds the schema through `BB2DASH_DIR`,
+  then `../bb2dash`, and skips full equality until the schema lists one of the five new names.
+* **Three places where the brief was not built to the letter**, each because an unedited test pins
+  the old form: the README section is still titled "The nine verbs" (the text says ten and names
+  the tenth); `.env.example` keeps its one `COMPOSE_PROFILES=workspace` line and gives
+  `workspace,apply` in a comment; when compose itself cannot answer, apply's row repeats the words
+  and does not count a second problem.
