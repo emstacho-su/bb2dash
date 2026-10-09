@@ -11,6 +11,7 @@ import { HamburgerIcon, UserIcon } from './icons';
 import { ActivityMenu } from './ActivityMenu';
 import { Bell } from './Bell';
 import { NavSearch } from './NavSearch';
+import { ThemeMenu } from './ThemeMenu';
 import { useSidebar } from './SidebarProvider';
 import { SyncButton } from './SyncButton';
 import { usePopover } from './usePopover';
@@ -223,6 +224,7 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
                   {updateLabel(desktopUpdate.state)}
                 </button>
               )}
+              <ThemeMenu />
               <button type="button" className={styles.ddRow} role="menuitem" onClick={signOut}>
                 Sign out
               </button>
