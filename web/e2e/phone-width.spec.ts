@@ -306,6 +306,25 @@ for (const theme of THEMES) {
     const scrollWidth = await pageScrollWidth(page);
     console.log(`popout assignment [${theme}]: page scrollWidth=${scrollWidth}`);
     expect(scrollWidth, `popout assignment [${theme}]: page scrollWidth`).toBeLessThanOrEqual(PHONE.width);
+
+    // The popout's foot, in the walk's window (1440 by 900): the backdrop is the scroller, and the
+    // panel's bottom edge must be reachable by scrolling it to its end.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const foot = await page.getByRole('dialog').evaluate((panel) => {
+      const backdrop = panel.parentElement as HTMLElement;
+      backdrop.scrollTop = backdrop.scrollHeight;
+      return {
+        windowHeight: window.innerHeight,
+        backdropClientHeight: backdrop.clientHeight,
+        backdropScrollHeight: backdrop.scrollHeight,
+        backdropScrolledTo: Math.round(backdrop.scrollTop),
+        panelBottomAfterScroll: Math.round(panel.getBoundingClientRect().bottom),
+      };
+    });
+    console.log(`popout assignment [${theme}] foot: ${JSON.stringify(foot)}`);
+    expect(foot.panelBottomAfterScroll, `popout assignment [${theme}]: the panel's bottom edge is reachable`).toBeLessThanOrEqual(
+      foot.windowHeight,
+    );
   });
 }
 
@@ -519,9 +538,57 @@ test('unfolded bar at 721', async ({ page, context }) => {
     expect(name, `the accessible name of the "${tip}" button`).toMatch(new RegExp(`^${tip}( \\d+)?$`));
   }
 
+  // The unread badge sits off the icon's corner: where the Activity button holds one, its box covers
+  // less than a third of the icon's (a two-digit count must not hide the glyph).
+  const activityButton = navOf(page).locator('button[data-tip="Activity"]');
+  const badge = activityButton.locator(':scope > span:not(.sr-only)');
+  if ((await badge.count()) === 0) {
+    console.log('activity badge: none (no unseen count to measure)');
+  } else {
+    const boxes = await activityButton.evaluate((button) => {
+      const rectOf = (element: Element | null) => {
+        const { left, top, right, bottom } = (element ?? button).getBoundingClientRect();
+        return { left, top, right, bottom };
+      };
+      const badgeBox = rectOf(button.querySelector(':scope > span:not(.sr-only)'));
+      const iconBox = rectOf(button.querySelector('svg'));
+      const overlapX = Math.max(0, Math.min(badgeBox.right, iconBox.right) - Math.max(badgeBox.left, iconBox.left));
+      const overlapY = Math.max(0, Math.min(badgeBox.bottom, iconBox.bottom) - Math.max(badgeBox.top, iconBox.top));
+      const iconArea = (iconBox.right - iconBox.left) * (iconBox.bottom - iconBox.top);
+      return { badgeBox, iconBox, covered: (overlapX * overlapY) / iconArea };
+    });
+    const round = (box: Rect) => `${printed(box.left)},${printed(box.top)},${printed(box.right)},${printed(box.bottom)}`;
+    console.log(
+      `activity badge [left,top,right,bottom]: ${round(boxes.badgeBox)}; icon: ${round(boxes.iconBox)}; covers ${printed(boxes.covered * 100)}% of the icon`,
+    );
+    expect(boxes.covered, 'the share of the Activity icon the badge covers').toBeLessThan(1 / 3);
+  }
+
   const scrollWidth = await navScrollWidth(page);
   // Recorded, not asserted: open item 3 of the brief wants the number.
   console.log(`unfolded bar at 721: nav scrollWidth=${scrollWidth}`);
+
+  // The band between 721 px and the idle bar's width (815 px since direction D's fonts): the frame holds
+  // the document at the window's size, so can the page still scroll sideways to the Account button?
+  await page.setViewportSize({ width: 800, height: 900 });
+  const band = await navOf(page).evaluate((nav) => {
+    const before = window.scrollX;
+    window.scrollTo(100, 0);
+    const moved = window.scrollX - before;
+    window.scrollTo(before, 0);
+    return {
+      documentScrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+      navScrollWidth: nav.scrollWidth,
+      scrollXAfterScrollTo100: moved,
+    };
+  });
+  console.log(`bar at 800: ${JSON.stringify(band)}`);
+  // Whatever the bar overflows the window by can be scrolled into view (the Account button is reachable).
+  const overflow = band.documentScrollWidth - band.innerWidth;
+  expect(band.scrollXAfterScrollTo100, 'the page scrolls sideways by the overflow of the bar, up to the 100 px asked').toBe(
+    Math.min(100, Math.max(0, overflow)),
+  );
 });
 
 test('bar at 390 longest label', async ({ page, context }) => {
