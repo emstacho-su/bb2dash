@@ -43,11 +43,6 @@
   visibility: hidden;
 }
 
-.panel:focus-visible {
-  outline: var(--size-focus) solid var(--color-accent);
-  outline-offset: var(--size-focus-gap);
-}
-
 .head {
   display: flex;
   align-items: center;
