@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { SearchIcon } from './icons';
+import tokens from '@/styles/tokens.module.css';
 import { SearchPanel, useMaterialSearch } from './SearchPanel';
 import { useExit } from './useExit';
 import styles from './NavSearch.module.css';
@@ -124,7 +125,7 @@ export function NavSearch() {
       <button
         ref={iconRef}
         type="button"
-        className={styles.icon}
+        className={`${styles.icon} ${tokens.tip}`}
         onMouseDown={() => {
           iconPressedRef.current = true;
         }}
@@ -139,7 +140,7 @@ export function NavSearch() {
         aria-label="Search"
         aria-expanded={expanded}
         aria-controls={expanded ? fieldId : undefined}
-        title="Search materials (⌘K)"
+        data-tip="Search"
       >
         <SearchIcon />
       </button>

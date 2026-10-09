@@ -19,7 +19,7 @@
  * is what runs on every screen.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -30,6 +30,8 @@ import {
   type AnnouncementCard,
 } from '@/lib/queries.announcements';
 import { BellIcon } from './icons';
+import tokens from '@/styles/tokens.module.css';
+import { useEscapeFocus } from './useEscapeFocus';
 import { useExit } from './useExit';
 import { usePopover } from './usePopover';
 import styles from './Bell.module.css';
@@ -40,6 +42,8 @@ const DROPDOWN_LIMIT = 8;
 export function Bell() {
   const [popover, anchor] = usePopover<HTMLSpanElement>();
   const [exit, exitRef] = useExit(popover.open);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  useEscapeFocus(popover.open, buttonRef);
   const unread = useUnreadAnnouncements();
   const list = useQuery({ ...allAnnouncementsOptions(), enabled: popover.open });
 
@@ -61,11 +65,13 @@ export function Bell() {
     <span ref={anchor} className={styles.anchor}>
       <button
         type="button"
-        className={popover.open ? styles.icOpen : styles.ic}
+        ref={buttonRef}
+        className={`${popover.open ? styles.icOpen : styles.ic} ${tokens.tip}`}
         onClick={() => popover.toggle()}
         aria-expanded={popover.open}
         aria-haspopup="menu"
-        title="Announcements"
+        data-tip="Announcements"
+        aria-label={badge > 0 ? `Announcements ${badge}` : 'Announcements'}
       >
         <BellIcon />
         <span className="sr-only">Announcements</span>

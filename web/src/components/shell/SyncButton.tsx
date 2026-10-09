@@ -100,6 +100,12 @@ export function SyncButton() {
   // The request this tab follows by id: the one it filed, or one it saw open.
   const [followedId, setFollowedId] = useState<number | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  // The timer waits while the pointer rests on the toast or focus is inside it.
+  // Kept as "the toast that is held", so a toast that is replaced or removed under the pointer
+  // (no leave event arrives) never leaves the next one held.
+  const [heldToast, setHeldToast] = useState<Toast | null>(null);
+  const toastHeld = toast !== null && heldToast === toast;
+  const buttonRef = useRef<HTMLButtonElement>(null);
   // A toast that goes stays for one exit with the words it had (task 29).
   const [toastExit, toastExitRef] = useExit(toast !== null);
   const [lastToast, setLastToast] = useState<Toast | null>(null);
@@ -126,10 +132,10 @@ export function SyncButton() {
 
   // A toast with nothing to act on is transient; the request state in the label is not.
   useEffect(() => {
-    if (!toast || staysUp(toast)) return;
+    if (!toast || staysUp(toast) || toastHeld) return;
     const timer = window.setTimeout(() => setToast(null), TOAST_MS);
     return () => window.clearTimeout(timer);
-  }, [toast]);
+  }, [toast, toastHeld]);
 
   // A request this tab saw moving gets one line when it closes. One the page
   // loaded already closed says nothing: that report is Activity's.
@@ -188,6 +194,7 @@ export function SyncButton() {
     <span className={styles.wrap}>
       <button
         type="button"
+        ref={buttonRef}
         className={styles.button}
         onClick={() => void press()}
         disabled={busy}
@@ -217,6 +224,10 @@ export function SyncButton() {
               className={styles.toast}
               role="status"
               data-leaving={toastExit.leaving ? '' : undefined}
+              onPointerEnter={() => setHeldToast(toast)}
+              onPointerLeave={() => setHeldToast(null)}
+              onFocus={() => setHeldToast(toast)}
+              onBlur={() => setHeldToast(null)}
             >
               {shownToast.kind === 'fallback' ? (
                 <>
@@ -235,7 +246,15 @@ export function SyncButton() {
                     <Link className={styles.toastLink} href="/inbox">
                       {SYNC_COPY.openInbox}
                     </Link>
-                    <button type="button" className={styles.toastDismiss} onClick={() => setToast(null)}>
+                    <button
+                      type="button"
+                      className={styles.toastDismiss}
+                      onClick={() => {
+                        setToast(null);
+                        setHeldToast(null);
+                        buttonRef.current?.focus();
+                      }}
+                    >
                       {SYNC_COPY.dismiss}
                     </button>
                   </span>

@@ -433,3 +433,10 @@
     display: none;
   }
 }
+
+/* The rightmost icon's drawn label ends at the button's right edge, so it cannot run past the bar. */
+.right .iconEnd[data-tip]::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}

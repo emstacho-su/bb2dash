@@ -14,7 +14,7 @@
  * of them is a reason to break the top bar.
  */
 
-import { useState, useSyncExternalStore } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import {
   readActivitySeen,
   relativeTime,
@@ -23,6 +23,8 @@ import {
   writeActivitySeen,
   type ActivityEntry,
 } from '@/lib/queries.sync';
+import tokens from '@/styles/tokens.module.css';
+import { useEscapeFocus } from './useEscapeFocus';
 import { useExit } from './useExit';
 import { usePopover } from './usePopover';
 import styles from './TopNav.module.css';
@@ -30,6 +32,8 @@ import styles from './TopNav.module.css';
 export function ActivityMenu() {
   const [popover, anchor] = usePopover<HTMLSpanElement>();
   const [exit, exitRef] = useExit(popover.open);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  useEscapeFocus(popover.open, buttonRef);
   const activity = useActivity();
   const entries = activity.data ?? [];
 
@@ -56,11 +60,13 @@ export function ActivityMenu() {
     <span ref={anchor} className={styles.anchor}>
       <button
         type="button"
-        className={popover.open ? styles.icOpen : styles.ic}
+        ref={buttonRef}
+        className={`${popover.open ? styles.icOpen : styles.ic} ${tokens.tip}`}
         onClick={open}
         aria-expanded={popover.open}
         aria-haspopup="menu"
-        title="Activity — what the last syncs changed"
+        data-tip="Activity"
+        aria-label={unseen > 0 ? `Activity ${unseen}` : 'Activity'}
       >
         <ActivityIcon />
         <span className="sr-only">Activity</span>

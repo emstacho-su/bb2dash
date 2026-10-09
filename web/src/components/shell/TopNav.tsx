@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, type KeyboardEvent } from 'react';
 import { getDesktopUpdater } from '@/lib/desktop-bridge';
 import { clearPersistedQueryCache } from '@/lib/query-provider';
 import { SIDEBAR_ID } from '@/lib/sidebar-preference';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import tokens from '@/styles/tokens.module.css';
 import { HamburgerIcon, UserIcon } from './icons';
 import { ActivityMenu } from './ActivityMenu';
 import { Bell } from './Bell';
@@ -14,6 +15,7 @@ import { NavSearch } from './NavSearch';
 import { ThemeMenu } from './ThemeMenu';
 import { useSidebar } from './SidebarProvider';
 import { SyncButton } from './SyncButton';
+import { useEscapeFocus } from './useEscapeFocus';
 import { useExit } from './useExit';
 import { usePopover } from './usePopover';
 import { isUpdateLocked, updateLabel, useDesktopUpdate } from './useDesktopUpdate';
@@ -58,6 +60,12 @@ const NAV_LINKS = [
 /** The phone-width menu's panel: what the Menu button controls. */
 const NAV_MENU_ID = 'primary-nav-menu';
 
+/** The rows of an open menu that can take focus: the menu items and the radio rows. */
+function menuItemsOf(menu: HTMLElement | null): HTMLElement[] {
+  if (menu === null) return [];
+  return [...menu.querySelectorAll<HTMLElement>('[role^="menuitem"]:not(:disabled)')];
+}
+
 export function TopNav({ userEmail }: { userEmail: string | null }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -66,6 +74,8 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
   // The phone-width menu (≤720px): the same six pages in a panel under the bar.
   const [menu, menuAnchor] = usePopover<HTMLSpanElement>();
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const accountButtonRef = useRef<HTMLButtonElement>(null);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
   // Both panels stay for one exit, marked data-leaving (task 29).
   const [userExit, userExitRef] = useExit(user.open);
   const [menuExit, menuExitRef] = useExit(menu.open);
@@ -83,15 +93,38 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
-  // usePopover closes on Escape and returns no focus; Menu returns it to its own button.
+  // usePopover closes on Escape and returns no focus; each menu returns it to its own button.
+  useEscapeFocus(menu.open, menuButtonRef);
+  useEscapeFocus(user.open, accountButtonRef);
+
+  // The account menu acts as a menu: opening it puts focus on its first row.
   useEffect(() => {
-    if (!menu.open) return;
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') menuButtonRef.current?.focus();
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [menu.open]);
+    if (user.open) menuItemsOf(accountMenuRef.current)[0]?.focus();
+  }, [user.open]);
+
+  // One ref callback for the exit hook and for the arrow keys below.
+  const accountMenuNode = useCallback(
+    (node: HTMLDivElement | null) => {
+      accountMenuRef.current = node;
+      userExitRef(node);
+    },
+    [userExitRef],
+  );
+
+  /** Down and Up move between the rows and wrap; Home and End jump. */
+  function onAccountMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const rows = menuItemsOf(event.currentTarget);
+    if (rows.length === 0) return;
+    const at = rows.indexOf(document.activeElement as HTMLElement);
+    let target: HTMLElement | undefined;
+    if (event.key === 'ArrowDown') target = rows[(at + 1) % rows.length];
+    else if (event.key === 'ArrowUp') target = rows[(at - 1 + rows.length) % rows.length];
+    else if (event.key === 'Home') target = rows[0];
+    else if (event.key === 'End') target = rows[rows.length - 1];
+    if (target === undefined) return;
+    event.preventDefault();
+    target.focus();
+  }
 
   function isActive(href: string): boolean {
     if (href === '/') return pathname === '/';
@@ -176,7 +209,7 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
         <button
           type="button"
           ref={sidebarToggleRef}
-          className={styles.icToggle}
+          className={`${styles.icToggle} ${tokens.tip}`}
           onClick={() => {
             user.close();
             menu.close();
@@ -184,7 +217,8 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
           }}
           aria-expanded={sidebarOpen}
           aria-controls={SIDEBAR_ID}
-          title="Courses sidebar"
+          data-tip="Courses sidebar"
+          aria-label="Courses sidebar"
         >
           <HamburgerIcon />
           <span className="sr-only">Courses sidebar</span>
@@ -200,14 +234,16 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
         <span ref={userAnchor} className={styles.anchor}>
           <button
             type="button"
-            className={user.open ? styles.icOpen : styles.ic}
+            ref={accountButtonRef}
+            className={`${user.open ? styles.icOpen : styles.ic} ${tokens.tip} ${styles.iconEnd}`}
             onClick={() => {
               menu.close();
               user.toggle();
             }}
             aria-expanded={user.open}
             aria-haspopup="menu"
-            title="Account"
+            data-tip="Account"
+            aria-label="Account"
           >
             <UserIcon />
             <span className="sr-only">Account</span>
@@ -215,9 +251,10 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
 
           {userExit.present && (
             <div
-              ref={userExitRef}
+              ref={accountMenuNode}
               className={styles.ddUser}
               role="menu"
+              onKeyDown={onAccountMenuKeyDown}
               data-leaving={userExit.leaving ? '' : undefined}
             >
               <div className={styles.ddIdentity}>

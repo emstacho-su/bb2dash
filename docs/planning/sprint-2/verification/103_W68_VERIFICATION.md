@@ -392,3 +392,30 @@ Exit tokens                                                          3 0
 Time check over the shell paths                                      (nothing, exit 1)
 ```
 `cd web && npm test`: 168 files, 3309 passed; `npm run typecheck` 0; `npx eslint . --max-warnings 0` 0; Audit green (shell.json stays `{}`).
+
+### Task 30, smooth sidebar and search
+
+`web/test/shell-motion.css.test.ts` first: RED 7 failed, 1 passed (the width transition, the keyframes' `width`, no transform on the drawer, no sign case); GREEN 8 passed with `NavSearch.css.test.ts`, `CourseSidebar.test.tsx`, `TopNav.search.test.tsx` and the audit (134 passed, exit 0; the three old files unedited).
+`git grep -n -E "(transition|animation)[a-z-]*:[^;]*width" -- web/src/components/shell` prints nothing (exit 1); Time check prints nothing. The closed drawer is `translateX(100%)` (today's `row-reverse`); the test fails when `--sidebar-side` moves and the sign does not.
+Harness `-g "open state 7|sidebar toggle|bar at"` on c9827fc: run 20261009T010533Z, 6 failed, all at the font check (see the finding under task 32): not a result for task 30. After the one-line override described there the same cases are covered by the final run below.
+
+### Task 32, keyboard polish
+
+RED: `shell-keyboard.test.tsx` (import of `SkipLink` unresolved) and `SyncButton.toast-timer.test.tsx` (3 failed: pointer, focus, Dismiss). GREEN: 9 files, 199 passed with the five old files unedited
+(`SyncButton`, `TopNav.search`, `TopNav.update`, `TopNav.workspace`, `Bell`), `TopNav.fold` and the audit. `cd web && npm test`: 171 files, 3335 passed; typecheck 0; eslint 0.
+`grep -c "Skip to content" "web/src/app/(app)/layout.tsx"` prints 1; `git grep -c "title=" -- TopNav.tsx Bell.tsx ActivityMenu.tsx NavSearch.tsx` prints nothing (exit 1); `grep -c "title={title}" web/src/components/shell/SyncButton.tsx` prints 1.
+Built: `SkipLink.tsx`, `useEscapeFocus.ts`; the account menu focuses its first row on open and takes Down, Up, Home and End (wrapping); Escape returns focus to the Account, Bell, Activity and Menu buttons; Dismiss focuses Sync;
+the toast's timer waits while the pointer or focus is on it (kept as "the toast that is held", so a toast removed under the pointer cannot leave the next one held); five icon buttons lose their `title` and carry `data-tip` and `tokens.tip`.
+The Dismiss case is in `SyncButton.toast-timer.test.tsx` (it needs the Sync stubs), not in `shell-keyboard.test.tsx`.
+
+`phone-width.spec.ts` `reachability` now presses Tab (the first stop is "Skip to content") and Enter (focus is on `main#content`) before the old steps. Harness `-g "reachability"`: run **20261009T012754Z**, exit 0, `2 passed`, 0 failed
+(on the tree with the globals override below, which was not committed).
+
+Two findings in W-67's files, not fixed by me:
+
+1. **`globals.css` line 24: the fonts `@import` is dropped by the production build.** The built CSS holds no `fonts.googleapis.com` import and `document.fonts.size` is 0 in the box, so the page runs on its fallback faces and
+   `phone-width.spec.ts`'s font check ("a face of Source Sans 3 with status loaded") fails every case that reads a width. Isolated with four builds: the `main` Inter import survives; an import whose URL holds
+   `Source+Serif+4:opsz,wght@8..60,600` is dropped (the comma and the `..` range), while `Source+Sans+3:wght@400;500`, a two-family URL and `Source+Serif+4:wght@600` all survive. The fix is one value in
+   `direction-d.json`'s `fontsHref` and `globals.css`: `family=Source+Serif+4:wght@600` (the Direction check compares `fontsHref`). For my harness runs I applied that one-line change to the working tree only, ran, and restored the file; `git status` on `globals.css` is clean.
+2. **`tokens.module.css` `.tip` doubles the accessible name.** `content: attr(data-tip)` is part of the name Chromium computes, so "Courses sidebar" became "Courses sidebarCourses sidebar" and `getByRole('button', { name: 'Courses sidebar', exact: true })` found nothing. The clean fix is
+   `content: attr(data-tip) / ''` (alt text for the generated content). Until then the four buttons carry an `aria-label` equal to their name (with the count: "Activity 3"), which wins over the generated content; Search already had one.
