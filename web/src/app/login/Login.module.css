@@ -6,7 +6,7 @@
 }
 
 .panel {
-  width: min(380px, 100%);
+  width: min(var(--size-380), 100%);
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -19,18 +19,21 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--size-10);
   font-family: var(--font-heading);
   font-weight: var(--font-heading-weight);
-  font-size: 19px;
+  font-size: var(--text-19);
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
+/* the square mark: the ink, with no glow */
 .mark {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
+  width: var(--size-10);
+  height: var(--size-10);
+  border-radius: var(--radius-xs);
   background: var(--color-accent);
-  box-shadow: 0 0 12px var(--color-accent);
+  box-shadow: var(--shadow-mark);
 }
 
 .lede {
@@ -45,12 +48,12 @@
   gap: var(--space-4);
 }
 
+/* the shared error notice: the tint, the danger words, the bar and the word "Error" */
 .error {
+  composes: errorNotice from '@/styles/tokens.module.css';
   margin: 0;
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
   font-size: var(--text-sm);
   line-height: 1.4;
 }
