@@ -400,7 +400,8 @@ describe('a unit larger than its share, and lines the guard grows', () => {
 });
 
 describe('the whole prompt', () => {
-  it('stays under 131,072 bytes at every maximum, over many random mixes', () => {
+  // CPU-bound (40 rounds of up to 6 MB of text): under load it passed the 5 s default, so the limit is explicit.
+  it('stays under 131,072 bytes at every maximum, over many random mixes', { timeout: 120_000 }, () => {
     let seed = 12345;
     const random = (): number => {
       seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -439,7 +440,7 @@ describe('the whole prompt', () => {
     }
   });
 
-  it('holds the prompt under the limit with every block at its largest', () => {
+  it('holds the prompt under the limit with every block at its largest', { timeout: 120_000 }, () => {
     const feed = parseFeed(bigFeedJson(60, 60));
     const hits = [
       ...Array.from({ length: 14 }, (_, i) => hitFixture({ unitId: i + 1, passage: 'p'.repeat(9000), title: 't'.repeat(500) })),
