@@ -18,9 +18,6 @@
 .rail {
   flex: none;
   width: var(--sidebar-width);
-  position: sticky;
-  top: var(--nav-height);
-  height: calc(100dvh - var(--nav-height));
   background: var(--color-panel);
   overflow: hidden;
   display: flex;
@@ -161,7 +158,6 @@
   /* The drawer slides by transform, never by width (task 30). */
   .rail {
     position: static;
-    height: auto;
     box-shadow: var(--shadow-md);
     transition: transform var(--motion-enter-lg) var(--ease-out);
   }

@@ -3,8 +3,9 @@
    Phase 22 (direction D): tokens only, one ring, states that ease, panels that arrive and leave. */
 
 .bar {
-  position: sticky;
-  top: 0;
+  /* The first row of the frame (task 26), not sticky. Positioned, so its panels hang from it. */
+  position: relative;
+  flex: none;
   z-index: 20;
   display: flex;
   align-items: center;

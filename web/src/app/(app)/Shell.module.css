@@ -1,5 +1,7 @@
 .shell {
-  min-height: 100dvh;
+  /* The frame (task 26): exactly the window's height. The bar is its first row, the body fills the
+     rest, and the document does not scroll: the content pane does. */
+  height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -45,13 +47,25 @@
    what left a dead gap on the right of a wide window; the rail now uses that
    space, and the column takes the rest. Screens that need a reading measure
    set one on their own text blocks. */
+/* The content pane scrolls by itself. It is positioned, so a label placed inside it is contained by
+   it (Workspace.layout.test.tsx), and the gutter is stable so a page that grows a scrollbar does not
+   shift. */
 .main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
   padding: var(--space-8) var(--space-12) var(--space-12);
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
+}
+/* Its children keep their height and the pane scrolls, instead of squeezing them to fit. */
+.main > * {
+  flex-shrink: 0;
 }
 /* Focus lands here from the skip link: the ring sits just inside the pane. */
 .main:focus-visible {

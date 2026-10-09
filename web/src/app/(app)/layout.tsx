@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { Suspense, type ReactNode } from 'react';
+import { ContentPane } from '@/components/shell/ContentPane';
 import { CourseSidebar } from '@/components/shell/CourseSidebar';
 import { ItemPopout } from '@/components/popout/ItemPopout';
 import { SidebarProvider } from '@/components/shell/SidebarProvider';
@@ -49,9 +50,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <TopNav userEmail={user.email ?? null} />
         <div className={styles.body}>
           <CourseSidebar />
-          <main id={CONTENT_ID} tabIndex={-1} className={styles.main}>
+          <ContentPane id={CONTENT_ID} className={styles.main}>
             {children}
-          </main>
+          </ContentPane>
         </div>
         <Suspense fallback={null}>
           <ItemPopout />
