@@ -43,9 +43,9 @@ Spawn 1 does task 15 and the tokens table. Task 18 (the sweep) waits for W-67's 
 ### GREEN
 
 * Harness run `20261008T235442Z`, exit 0, `result` `passed`, `8 passed (27.0s)`. Printed `page scrollWidth`:
-  `/` 390 / 390, `/planner` 390 / 390, `/inbox` 390 / 390, `/announcements` 390 / 390 (dark / light). The
-  `/planner` case also asserts the board's `scrollWidth` above its `clientWidth` (read from
-  `[data-planner-board="true"]`), and it passed.
+  `/` 390 / 390, `/planner` 390 / 390, `/inbox` 390 / 390, `/announcements` 390 / 390 (dark / light).
+  The spec of that run held no assertion on the board's own width: the run printed the page's width only. A later run by
+  W-68, `20261009T001508Z`, printed `route /planner [dark]: box scrollWidth=764 clientWidth=368` (the same in light).
 * The deterministic checks are in the section "Checks" below.
 
 ## Tokens my sweep needs
@@ -154,3 +154,84 @@ No pre-existing test failed on the contract; none was edited. The table above ho
   that is the smaller change and the brief names tracks first.
 * Names in the table are numeric (`--size-N`) for plain lengths and named for the planner's three, so W-67 can
   merge a value another table asks for under the same name; W-67 chooses the final names.
+
+## Resume 1: start checks
+
+`git fetch origin`, `git merge origin/feat/styling-22` (clean). The row's five checks, each by itself, every one printed one
+line and exited 0: `data-theme='light'` in `globals.css` (2), `^\.errorNotice` in `tokens.module.css` (2), `motion-control`
+in `globals.css` (3), `size-target` in `globals.css` (1), `attemptText` in `queries.grades.ts` (2).
+
+## Task 18: the sweep of screens A
+
+Tokens are used under the names `globals.css` declares: `--color-mix-text-45-transparent` is an alias of `--color-text-45`
+(not needed in this cluster after the sweep: the one use was `StatusSelect`'s hover, which now names
+`--color-neutral-400`); `--text-2xs` 10px; `--text-3xs` 9px.
+
+### RED, then GREEN
+
+| Step | Command | Result |
+|---|---|---|
+| RED | `cd web && npx vitest run test/UpcomingTracker.urgency.test.tsx` (new file, written first) | exit 1, 3 failed, 1 passed (the mixed day passes on today's data order; the legend and the two stability cases fail) |
+| GREEN | the same | exit 0, 4 passed |
+| GREEN | `cd web && npx vitest run test/UpcomingTracker.urgency.test.tsx test/UpcomingTracker.test.tsx test/UpcomingTracker.scroll.test.tsx test/upcoming-tracker-css.test.ts` | 0 failures; the three old files unedited |
+
+### The row's commands, before and after
+
+| Command | Before the sweep | After |
+|---|---|---|
+| Baseline sum, `F=/^screens-a\.json$/` | 106 (sum of the old JSON) | `0` (the JSON is `{}`) |
+| Weight check over `NeedsAttention.module.css` and `web/src/components/tracker` | 1 line (`NeedsAttention.module.css:51`) | prints nothing |
+| Red files over inbox, announcements, planner, tracker | prints nothing | 4 lines: `Inbox.module.css`, `AnnouncementsList.module.css`, `PlannerWeek.module.css`, `UpcomingTracker.module.css` |
+| Notice files over inbox, `Today.module.css`, `components/inbox`, `components/planner` | prints nothing | 5 lines: `Today.module.css`, `Inbox.module.css`, `InboxCard.module.css`, `PlannerEventForm.module.css`, `PlannerWeek.module.css` |
+| `grep -c "var(--radius-day)"` / `"var(--radius-bar)"` in `UpcomingTracker.module.css` | 0 / 0 | 1 / 1 |
+| Time check over the screens A paths | prints nothing | prints nothing |
+| Field check | `5 0 0` | `5 2 2` (`StatusSelect`, `PlannerItemPopover` `.control`) |
+| No-select check over `UpcomingTracker.module.css` and `Inbox.module.css` | | `2 0 0` |
+| `grep -c "user-drag: none" "web/src/app/(app)/Today.module.css"` | 0 | 1 |
+| Strength check | `7 7` (by the brief; the four files of W-69 were the 0.45/0.55/0.6 ones) | `7 3` (down by 4; the three left are W-67's `.btn:disabled` and W-68's `SyncButton` and `Popout`) |
+| `git grep -c "cursor: progress"` over planner and tracker | 2 lines | 2 lines: `PlannerWeek.module.css:1`, `StatusSelect.module.css:1` |
+| `grep -c "accent-color" PlannerWeek.module.css` | 1 | 0 |
+| `grep -c "outline: none" StatusSelect.module.css` | 1 | 0 |
+| `grep -c "var(--color-surface-press)" Today.module.css`; `grep -c "var(--motion-delay)" Today.module.css` | 0; 0 | 1; 1 |
+| `git grep -c "@starting-style"` over `PlannerItemPopover.module.css`, `InboxApplyButton.module.css` | none | 2 lines, one each |
+| Ring check, W-69's stylesheets only | | `14 0 0` |
+| `npm test` | | exit 0, 165 files, 3242 tests |
+| `npm run typecheck`; `npx eslint . --max-warnings 0` | | exit 0; exit 0 |
+| `npx vitest run test/token-audit.test.ts` | | 0 failures |
+
+### What the sweep did, and the defaults it took
+
+* Every size literal is `var(--size-N)` (or the planner's three named ones, `--text-2xs`, `--text-3xs`, `--radius-3`); every
+  `color-mix()` is the `--color-mix-*` token of its row; `NeedsAttention` `.count b` is `--font-weight-semibold`.
+  `PlannerWeek.module.css` keeps A3's `--planner-slot: 24px`, `.block`'s `padding: 3px 5px` and `line-height: 14px`, and
+  `.chip`'s padding; `StatusSelect`'s `padding: 3px 6px` and `.barArea`'s `height: 120px` stay.
+* The four `style=` keys that were not custom properties are gone: the three `fontSize: 'var(--text-sm)'` on a button link
+  became a descendant rule (`.headerMeta a`, `.panelFoot a`, `a.inboxLink`; an element selector outranks the composed
+  `.btn` class whichever sheet the browser loads last), `Today.tsx`'s `textAlign` a class (`.stripHead`, composing
+  `kicker`), `UpcomingTracker.tsx`'s bar `height` a custom property (`--seg-height`). `PlannerWeek.tsx`'s one `height` key
+  stays (A5); `PlannerBoard.tsx`'s sites already held only `--` keys.
+* Home's loading line (`.muted`) waits `--motion-delay` and fades in once, with its own `@keyframes arrives` in the module
+  (a module's animation names are local). It carries `data-loading`, so `globals.css`'s reduced-motion rule keeps the wait
+  and drops the fade. The attribute is on that one span only; H-5's "not needed" is about the other loading lines.
+* `.statusSelect` fill is the well (`--color-bg`), as the text field's. The popover and the series dialog panels carry the
+  scroll and arrival rules the entries name. `PlannerItemPopover` `.panel` grows from the top centre, or the bottom centre
+  when `data-placement` is `above`.
+* The Upcoming order: `LEGEND` reads exam, project, quiz, assignment, reading and `URGENCY_RANK` is read from it;
+  `barOrder` sorts a day's items stably, least urgent first, so the last child (the top bar of the `column-reverse` area) is
+  the most urgent. The item detail rows keep the order they arrive in.
+* The popover `.control` and `.statusSelect` disabled rules keep the pointer they have (`default` for the first, which got
+  `cursor: pointer` for the field look; `progress` for the second).
+* Scrollbar: `.tracker`'s own rules stay for now (task 38); the one `8px` in `::-webkit-scrollbar` became `--size-8` so
+  the baseline reaches 0 at this task.
+
+## ui-ux-pro-max
+
+Loaded with the Skill tool at the start of resume 1 and kept for the tasks of that resume (18, then 28 and 34 to 38, and 31).
+
+* **Task 18.** Files read: `design-system/bb2dash/MASTER.md`, `pages/home.md`, `pages/planner.md`, `pages/inbox.md`, and
+  `component-changes.json` (the `what` of every W-69 entry). Searches: none run. The design system the pass persisted
+  already answers every question the sweep asks (colour, motion, states, focus), and the brief says the brief and
+  `direction-d.json` win on a value; a fresh search would only return generic advice to set aside. Advice set aside, and the
+  rule that won: the skill's "min 44x44 touch" and "16px body" rules (native/mobile scope; the brief pins the sizes and
+  asks for the 24px target of task 36); "spring-physics" curves (the brief's `--ease-out` token); "toast auto-dismiss in
+  3-5s" (not a W-69 rule; the app's own timer stays); the generated `transition: all` (the Master bans it).

@@ -41,7 +41,6 @@ import {
 } from '@/lib/queries.inboxChoice';
 import { latestWrite } from '@/components/inbox/inbox-row';
 import { UNDO_BLOCKED, useReopenAttentionItem } from '@/lib/queries.inboxReopen';
-import tokens from '@/styles/tokens.module.css';
 import shell from '../Shell.module.css';
 import styles from './Inbox.module.css';
 import {
@@ -269,7 +268,7 @@ export function InboxView({
 
 export function InboxLink({ label = 'Open inbox →' }: { label?: string }) {
   return (
-    <Link href="/inbox" className={tokens.btnGhost} style={{ fontSize: 'var(--text-sm)' }}>
+    <Link href="/inbox" className={styles.inboxLink}>
       {label}
     </Link>
   );

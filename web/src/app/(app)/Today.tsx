@@ -221,7 +221,7 @@ export function Today() {
           <h1 className={styles.title}>Today</h1>
         </div>
         <div className={styles.headerMeta}>
-          <a href="/planner" className={tokens.btnGhost} style={{ fontSize: 'var(--text-sm)' }}>
+          <a href="/planner" className={tokens.btnGhost}>
             Open planner →
           </a>
         </div>
@@ -265,7 +265,11 @@ export function Today() {
               grades={cardGrades(course)}
             />
           ))}
-          {coursesQ.isPending && <span className={styles.muted}>loading courses…</span>}
+          {coursesQ.isPending && (
+            <span className={styles.muted} data-loading>
+              loading courses…
+            </span>
+          )}
         </div>
       </section>
 
@@ -476,7 +480,7 @@ export function CourseCard({
         </div>
       </div>
       <div className={styles.strip}>
-        <span className={tokens.kicker} style={{ textAlign: 'center' }}>
+        <span className={styles.stripHead}>
           this week
         </span>
         <span className={styles.stripCells}>

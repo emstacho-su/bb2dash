@@ -20,13 +20,13 @@
 }
 .row:hover { background: var(--color-hover); }
 .row:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: calc(var(--size-focus-gap) * -1);
 }
 
 .caret {
   color: var(--color-neutral-500);
-  width: 10px;
+  width: var(--size-10);
 }
 
 .title {
@@ -48,7 +48,7 @@
   white-space: nowrap;
 }
 .count b {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--color-accent-300);
 }
 
@@ -74,7 +74,7 @@
 
 .item {
   display: grid;
-  grid-template-columns: 72px 84px 1fr;
+  grid-template-columns: var(--size-72) var(--size-84) 1fr;
   align-items: baseline;
   gap: var(--space-3);
   font-size: var(--text-sm);
@@ -96,7 +96,11 @@
   gap: var(--space-3);
   margin-top: var(--space-2);
 }
-.panelFoot a { margin-left: auto; }
+.panelFoot a {
+  margin-left: auto;
+  /* A descendant selector outranks the composed button class in either sheet order. */
+  font-size: var(--text-sm);
+}
 
 .empty {
   margin: 0;
@@ -121,7 +125,7 @@
 .heartbeat {
   list-style: none;
   margin: 0;
-  padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 10px + var(--space-3));
+  padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + var(--size-10) + var(--space-3));
   display: flex;
   flex-direction: column;
   gap: var(--space-1);

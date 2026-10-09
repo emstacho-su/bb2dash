@@ -21,6 +21,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { readGlobalsThemeMaps } from './css-tokens';
 
 const STYLESHEET = 'src/components/planner/PlannerWeek.module.css';
 const SOURCE = readFileSync(join(process.cwd(), STYLESHEET), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -73,6 +74,16 @@ function readRules(css: string): readonly Rule[] {
 }
 
 const RULES = readRules(SOURCE);
+const GLOBAL_TOKENS = readGlobalsThemeMaps().dark;
+
+/** A length written as px, or as a `var(--size-*)` that globals.css declares in px. */
+function pixels(text: string | undefined): number | null {
+  if (text === undefined) return null;
+  const reference = /^var\((--[a-z0-9-]+)\)$/.exec(text.trim());
+  const value = reference ? GLOBAL_TOKENS.get(reference[1]) : text;
+  const match = /^(\d+(?:\.\d+)?)px$/.exec((value ?? '').trim());
+  return match ? Number(match[1]) : null;
+}
 
 /** Every rule whose selector list names exactly `selector`, in any block. */
 function rulesFor(selector: string): readonly Rule[] {
@@ -111,17 +122,19 @@ describe('planner phone width (R-46, task 15) — the board scrolls inside itsel
 
     const columns = declaration(phone, 'grid-template-columns');
     expect(columns).not.toBeNull();
-    const dayTracks = /repeat\(\s*7\s*,\s*minmax\(\s*(\d+(?:\.\d+)?)px\s*,\s*1fr\s*\)\s*\)/.exec(columns ?? '');
-    expect(dayTracks, 'seven day tracks of minmax(<floor>px, 1fr)').not.toBeNull();
+    const dayTracks = /repeat\(\s*7\s*,\s*minmax\(\s*([^,]+?)\s*,\s*1fr\s*\)\s*\)/.exec(columns ?? '');
+    expect(dayTracks, 'seven day tracks of minmax(<floor>, 1fr)').not.toBeNull();
 
-    const gutter = /--planner-gutter\s*:\s*(\d+(?:\.\d+)?)px/.exec(phone.body);
+    const gutter = /--planner-gutter\s*:\s*([^;]+);/.exec(phone.body);
     expect(gutter, 'the phone block sets the gutter').not.toBeNull();
 
-    const trackFloor = Number(dayTracks?.[1]);
-    const gutterPx = Number(gutter?.[1]);
+    const trackFloor = pixels(dayTracks?.[1]);
+    const gutterPx = pixels(gutter?.[1]);
+    expect(trackFloor, 'the track floor resolves to px').not.toBeNull();
+    expect(gutterPx, 'the gutter resolves to px').not.toBeNull();
     const gaps = (TRACK_COUNT - 1) * BOARD_GAP_PX;
     const padding = 2 * BOARD_PADDING_PX;
-    const gridMinimum = gutterPx + DAY_COLUMNS * trackFloor + gaps + padding;
+    const gridMinimum = (gutterPx ?? 0) + DAY_COLUMNS * (trackFloor ?? 0) + gaps + padding;
 
     expect(gridMinimum).toBeGreaterThanOrEqual(BOARD_FLOOR_PX);
     // And not a different board: the floor is the old one, give or take a pixel per track.

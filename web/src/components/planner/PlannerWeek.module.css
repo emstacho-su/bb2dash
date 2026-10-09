@@ -58,11 +58,14 @@
   composes: btnSecondary from '@/styles/tokens.module.css';
   margin-left: var(--space-2);
 }
+.todayLink:active {
+  opacity: 0.7;
+}
 
 /* R3-9: "+" at the header's top right opens the new-event wizard. */
 .addEvent {
   composes: btnPrimary from '@/styles/tokens.module.css';
-  min-width: 32px;
+  min-width: var(--size-32);
   font-size: var(--text-lg);
   line-height: 1;
 }
@@ -95,7 +98,7 @@
   /* The whole grid's height, summed over the per-row table. Overridden inline
      by the board; the fallback keeps the stylesheet meaningful on its own. */
   --planner-grid-height: calc(var(--planner-slots, 28) * var(--planner-slot));
-  --planner-gutter: 62px;
+  --planner-gutter: var(--size-planner-gutter);
 
   display: grid;
   grid-template-columns: var(--planner-gutter) repeat(7, minmax(0, 1fr));
@@ -122,18 +125,23 @@
 }
 
 .dayHead[data-today='true'] {
-  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
+  background: var(--color-mix-accent-14-surface);
 }
 
 .dayName {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-neutral-500);
 }
 
+/* Where you are: the ink words over the one red underline, as the tracker marks today. */
 .dayHead[data-today='true'] .dayName {
   color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-color: var(--color-accent-500);
+  text-decoration-thickness: var(--size-underline-mark);
+  text-underline-offset: var(--size-underline-offset);
 }
 
 .dayDate {
@@ -150,7 +158,7 @@
   align-items: center;
   justify-content: flex-end;
   padding: var(--space-2);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-neutral-500);
@@ -199,7 +207,7 @@
 .bandToggle:hover,
 .bandToggle:focus-visible {
   color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+  background: var(--color-mix-accent-10-surface);
 }
 
 .bandChevron {
@@ -210,7 +218,7 @@
 /* What a closed cell says instead of its chips, so nothing due is invisible. */
 .bandCount {
   align-self: flex-start;
-  padding: 0 4px;
+  padding: 0 var(--size-4);
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -224,13 +232,13 @@
   flex-direction: column;
   gap: 2px;
   min-height: calc(var(--planner-slot) * 1.2);
-  padding: 3px;
+  padding: var(--size-3);
   background: var(--color-surface);
   min-width: 0;
 }
 
 .bandCell[data-today='true'] {
-  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+  background: var(--color-mix-accent-8-surface);
 }
 
 .bandEmpty {
@@ -270,7 +278,7 @@
 }
 
 .dayColumn[data-today='true'] {
-  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+  background: var(--color-mix-accent-8-surface);
 }
 
 /* The hour lines. Phase 11 painted them as a repeating gradient every 48px;
@@ -292,8 +300,8 @@
   right: 0;
   top: var(--top-px);
   height: 2px;
-  background: var(--color-accent);
-  box-shadow: 0 0 8px var(--color-accent);
+  background: var(--color-accent-500);
+  box-shadow: none;
   pointer-events: none;
   z-index: 3;
 }
@@ -349,7 +357,7 @@
 .meetingBlock {
   composes: block;
   z-index: 1;
-  background: color-mix(in srgb, var(--color-accent-2-800) 78%, transparent);
+  background: var(--color-mix-accent-2-800-78-transparent);
   color: var(--color-accent-2-100);
   box-shadow: inset 2px 0 0 var(--color-accent-2-400);
 }
@@ -387,7 +395,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0 4px;
+  gap: 0 var(--size-4);
   min-width: 0;
 }
 
@@ -478,11 +486,11 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 1px 4px;
+  gap: 1px var(--size-4);
   min-width: 0;
-  padding: 1px 4px;
+  padding: 1px var(--size-4);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--color-bg) 55%, transparent);
+  background: var(--color-mix-bg-55-transparent);
   box-shadow: inset 2px 0 0 var(--color-accent-300);
 }
 
@@ -558,8 +566,8 @@
   composes: chip;
   flex-direction: row;
   align-items: center;
-  gap: 4px;
-  background: color-mix(in srgb, var(--color-accent-2-800) 78%, transparent);
+  gap: var(--size-4);
+  background: var(--color-mix-accent-2-800-78-transparent);
   color: var(--color-accent-2-100);
 }
 
@@ -580,11 +588,11 @@
   cursor: pointer;
 }
 .slot:hover {
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  background: var(--color-mix-accent-10-transparent);
 }
 .slot:focus-visible {
-  outline-offset: -2px;
-  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  outline-offset: calc(var(--size-focus-gap) * -1);
+  background: var(--color-mix-accent-16-transparent);
 }
 
 .eventBlock {
@@ -594,6 +602,14 @@
   background: var(--planner-kind-bg);
   color: var(--planner-kind-fg);
   box-shadow: inset 2px 0 0 var(--planner-kind-edge);
+  transition: var(--motion-control);
+}
+/* Clickable, so it shows it: a hairline of its own edge colour, inset so no box
+   moves. A box-shadow and not an outline: two kinds already use their outline. */
+.eventBlock:hover {
+  box-shadow:
+    inset 2px 0 0 var(--planner-kind-edge),
+    inset 0 0 0 var(--size-underline) var(--planner-kind-edge);
 }
 
 /* A block's lines keep their height. Flex items shrink by default, and the title
@@ -608,7 +624,7 @@
 .eventMeta {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--size-4);
   min-width: 0;
 }
 
@@ -620,7 +636,7 @@
 .eventBlock[data-compact='true'] .blockBody {
   flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: var(--size-4);
 }
 .eventBlock[data-compact='true'] .blockBody > .blockHead {
   flex: none;
@@ -659,7 +675,7 @@
 
 .eventBlock[data-pending='true'],
 .eventChip[data-pending='true'] {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: progress;
 }
 
@@ -683,8 +699,8 @@
   --planner-kind-edge: var(--planner-ooo-edge);
   background-image: repeating-linear-gradient(
     135deg,
-    var(--planner-ooo-hatch) 0 4px,
-    transparent 4px 9px
+    var(--planner-ooo-hatch) 0 var(--size-4),
+    transparent var(--size-4) var(--size-9)
   );
 }
 .eventBlock[data-kind='focus_time'],
@@ -711,7 +727,7 @@
 }
 
 .eventKind {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   opacity: 0.8;
@@ -732,10 +748,15 @@
   white-space: normal;
   overflow-wrap: anywhere;
   cursor: pointer;
+  transition: var(--motion-control);
 }
+.eventTitle:active {
+  opacity: 0.7;
+}
+/* Inside the block's clipped box, so the ring sits inset. */
 .eventTitle:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+  outline: var(--size-focus) solid var(--color-accent);
+  outline-offset: calc(var(--size-focus-gap) * -1);
 }
 .eventTitle[data-done='true'] {
   text-decoration: line-through;
@@ -744,22 +765,26 @@
 
 .eventDone {
   flex: none;
-  width: 12px;
-  height: 12px;
+  width: var(--size-12);
+  height: var(--size-12);
   margin: 0;
-  accent-color: var(--color-accent);
   cursor: pointer;
+}
+/* Drawn by the app's checkbox rule: the edge is the block's text colour; ticked, a
+   tick in the block's own fill scales in. */
+.eventDone::before {
+  background: var(--planner-kind-bg);
 }
 
 .zoneChip {
   flex: none;
   align-self: flex-start;
-  padding: 0 4px;
+  padding: 0 var(--size-4);
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   white-space: nowrap;
-  background: color-mix(in srgb, var(--color-bg) 45%, transparent);
+  background: var(--color-mix-bg-45-transparent);
 }
 
 /* T-1: an occurrence of a repeating event. Small enough not to compete with
@@ -767,7 +792,7 @@
 .repeatMark {
   flex: none;
   align-self: flex-start;
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1;
   white-space: nowrap;
   opacity: 0.85;
@@ -802,7 +827,7 @@
 }
 .bandAdd:hover,
 .bandAdd:focus-visible {
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  background: var(--color-mix-accent-10-transparent);
 }
 
 /* — states ——————————————————————————————————————————————————————————— */
@@ -814,6 +839,7 @@
 }
 
 .alert {
+  composes: errorNotice from '@/styles/tokens.module.css';
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -821,8 +847,6 @@
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
-  color: var(--color-danger);
-  background: var(--color-danger-bg);
 }
 
 .alertDismiss {
@@ -846,7 +870,7 @@
    rounded up to a whole pixel per track. */
 @media (max-width: 900px) {
   .board {
-    --planner-gutter: 48px;
-    grid-template-columns: var(--planner-gutter) repeat(7, minmax(101px, 1fr));
+    --planner-gutter: var(--size-planner-gutter-narrow);
+    grid-template-columns: var(--planner-gutter) repeat(7, minmax(var(--size-planner-day-min), 1fr));
   }
 }

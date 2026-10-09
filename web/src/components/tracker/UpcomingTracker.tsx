@@ -137,13 +137,28 @@ const SUBMISSION_LABEL: Record<string, string> = {
   email: 'email',
 };
 
+/** Most urgent first: the legend reads in this order and a day's bars are stacked by it. */
 const LEGEND: { category: WorkCategory; glyph: string; label: string }[] = [
-  { category: 'reading', glyph: 'R', label: 'reading' },
-  { category: 'assignment', glyph: 'A', label: 'assignment' },
-  { category: 'quiz', glyph: 'Q', label: 'quiz' },
-  { category: 'project', glyph: 'P', label: 'project' },
   { category: 'exam', glyph: 'E', label: 'exam' },
+  { category: 'project', glyph: 'P', label: 'project' },
+  { category: 'quiz', glyph: 'Q', label: 'quiz' },
+  { category: 'assignment', glyph: 'A', label: 'assignment' },
+  { category: 'reading', glyph: 'R', label: 'reading' },
 ];
+
+/** How urgent a kind is: 0 is the most urgent. Read from the legend, so the two cannot disagree. */
+const URGENCY_RANK: Record<WorkCategory, number> = Object.fromEntries(
+  LEGEND.map((entry, index) => [entry.category, index]),
+) as Record<WorkCategory, number>;
+
+/**
+ * A day's items for drawing. The bar area is column-reverse, so the LAST child is the top bar:
+ * the least urgent come first. The sort is stable, so two items of one kind keep the order they
+ * arrived in. Returns a new array; the caller's is not touched.
+ */
+function barOrder(items: readonly WorkItem[]): WorkItem[] {
+  return [...items].sort((a, b) => URGENCY_RANK[b.category] - URGENCY_RANK[a.category]);
+}
 
 /* ---------------------------------------------------------------------------
  * Row-level display helpers (pure)
@@ -593,11 +608,11 @@ function DayColumn({
       <span className={styles.monthLabel}>{day.monthLabel}</span>
       <span className={styles.dayCount}>{items.length || ''}</span>
       <span className={styles.barArea}>
-        {items.map((item) => (
+        {barOrder(items).map((item) => (
           <span
             key={`${item.item_kind}:${item.item_id}`}
             className={`${styles.seg} ${SEG_CLASS[item.category]}`}
-            style={{ height: `${Math.max(3, toNumber(item.effort) * scale)}px` }}
+            style={{ ['--seg-height' as string]: `${Math.max(3, toNumber(item.effort) * scale)}px` }}
             title={`${item.title} · ${effortLabel(toNumber(item.effort))}`}
           />
         ))}

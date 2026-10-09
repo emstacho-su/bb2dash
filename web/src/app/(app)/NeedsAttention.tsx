@@ -155,7 +155,7 @@ export function NeedsAttentionView({
                 {open - top.length} more not shown
               </span>
             )}
-            <Link href="/inbox" className={tokens.btnGhost} style={{ fontSize: 'var(--text-sm)' }}>
+            <Link href="/inbox" className={tokens.btnGhost}>
               Open inbox →
             </Link>
           </div>

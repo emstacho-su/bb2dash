@@ -30,23 +30,23 @@
 .row {
   composes: card from '@/styles/tokens.module.css';
   display: grid;
-  grid-template-columns: 8px 1fr;
+  grid-template-columns: var(--size-8) 1fr;
   align-items: start;
   gap: var(--space-3);
   padding: var(--space-4);
 }
 
 .dot {
-  width: 6px;
-  height: 6px;
-  margin-top: 7px;
+  width: var(--size-6);
+  height: var(--size-6);
+  margin-top: var(--size-7);
   border-radius: 50%;
   background: transparent;
 }
 
 .dotUnread {
   composes: dot;
-  background: var(--color-accent);
+  background: var(--color-accent-500);
 }
 
 .body {
@@ -66,8 +66,8 @@
 
 .unreadTag {
   composes: tagOutline from '@/styles/tokens.module.css';
-  font-size: 10px;
-  padding: 1px 7px;
+  font-size: var(--text-2xs);
+  padding: 1px var(--size-7);
 }
 
 .title {
