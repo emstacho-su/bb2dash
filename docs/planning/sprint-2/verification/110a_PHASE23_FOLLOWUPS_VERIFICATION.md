@@ -624,7 +624,7 @@ empty, no acceptance lock, no `bb2dash-walk22-...` box in `docker ps`.
 | The task | `scripts/register-exports.ps1`, first with `-SecretsDir` naming a folder that does not exist, then with the real folders | First: exit 2, "is not an existing folder", no task. Then: `Bb2dash-Exports` registered, 2 triggers (logon; every 6 h), action is `powershell.exe` hidden running `node scripts/exports-run.mjs` from the shared checkout |
 | The first export | `Start-ScheduledTask` | `LastTaskResult` 0. `state.json`: started 04:34:34Z, ended 04:34:55Z, exit 0, `inbox-decisions` filed 16, skipped 0, not filed 0. On prod: 0 archived decisions unfiled, 16 with a note path, 16 listed by `inbox_decisions_unlogged` (no day file yet, which is `just file-decisions`), item 3782 skipped |
 | `just doctor` | from bb2dash-stack's `main` | `exports` "last run 13s ago, exit 0, 16 filed". `apply` is a problem: "off, but a container of apply is running", which is the missing `.env` line. The three other problems are the vaults' uncommitted entries and the harness doctor, not this phase's |
-| `just accept 23 --check` | from bb2dash-stack's `main` | Passes: bb2dash at `c19cd9a` (origin/main), "a green run would count as acceptance", ten stages listed, five rows not done by a run |
+| `just accept 23 --check` | from bb2dash-stack's `main` | Passes: bb2dash at `c19cd9a` (origin/main), "a green run would count as acceptance", nine stages listed, five rows not done by a run |
 | `just accept 23` | **Not started.** | Its `ready` stage reads `apply.doctorRow`, which is a problem until the `.env` line is in |
 
 Seen on the way: Vercel's production is still the build of `a58be34` (#83), because its GitHub App is not
