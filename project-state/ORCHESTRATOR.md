@@ -271,9 +271,18 @@ Learned in the Phase 23 follow-ups (2026-10-09; each from `verification/110a_PHA
      not apply a superseded-file pick; the acceptance run presses Sync; the verb `file-decisions`; 187 during the
      build and 188 at the cut-over); migration 187 as one file of 940 lines, over your 800 limit (a split would
      have spent 189); and rulings R1 to R7 (DECISIONS 2026-10-08 and 2026-10-09).
-  5. **A fourth SQL unit fails on prod's course data, `phase18_123_file_sessions.sql`** (file 2488's question was
-     answered "none" and archived). It joins the three under the Phase 21 item below: say which session takes
-     them.
+  5. **The failing SQL units are audited and corrected** (2026-10-09, on your word; record
+     `verification/115_SQL_UNITS_AUDIT_2026-10-09.md`; the suite went from 70 of 81 to 75 of 81, and the six
+     left each have a named reason). That also answers item 7 under Phase 21 below. Two things the audit found
+     are yours:
+     * **A number for a small grades fix, and your look at it.** The Grades table's "counts toward" flag does not
+       see the "Counts toward…" picker: GEO.103's two attendance columns that you marked "Not graded" are still
+       listed among the items. One expression in one view, proved in a rolled-back transaction. It needs a
+       migration number outside the follow-ups' block (107 is free in Phase 16's own block) and, because it
+       changes what the Grades tab lists, your look before it merges.
+     * **File 2851**, a PDF in ECN.304's readings, has no text and is not in search; the sync said "Files: 3
+       pulled". Open it: if it is a scan, say whether it joins the `na` files or gets read by hand as file 68
+       was.
   6. Still yours from Phase 23 itself: the two grading components the writer set (30 and 33), the question in
      archived item 3425's record, and the note on item 3435.
 
@@ -384,7 +393,9 @@ Learned in the Phase 23 follow-ups (2026-10-09; each from `verification/110a_PHA
      PM; the runner keeps no figure of them.
   6. **`npm ci` in `C:/Users/stack/agentic-harness/mcp-server`**, yours to run or to ask for: its installed
      `node_modules` still holds fastembed 2.1.0 under a lock that says 2.1.1.
-  7. **Three SQL units fail on prod's course data** from any checkout (`grading_invariants.sql`,
+  7. ~~**Three SQL units fail on prod's course data**~~ Audited and corrected 2026-10-09 (the Phase 23
+     follow-ups item above, point 5; `verification/115_SQL_UNITS_AUDIT_2026-10-09.md`). As it was asked:
+     from any checkout (`grading_invariants.sql`,
      `phase18_122_supersede_rule.sql`, `phase18_golden_truth.sql`; STATUS, Known issues). They are not Phase 21's;
      say which session takes them.
 
