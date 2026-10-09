@@ -34,6 +34,7 @@ import {
   type OutcomeAction,
   type ResolveInput,
 } from '@/lib/queries.sync';
+import { MarkedLabel } from '@/components/shell/icons';
 import { courseCodeFromId } from '@/lib/queries.today';
 import {
   REOPENED_LINE,
@@ -234,7 +235,7 @@ export function InboxCard({
         <span>{sourceText(item)}</span>
         {href && (
           <Link className={styles.sourceLink} href={href} scroll={false}>
-            {sourceLinkLabel(item)}
+            <MarkedLabel label={sourceLinkLabel(item)} />
           </Link>
         )}
       </p>

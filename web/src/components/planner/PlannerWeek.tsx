@@ -69,6 +69,7 @@ import { WeekHeader } from './PlannerWeekHeader';
 import { usePlannerEventEditor } from './usePlannerEventEditor';
 import type { ItemActions } from './PlannerItem';
 import { usePlannerWeekData } from './usePlannerWeekData';
+import { Mark } from '@/components/shell/icons';
 import styles from './PlannerWeek.module.css';
 
 /** What the server and the hydrating client both render (see `useHydrated`). */
@@ -115,8 +116,12 @@ function PlannerWeekSkeleton() {
       <div className={styles.head}>
         <h2 className={styles.h2}>{LOADING_WEEK}</h2>
         <span className={styles.pager} data-planner-pager="true" aria-hidden="true">
-          <span className={styles.pageGhost}>◂</span>
-          <span className={styles.pageGhost}>▸</span>
+          <span className={styles.pageGhost}>
+            <Mark name="caretLeft" />
+          </span>
+          <span className={styles.pageGhost}>
+            <Mark name="caretRight" />
+          </span>
           <span className={styles.pageGhost}>Today</span>
         </span>
       </div>

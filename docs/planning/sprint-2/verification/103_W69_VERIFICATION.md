@@ -353,3 +353,33 @@ in the stylesheet avoids the property names, because the row's grep reads commen
 | | `grep -c "does not hide the scrollbar" web/test/upcoming-tracker-css.test.ts` | `1` |
 | Audit | `cd web && npx vitest run test/token-audit.test.ts` | exit 0 |
 | Gates | `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0` | exit 0 (167 files, 3255 tests); exit 0; exit 0 |
+
+## Task 31: marks (W-69's files)
+
+Start check, after `git fetch origin` and a merge of `origin/feat/styling-22`: `git grep -c "export function Mark" origin/feat/styling-22 --
+web/src/components/shell/icons.tsx` printed `...icons.tsx:2` (`Mark` and `MarkedLabel`), exit 0; `git grep -c "export const MARK_CHAR" ...` printed
+`...icons.tsx:1`, exit 0. W-68's `icons.tsx` commit was in.
+
+The 18 characters in 8 files are drawn by `Mark`; each keeps its character as clipped text inside the wrapper it had, so a caret
+inside an `aria-hidden` wrapper stays hidden and every accessible name and text content is what it was. A right arrow after a link's
+words is the caret right with `char={MARK_CHAR.arrowRight}`, so the character stands in `icons.tsx` alone.
+
+| File | Characters | Now |
+|---|---|---|
+| `NeedsAttention.tsx` | fold caret, "Open inbox →" | `Mark` caretDown/caretRight in its `aria-hidden` span; `Mark` caretRight with `MARK_CHAR.arrowRight` |
+| `Today.tsx` | Undated fold caret, "Open planner →" | the same; the button is still named from `Undated` |
+| `PlannerBoard.tsx` | Assignments band chevron | `Mark` in its `aria-hidden` span |
+| `PlannerWeek.tsx` | the two ghost pager marks | `Mark` caretLeft/caretRight in `.pageGhost` (inside an `aria-hidden` pager) |
+| `PlannerWeekHeader.tsx` | the week pager | `Mark` caretLeft/caretRight (the links keep their `aria-label`) |
+| `PlannerItemPopover.tsx` | close, "See full details →", "Blackboard ↗" | `Mark` close (the button keeps `aria-label="Close"`), caretRight, arrowUpRight |
+| `UpcomingTracker.tsx` | the tracker pager | `Mark` caretLeft/caretRight (the buttons keep their `aria-label`) |
+| `Inbox.tsx` | `InboxLink`'s default label | the label is built from `MARK_CHAR.arrowRight` and drawn through `MarkedLabel` |
+| `InboxCard.tsx` | `sourceLinkLabel(item)` (a string from `inbox-row.ts`) | drawn through `MarkedLabel`; the string is unchanged |
+
+| Command | Before (HEAD of this task) | After |
+|---|---|---|
+| Mark characters (whole tree) | `41 20` | `23 12` (the 23 in 12 files left are W-68's 5 in 3 and W-70's 18 in 9) |
+| Mark characters, W-69's eight files | 18 in 8 | 0 in 0 |
+| `grep -c "<MarkedLabel" web/src/components/inbox/InboxCard.tsx`; `... "web/src/app/(app)/inbox/Inbox.tsx"` | 0; 0 | 1; 1 |
+| `npx vitest run test/TodayLayout.test.tsx test/Inbox.test.tsx test/PlannerItemPopover.test.tsx` | | exit 0, 3 files, 137 passed, unedited |
+| `npm test`; `npm run typecheck`; `npx eslint . --max-warnings 0`; `npx vitest run test/token-audit.test.ts` | | exit 0 (170 files, 3318 tests); exit 0; exit 0; exit 0 |

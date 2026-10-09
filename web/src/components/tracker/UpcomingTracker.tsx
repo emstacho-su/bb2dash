@@ -65,6 +65,7 @@ import {
   MONTH_LABELS,
   type TrackerDay,
 } from './anchor';
+import { Mark } from '@/components/shell/icons';
 import styles from './UpcomingTracker.module.css';
 
 /* ---------------------------------------------------------------------------
@@ -472,7 +473,7 @@ export function UpcomingTracker({
             title="Earlier"
             aria-label="Earlier days"
           >
-            ◂
+            <Mark name="caretLeft" />
           </button>
           <button
             type="button"
@@ -482,7 +483,7 @@ export function UpcomingTracker({
             title="Later"
             aria-label="Later days"
           >
-            ▸
+            <Mark name="caretRight" />
           </button>
         </span>
       </div>

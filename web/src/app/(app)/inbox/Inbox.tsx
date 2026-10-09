@@ -24,6 +24,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { InboxApplyButton } from '@/components/inbox/InboxApplyButton';
+import { MARK_CHAR, MarkedLabel } from '@/components/shell/icons';
 import { InboxCard } from '@/components/inbox/InboxCard';
 import {
   EMPTY_TAB_TEXT,
@@ -266,10 +267,10 @@ export function InboxView({
  * The Home row links here; keep one canonical label for the link.
  * ------------------------------------------------------------------------ */
 
-export function InboxLink({ label = 'Open inbox →' }: { label?: string }) {
+export function InboxLink({ label = `Open inbox ${MARK_CHAR.arrowRight}` }: { label?: string }) {
   return (
     <Link href="/inbox" className={styles.inboxLink}>
-      {label}
+      <MarkedLabel label={label} />
     </Link>
   );
 }

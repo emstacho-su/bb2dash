@@ -11,6 +11,7 @@ import Link from 'next/link';
 import tokens from '@/styles/tokens.module.css';
 import { useTerm } from '@/lib/queries.today';
 import { termWeekNumber, type PlannerDay, type PlannerWeekModel } from '@/lib/planner-week';
+import { Mark } from '@/components/shell/icons';
 import styles from './PlannerWeek.module.css';
 
 /** '2 classes · 3 due', plus ' · 1 event' when the week has planner events. */
@@ -89,7 +90,7 @@ function WeekPager({ view, pathname }: { view: PlannerWeekModel; pathname: strin
         aria-label="Previous week"
         scroll={false}
       >
-        ◂
+        <Mark name="caretLeft" />
       </Link>
       <Link
         className={styles.pageLink}
@@ -98,7 +99,7 @@ function WeekPager({ view, pathname }: { view: PlannerWeekModel; pathname: strin
         aria-label="Next week"
         scroll={false}
       >
-        ▸
+        <Mark name="caretRight" />
       </Link>
       <Link className={styles.todayLink} href={pathname} scroll={false}>
         Today

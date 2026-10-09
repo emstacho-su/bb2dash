@@ -24,6 +24,7 @@ import { useId } from 'react';
 import Link from 'next/link';
 import { HOME_COLLAPSE, UNDATED_SECTION, useCollapseState } from '@/lib/collapse-state';
 import tokens from '@/styles/tokens.module.css';
+import { MARK_CHAR, Mark } from '@/components/shell/icons';
 import styles from './Today.module.css';
 import {
   courseCodeFromId,
@@ -222,7 +223,7 @@ export function Today() {
         </div>
         <div className={styles.headerMeta}>
           <a href="/planner" className={tokens.btnGhost}>
-            Open planner →
+            Open planner <Mark name="caretRight" char={MARK_CHAR.arrowRight} />
           </a>
         </div>
       </header>
@@ -331,7 +332,7 @@ function UndatedTray({
             onClick={() => toggle(UNDATED_SECTION)}
           >
             <span className={styles.undatedCaret} aria-hidden="true">
-              {folded ? '▸' : '▾'}
+              {folded ? <Mark name="caretRight" /> : <Mark name="caretDown" />}
             </span>
             {`Undated${count}`}
           </button>
