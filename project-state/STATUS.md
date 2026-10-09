@@ -1562,7 +1562,9 @@ running") and `just accept 23` has not been started: its first host stage reads 
 Phase 22 walk box is running: `just accept 23` from bb2dash-stack's `main`; a green run counts as Phase
 23's acceptance.
 
-**The live site is older than `main`.** Vercel has not deployed since the repositories moved to
+**The live site is `main` again since 2026-10-09 about 12:10Z.** Stack installed Vercel's GitHub App on
+`stack-dev-personal` and reconnected project `web`; production is the build of `c19cd9a`, read with the
+Vercel tools. What stood before, for the record: Vercel had not deployed since the repositories moved to
 `stack-dev-personal` (its GitHub App is not installed there); production is the build of `a58be34` (#83).
 Between that commit and `main` the app's source differs by one line (the picker's write also refreshes the
 gradebook rows, #87) and the generated types, so the acceptance run walks the same Inbox the follow-ups
@@ -1584,8 +1586,12 @@ expect. The fix is his: install the app on the organization and reconnect projec
   schedule fires by itself is not proved by the run either: it starts the task once by hand.
 * The scheduled task starts through a hidden PowerShell; a console window may still flash for a moment
   as it starts, as the logon task's does.
-* The exporter's first real run on this laptop was the cut-over's (16 filed). That the schedule fires by
-  itself is still to be seen: the next start is the logon trigger or the six-hour one.
+* The exporter's first real run on this laptop was the cut-over's (16 filed). The schedule fires by itself:
+  the time trigger ran at 04:44Z (exit 0, nothing to file). **The run at 11:56Z failed** ("the request did
+  not reach Supabase: fetch failed"), five minutes after a logon, before the network was up; `just doctor`
+  showed it, as built, and a run started by hand at 12:12Z was exit 0. A run that finds no network reads
+  as a problem until the next one, up to six hours later. Not changed; a retry or a later logon delay is
+  a follow-up if it recurs.
 
 **Still Stack's, outside this work:** the two grading components the writer set (30 and 33, on items
 3433, 3434, 3668, 3669); the question written into archived item 3425's record; the note on item 3435.
