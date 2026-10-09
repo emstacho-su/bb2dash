@@ -156,6 +156,7 @@ Required by the brief's working rules (amendment 3, H-1). One row per task that 
 | Task | Skill loaded | Files read first | Searches run | Advice set aside, and the rule that won |
 |---|---|---|---|---|
 | 19, 28, 31, 34, 37 | yes (Skill tool, `ui-ux-pro-max`, once at the start of the resume, before task 19) | `design-system/bb2dash/MASTER.md` (all of it), `design-system/bb2dash/pages/grades.md`, `design-system/bb2dash/pages/workspace.md`; `direction-d.json` and `component-changes.json` for every value and entry | none. The brief names every rule these tasks write, the component-changes entries give each change word for word, and `direction-d.json` holds every value, so a query would only have returned advice the brief already overrides. No `--persist` was passed and no script ran | `touch-target-size` (44 px) and `web-target-size` lose to `--size-target` (task 36, not mine); `readable-font-size` (16 px body) and the type-floor advice lose to the seven pinned `--text-*` sizes and the brief's "no 11px floor" (D-2); `weight-hierarchy` loses to the sweep's rule that weights are `--font-weight-*` tokens at today's value; `truncation-strategy` and `spring-physics` do not apply (these tasks truncate and animate nothing new); the icon-package advice (a Phosphor import) loses to "no new dependency": the marks are the inline SVGs of `icons.tsx`; `grades.md` lines 21-22, 34, 36 and 37 ("waits", "needs his word") are read against D-2, D-3, D-5 and H-5 and the brief's table of overtaken lines: all of them are now in (tasks 28, 31, 34, 37) |
+| 26 (my line) | yes (Skill tool, at the start of the task) | `design-system/bb2dash/MASTER.md`; the brief's frame section and task row | none (the brief names the one line) | `fixed-element-offset` and `scroll-behavior` lose to D-1, the frame with scrolling panes: no bar lies over a scrolling page any more |
 
 ## Task 19: the sweep of screens B
 
@@ -335,3 +336,37 @@ not change.
 | `cd web && npm test` | 0 | 171 files, 3311 passed |
 | `npm run typecheck`; `npx eslint . --max-warnings 0` | 0; 0 | no error; no output |
 | `cd web && npx vitest run test/token-audit.test.ts` | 0 | 89 passed; `screens-b.json` sums to 0 |
+
+## Task 26: my line (the Stream's week rail sticks to the pane)
+
+Merged `origin/feat/styling-22` first. The row's checks: `git grep -c "scrollbar-gutter: stable" origin/feat/styling-22 --
+"web/src/app/(app)/Shell.module.css"` printed `:1`; `git grep -c "position: sticky" origin/feat/styling-22 --
+web/src/components/shell/TopNav.module.css` printed nothing (exit 1).
+
+* **ui-ux-pro-max (task 26).** Loaded at the start of the task; read `design-system/bb2dash/MASTER.md` first. No search
+  run: the brief's frame section and the task row name the one line. Advice set aside: `fixed-element-offset` (reserve
+  padding under a fixed bar) and `scroll-behavior` (avoid nested scroll regions) lose to D-1, the frame with scrolling
+  panes; with the bar no longer over a scrolling page, the offset is gone by design.
+* **The change** (commit `feat(22-T26): the Stream's week rail sticks to the pane`): `CourseTimeline.module.css` `.rail`
+  `top: calc(var(--nav-height) + var(--space-4))` becomes `top: var(--space-4)`. What is sticky now sticks to the
+  pane, which starts under the bar.
+* **Checks:** `grep -c "nav-height" web/src/components/course/CourseTimeline.module.css` → `0` (exit 1); `cd web && npx
+  vitest run test/course-timeline-css.test.ts test/CourseTimeline.test.tsx` → exit 0, 2 files, 26 passed, both
+  unedited; `cd web && npm test` → exit 0, 181 files, 3381 passed; `npm run typecheck` → 0; `npx eslint . --max-warnings 0`
+  → 0; `npx vitest run test/token-audit.test.ts` → 0, `screens-b.json` still 0.
+
+### Harness runs on the committed and pushed tree (commit `4675ff0`, `dirty` false)
+
+| Run | Command | Result |
+|---|---|---|
+| `20261009T032625Z` | `node scripts/walk-box.mjs web/e2e/phone-width.spec.ts -- -g "route /course/|route /grades |route /materials |route /workspace "` | `exit_code` 0, `passed`, `16 passed (49.2s)`, 0 failed |
+| `20261009T032835Z` | `node scripts/walk-box.mjs web/e2e/workspace-layout.spec.ts` (unedited) | `exit_code` 0, `passed`, `2 passed (740ms)`, 0 failed |
+
+Printed in run `20261009T032625Z`, every route in dark and light: `page scrollWidth=390 pane scrollWidth=380
+clientWidth=380` (the pane is 10 px narrower than the page by its stable gutter, and it does not overflow). On
+`/course/IST.466/grades`, in both themes, `box scrollWidth=452 clientWidth=335`: the gradebook box is still wider than
+its window and scrolls inside itself. The Workspace's message column still scrolls inside its own box and the page does
+not grow below the window (`workspace-layout.spec.ts`).
+
+The frame broke nothing on my screens: no failure in either run, so nothing to fix in my files and no element of another
+worker's to name.
