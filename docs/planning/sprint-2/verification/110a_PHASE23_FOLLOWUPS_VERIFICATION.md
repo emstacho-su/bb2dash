@@ -491,3 +491,25 @@ It walked the task's command line for the two real folders and for a path with a
 apostrophe and found both parse in PowerShell 5.1; traced `--notes-only` and the default mode for
 an ordinary row, an accepted skip, a refused skip and a row another run took; and compared 188's
 `link_file_sessions` with 163's body (163's plus the one end statement).
+
+## Task 6: 188's rolled-back dry run on its final text (2026-10-09, about 01:50Z)
+
+After W-80's round 5 (comments only) 188 is 615 lines, SHA-256 `b4cbfaaa...4ac387`. 187 is now on
+prod, so this run is 188 alone on top of it: one rolled-back transaction, the method above, no
+request open, the text fetched from commit 1d7cf22 and compared by SHA-256 first.
+
+* Before 188: `phase23_188_archived_answers` stops at "migration 188 is not applied".
+* 188 executed whole, guards silent. The backfill stamped **14**. One fold of
+  `link_file_sessions` on prod's own data examined 10 files, linked none, raised nothing; still 14.
+  The function's comment reads as R6 has it.
+* After 188: `phase23_188_archived_answers` **PASS**; `phase23_185`, both `phase23_187_held_answers`
+  units, `phase18_124`, `_162`, `_163` PASS.
+* `phase18_122_supersede_rule` and `phase18_123_file_sessions` give the same line before and after
+  ("newest run ... wrote 4"; "ambiguous without exactly one open question: 2488:0"): both fail on
+  live course data on `main` today, and 188 adds no line.
+* Rolled back. Through the runner `phase23_188_archived_answers.sql` still reads "migration 188 is
+  not applied", until task 20.
+
+Also merged since: W-84's round 3 (step 6 watches eight and a half minutes, about 45 seconds of
+slack; step 3's nine minutes have about 35) and W-82's round 4 (76 tests pass; the path literal
+count 1, control characters 0, non-ASCII bytes 0, parse errors 0).
