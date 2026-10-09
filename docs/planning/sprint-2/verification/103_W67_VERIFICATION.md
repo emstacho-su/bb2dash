@@ -591,3 +591,39 @@ Defaults taken:
    same work in its own text because it cannot import.
 4. **The listener falls back to `addListener`** where `addEventListener` is missing on the query (an old engine); the
    test stubs only `addEventListener`.
+
+## Task 10: ThemeMenu, the component (P-77, R-53)
+
+Files: `web/src/components/shell/ThemeMenu.tsx`, `web/src/components/shell/ThemeMenu.module.css` (tokens only),
+`web/test/ThemeMenu.test.tsx` (new). The mount in `TopNav.tsx` is W-68's (`grep -c "<ThemeMenu"` is theirs to bring to 1).
+Skill: loaded for this task (the Skill tool, at the start of task 8, stays loaded in this session); `MASTER.md` and the
+tile's account-menu fragment (`tile-d.html`, the `ddGroup` block and `.ddRow[role="menuitemradio"]`) were read first.
+No search was run. The look is the tile's: a "Theme" small-capital head, three rows like the account menu's own rows,
+the picked row marked by a tick in the ink (a shape, not a colour).
+
+| Step | Command | Exit | Result |
+|---|---|---|---|
+| RED: the new test with `ThemeMenu.tsx` moved aside | `npx vitest run test/ThemeMenu.test.tsx test/TopNav.update.test.tsx` | 1 | the new file failed to load; `TopNav.update` 8 passed |
+| GREEN | same | 0 | 2 files, 23 passed (23) |
+| `npm test` | | 0 | 166 files, 3290 passed (3290) |
+| `npm run typecheck` | | 0 | no error |
+| `npx eslint . --max-warnings 0` | | 0 | no output |
+| Time check over `web/src/components/shell/ThemeMenu.module.css` (the file read directly, as it was not yet tracked) | | 1 (no match) | prints nothing |
+
+The test proves: exactly three `menuitemradio` rows named Dark, Light, Auto in DOM order, no `menuitem`; Dark checked
+with no key, and under a stubbed light system; a stored `light` or `auto` checks its row; a stored `dark`, junk or
+empty value shows Dark; Light writes `light`, stamps the attribute and every meta; Auto follows a stubbed light or dark
+system and, with no `matchMedia`, stamps dark; Dark removes the key and stamps dark; a throwing storage still stamps
+and the checked row follows the pick; a pick sets `data-theme-switching`, gone two animation frames later.
+
+Defaults taken:
+
+1. **The rows sit in a `role="group"` named "Theme"**, with a "Theme" head, as the tile draws it. The group is a child
+   of the account menu's `role="menu"`, which ARIA allows for `menuitemradio`.
+2. **Same-tab refresh of the checked row**: `useSyncExternalStore` is notified by a module-level listener set after the
+   component's own write (the `storage` event only fires in other tabs). The picked value is also kept in state so a
+   throwing storage still shows the pick.
+3. **The mount is W-68's.** `ThemeMenu` takes no props; W-68 places `<ThemeMenu />` between the identity block and the
+   Update row, as the tile does. Its rows are `menuitemradio`, so the Update row's `menuitem` list does not change.
+4. **Keyboard**: the rows are buttons, so Tab reaches them; the arrow-key behaviour of the account menu is W-68's task 32
+   (the theme rows "are in the order").
