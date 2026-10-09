@@ -552,3 +552,42 @@ nothing beyond the two `--text-*` names above.
    localises `animation` names). For W-69.
 6. **`--color-surface-press`** is D's `color-mix(text 8%, surface)`; the reader's `color-mix` second argument may be a
    `var()` that ends in a plain colour, which this is.
+
+## Task 9: theme-preference, the boot script, the root layout (P-76, P-78, R-53)
+
+Files: `web/src/lib/theme-preference.ts` (new), `web/src/app/layout.tsx`, `web/test/theme-preference.test.ts` (new),
+`web/test/raw-html.audit.test.ts` (the three parts the brief names: the header sentence, the allow-list constants, the
+two cases that read them; the scanner, its fixtures and `OTHER_SINKS` are as they were),
+`web/test/token-audit.baseline/foundation.json` (`layout.tsx` 1 to 0, in this commit).
+
+| Step | Command | Exit | Result |
+|---|---|---|---|
+| RED: the new test with `theme-preference.ts` moved aside | `npx vitest run test/theme-preference.test.ts test/raw-html.audit.test.ts` | 1 | the new file failed to load (no module); `raw-html.audit` 6 passed |
+| GREEN | same | 0 | 2 files, 43 passed (43) |
+| the token audit after the root layout lost its literal | `npx vitest run test/token-audit.test.ts` | 1, then 0 | "layout.tsx counts 0, below its baseline of 1"; passes once the baseline is lowered |
+| `npm test` | | 0 | 165 files, 3275 passed (3275) |
+| `npm run typecheck` | | 0 | no error |
+| `npx eslint . --max-warnings 0` | | 0 | no output |
+| `grep -c "#161826" web/src/app/layout.tsx` | | | 0 |
+| `grep -c "__html: THEME_BOOT_SCRIPT" web/src/app/layout.tsx` | | | 1 |
+| `git grep -c "dangerouslySetInnerHTML=" -- web/src` | | | `web/src/app/(app)/layout.tsx:1`, `web/src/app/layout.tsx:1` |
+
+What the test proves: the nine rows of `resolveTheme` (and the same nine through the real script in jsdom with a
+stubbed `matchMedia`, each stamping the expected `data-theme` and writing and removing no storage); no `matchMedia`
+stamps dark and does not throw; a stored `dark` or junk value is left where it is; a resolved light sets every
+`theme-color` meta; a `change` event with `auto` stored re-stamps the attribute and the metas and sets
+`data-theme-switching`, gone two frames later, and with nothing, `light`, `dark` or junk stored it changes neither;
+the boot stamp never sets the switching mark; the listener is registered whatever is stored and reads storage again on
+each change; `THEME_BG` equals the blocks' `--color-bg` read by the reader; `THEME_COLOR` equals `THEME_BG.dark`.
+
+Defaults taken:
+
+1. **`suppressHydrationWarning` on `<html>`.** The boot script stamps `data-theme` before React hydrates and React never
+   renders it, so the attribute is the one thing the server HTML and the client may disagree on. The brief does not name
+   it; it is the standard form for this and affects only that element's own attributes.
+2. **`resolveTheme(stored, systemPrefersLight)`** takes `null` for "no `matchMedia`", so the nine rows are the function's
+   own table and the script's behaviour is tested against the same rows.
+3. **`stampTheme(theme, switching)`** and the storage helpers are exported for `ThemeMenu` (task 10). The script does the
+   same work in its own text because it cannot import.
+4. **The listener falls back to `addListener`** where `addEventListener` is missing on the query (an old engine); the
+   test stubs only `addEventListener`.
