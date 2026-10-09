@@ -183,7 +183,7 @@ export function SubmissionBlock({
           {attemptCount > 0 && (
             <span className={tokens.tagOutline}>{attemptsText(attemptCount, allowed)}</span>
           )}
-          <span title="When a Blackboard sync last saw this.">
+          <span className={styles.note} title="When a Blackboard sync last saw this.">
             seen {formatSeenAt(grade.seen_at)}
           </span>
         </div>
