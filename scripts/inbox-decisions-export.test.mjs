@@ -8,13 +8,12 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import {
+  createRpc,
   DEFAULT_LIMIT,
   DEFAULT_SUPABASE_URL,
-  ExportError,
-  SERVICE_KEY_FILE,
-  SKIP_WHY,
-  createRpc,
+  EXIT_UNREACHABLE,
   exportDecisions,
+  ExportError,
   isTestQuestion,
   main,
   parseArgs,
@@ -22,6 +21,9 @@ import {
   readServiceKey,
   resolveVault,
   runCommand,
+  SERVICE_KEY_FILE,
+  SKIP_WHY,
+  UnreachableError,
   writeAtomic,
 } from './inbox-decisions-export.mjs';
 
@@ -721,4 +723,33 @@ test('writeAtomic creates the folder, replaces a file whole and leaves no tempor
   writeAtomic(fs, file, 'two');
   assert.equal(fs.readFileSync(file, 'utf8'), 'two');
   assert.deepEqual(fs.readdirSync(path.dirname(file)), ['state.json']);
+});
+
+// ---------------------------------------------------------------------------------------------
+// A database that cannot be reached is told apart from every other failure (the scheduled run
+// starts five minutes after a logon and after a wake, sometimes before the network is up).
+// ---------------------------------------------------------------------------------------------
+
+test('a request that does not reach Supabase is an UnreachableError; one that is answered with an error is not', async () => {
+  const down = createRpc({ supabaseUrl: 'https://p.supabase.co', serviceKey: KEY, fetchImpl: async () => { throw new TypeError(`fetch failed ${KEY}`); } });
+  await assert.rejects(down.unfiled(5), (error) => error instanceof UnreachableError && /did not reach Supabase/.test(error.message) && !error.message.includes(KEY));
+  const refused = createRpc({ supabaseUrl: 'https://p.supabase.co', serviceKey: KEY, fetchImpl: async () => new Response('nope', { status: 500 }) });
+  await assert.rejects(refused.unfiled(5), (error) => !(error instanceof UnreachableError) && /HTTP 500/.test(error.message));
+});
+
+test('main exits 3 when the first read does not reach Supabase: nothing is written, and the result line says so', async (t) => {
+  const w = mainWorld(t, { rows: [row(3101)] });
+  const fetchImpl = async () => { throw new TypeError('fetch failed'); };
+  const code = await main(['--notes-only'], { env: w.env, log: w.log, run: w.run, fetchImpl });
+  assert.equal(code, EXIT_UNREACHABLE);
+  assert.equal(code, 3);
+  assert.equal(w.lines.at(-1), 'inbox-decisions-result {"exit_code":3,"filed":0,"skipped":0,"not_filed":0}');
+  assert.ok(w.lines.some((l) => l.includes('did not reach Supabase')));
+  assert.deepEqual(filesUnder(w.dirs.vault), []);
+});
+
+test('main still exits 1 when Supabase answers the first read with an error', async (t) => {
+  const w = mainWorld(t, { rows: [row(3101)] });
+  const code = await main(['--notes-only'], { env: w.env, log: w.log, run: w.run, fetchImpl: async () => new Response('nope', { status: 500 }) });
+  assert.equal(code, 1);
 });

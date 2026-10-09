@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import {
   EXPORTER_KEY,
   LOG_FILE,
+  NETWORK_RETRY_WAITS_MS,
   STATE_FILE,
   STATE_SCHEMA,
   checkoutIsOnMain,
@@ -75,7 +76,7 @@ function assertShape(state) {
   assert.match(state.started_at, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
   assert.match(state.ended_at, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
   assert.ok([0, 1, 2].includes(state.exit_code));
-  assert.ok([null, 'not_main', 'config', 'error'].includes(state.reason));
+  assert.ok([null, 'not_main', 'config', 'error', 'no_network'].includes(state.reason));
   for (const k of EXPORTER_STATE_KEYS) assert.equal(typeof state.exporters[EXPORTER_KEY][k], 'number');
 }
 
@@ -276,4 +277,79 @@ test('a timed-out exporter logs its spawn error, and no message reaches the stat
   assert.equal(state.exit_code, 1);
   assert.equal(state.reason, 'error');
   assert.ok(!fs.readFileSync(path.join(w.stateDir, STATE_FILE), 'utf8').includes('ETIMEDOUT'));
+});
+
+// ---------------------------------------------------------------------------------------------
+// No network yet (2026-10-09: two runs failed, each five minutes after a logon or a wake, with
+// "the request did not reach Supabase: fetch failed"). The exporter says so with exit 3, and the
+// runner waits and starts it again.
+// ---------------------------------------------------------------------------------------------
+
+const unreachable = () => exporterOk(3, { exit_code: 3, filed: 0, skipped: 0, not_filed: 0 });
+
+/** Deps whose exporter answers from a list, one answer a start, and whose waits are recorded, not slept. */
+function retryDeps(w, answers) {
+  const waits = [];
+  let started = 0;
+  const deps = w.deps(() => answers[Math.min(started++, answers.length - 1)]);
+  return { waits, deps: { ...deps, sleep: async (ms) => { waits.push(ms); } } };
+}
+
+test('the waits between tries grow, and all of them fit inside the task with room for the exporter', () => {
+  assert.deepEqual(NETWORK_RETRY_WAITS_MS, [15_000, 30_000, 60_000, 120_000, 240_000]);
+  assert.ok(NETWORK_RETRY_WAITS_MS.reduce((sum, ms) => sum + ms, 0) <= 8 * 60 * 1000);
+});
+
+test('no network at first: the runner waits and starts the exporter again, and the run that gets through is the one recorded', async (t) => {
+  const w = world(t);
+  const { waits, deps } = retryDeps(w, [unreachable(), unreachable(), exporterOk(0, { exit_code: 0, filed: 2, skipped: 1, not_filed: 0 })]);
+  const code = await main(w.argv, deps);
+  assert.equal(code, 0);
+  assert.equal(w.runs.length, 3);
+  assert.deepEqual(waits, [15_000, 30_000]);
+  assert.ok(w.runs.every((r) => r.command === process.execPath && r.args.at(-1) === '--notes-only'), 'every start is the exporter');
+  const state = w.state();
+  assertShape(state);
+  assert.equal(state.exit_code, 0);
+  assert.equal(state.reason, null);
+  assert.deepEqual(state.exporters[EXPORTER_KEY], { exit_code: 0, filed: 2, skipped: 1, not_filed: 0 });
+  assert.match(w.logText(), /did not reach Supabase \(try 1 of 6\): trying again in 15 s/);
+  assert.match(w.logText(), /did not reach Supabase \(try 2 of 6\): trying again in 30 s/);
+});
+
+test('no network at all: six tries, then exit 1 with the reason no_network and zero counts', async (t) => {
+  const w = world(t);
+  const { waits, deps } = retryDeps(w, [unreachable()]);
+  const code = await main(w.argv, deps);
+  assert.equal(code, 1);
+  assert.equal(w.runs.length, NETWORK_RETRY_WAITS_MS.length + 1);
+  assert.deepEqual(waits, [...NETWORK_RETRY_WAITS_MS]);
+  const state = w.state();
+  assertShape(state);
+  assert.equal(state.exit_code, 1);
+  assert.equal(state.reason, 'no_network');
+  assert.deepEqual(state.exporters[EXPORTER_KEY], { exit_code: 3, filed: 0, skipped: 0, not_filed: 0 });
+  assert.match(w.logText(), /did not reach Supabase \(try 6 of 6\): giving up/);
+});
+
+test('only an unreachable database is tried again: a failed run, a stopped one and a killed one start the exporter once', async (t) => {
+  for (const answer of [
+    exporterOk(1, { exit_code: 1, filed: 0, skipped: 0, not_filed: 1 }),
+    exporterOk(2, { exit_code: 2, filed: 0, skipped: 0, not_filed: 0 }),
+    { status: null, stdout: '', stderr: '' },
+  ]) {
+    const w = world(t);
+    const { waits, deps } = retryDeps(w, [answer]);
+    await main(w.argv, deps);
+    assert.equal(w.runs.length, 1);
+    assert.deepEqual(waits, []);
+  }
+});
+
+test('a run that got through after a wait and then failed is a failed run, not a network one', async (t) => {
+  const w = world(t);
+  const { waits, deps } = retryDeps(w, [unreachable(), exporterOk(1, { exit_code: 1, filed: 1, skipped: 0, not_filed: 1 })]);
+  assert.equal(await main(w.argv, deps), 1);
+  assert.deepEqual(waits, [15_000]);
+  assert.equal(w.state().reason, 'error');
 });
