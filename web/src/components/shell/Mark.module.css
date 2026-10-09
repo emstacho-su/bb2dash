@@ -1,0 +1,14 @@
+/* A mark (icons.tsx): an inline SVG at the size of the text it sits in, on the text colour. */
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.glyph {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+  flex: none;
+}
