@@ -66,7 +66,6 @@ export function ActivityMenu() {
         aria-expanded={popover.open}
         aria-haspopup="menu"
         data-tip="Activity"
-        aria-label={unseen > 0 ? `Activity ${unseen}` : 'Activity'}
       >
         <ActivityIcon />
         <span className="sr-only">Activity</span>
