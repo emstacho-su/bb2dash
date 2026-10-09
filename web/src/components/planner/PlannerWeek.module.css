@@ -838,9 +838,15 @@
   color: var(--color-neutral-600);
 }
 
+/* At 900px and below the week keeps a floor and the board scrolls inside
+   itself, so the page never does (R-46, Phase 22 task 15). The floor is on the
+   day tracks, not on the board: a `min-width` on the scroller made the scroller
+   itself 760px wide, and its parent grew to fit it. 48px of gutter + seven
+   101px tracks + the 7 gaps and 2px of padding is 764px, the old 760px floor
+   rounded up to a whole pixel per track. */
 @media (max-width: 900px) {
   .board {
     --planner-gutter: 48px;
-    min-width: 760px;
+    grid-template-columns: var(--planner-gutter) repeat(7, minmax(101px, 1fr));
   }
 }
