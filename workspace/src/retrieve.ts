@@ -148,15 +148,17 @@ function requestBody(request: RetrieveRequest): string {
   });
 }
 
-const passesFloor = (hit: Hit): boolean => hit.similarity === null || hit.similarity >= SIMILARITY_FLOOR;
-
 /**
  * The queries' hits as one list: round-robin by rank across the queries, one row per kind and id,
- * the floor applied, the ones with a similarity before the keyword-only ones, then cut to 14
+ *  then cut to 14
  * passages and 3 remembered items.
+ *
+ * The runner filters nothing by similarity: `workspace_search` applies the floor to its vector arm
+ * itself and returns keyword-arm hits with their unit's best similarity, which may be under it. The
+ * floor only orders: hits at or above it first, the others after, hits with no similarity last.
  */
 export function mergeHits(queries: readonly QueryAnswer[]): Hit[] {
-  const lists = queries.map((query) => query.hits.filter(passesFloor));
+  const lists = queries.map((query) => query.hits);
   const depth = Math.max(0, ...lists.map((list) => list.length));
   const ranked: Hit[] = [];
   const seen = new Set<string>();
@@ -170,7 +172,12 @@ export function mergeHits(queries: readonly QueryAnswer[]): Hit[] {
       ranked.push(hit);
     }
   }
-  const ordered = [...ranked.filter((hit) => hit.similarity !== null), ...ranked.filter((hit) => hit.similarity === null)];
+  const aboveFloor = (hit: Hit): boolean => hit.similarity !== null && hit.similarity >= SIMILARITY_FLOOR;
+  const ordered = [
+    ...ranked.filter(aboveFloor),
+    ...ranked.filter((hit) => hit.similarity !== null && !aboveFloor(hit)),
+    ...ranked.filter((hit) => hit.similarity === null),
+  ];
   const passages = ordered.filter((hit) => hit.kind !== 'memory').slice(0, PASSAGES_MAX);
   const memory = ordered.filter((hit) => hit.kind === 'memory').slice(0, MEMORY_ITEMS_MAX);
   return [...passages, ...memory];
@@ -198,11 +205,30 @@ export function createRetriever(deps: RetrieverDeps): Retriever {
     }
   };
 
+  /**
+   * During the pause the search is skipped but an attached file is still read: the child is started
+   * with no queries. The state stays `failed`-like (`paused`); this read counts no failure and does
+   * not move the pause.
+   */
+  const pausedResult = async (request: RetrieveRequest, started: number): Promise<RetrieveResult> => {
+    const skipped = failedResult('paused', started, deps.now);
+    if (request.attachments.length === 0) return skipped;
+    try {
+      const outcome = await run(spec, requestBody({ ...request, plan: { ...request.plan, queries: [] } }), { timeoutMs: RETRIEVE_TIMEOUT_MS, signal: request.signal });
+      const answer = outcome.exitCode === 0 && !outcome.timedOut ? parseBatchAnswer(outcome.stdout) : null;
+      if (answer === null || request.signal.aborted) return skipped;
+      deps.log(`retrieve: paused, attachments read=${answer.attachments.length} ms=${Math.round(deps.now() - started)}`);
+      return { ...skipped, attachments: answer.attachments, ms: Math.round(deps.now() - started) };
+    } catch {
+      return skipped;
+    }
+  };
+
   return async function retrieve(request) {
     const started = deps.now();
     if (started < breaker.pausedUntil) {
       deps.log(`retrieve: skipped, the search is paused for ${Math.ceil((breaker.pausedUntil - started) / MS_PER_SECOND)} more s`);
-      return failedResult('paused', started, deps.now);
+      return pausedResult(request, started);
     }
     let outcome: BatchRun;
     try {

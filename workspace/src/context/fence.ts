@@ -26,7 +26,10 @@ export type BlockKind = (typeof BLOCK_KINDS)[number];
 
 /** `[M12]`, `[U3]`, `[R7]` or `[P]` at the start of a line. */
 const LABEL_SHAPE = /^\[(?:[MUR][0-9]+|P)\]/;
-const LINE_BREAK = /\r\n|\n/;
+/** Every separator that starts a new visual line: LF, CRLF, CR, U+2028, U+2029, U+0085, a vertical tab and a form feed. */
+const LINE_SEPARATOR = /(\r\n|\n|\r|\u2028|\u2029|\u0085|\v|\f)/;
+/** Characters a reader does not see in front of a line's first visible one. */
+const INVISIBLE_LEAD = /^[\s\u200b\u200c\u200d\u2060\ufeff]+/;
 
 /** 16 random hex characters, drawn once for each turn. */
 export function newMarker(): string {
@@ -41,22 +44,23 @@ export function blockEndLine(marker: string): string {
   return `${BLOCK_OPENING} ${marker} end${BLOCK_CLOSING}`;
 }
 
-/** True when `line` could pass for a block line, or open with a label, in a reader's eyes. */
-function looksStructural(line: string, marker: string): boolean {
-  if (marker !== '' && line.includes(marker)) return true;
-  // A bare carriage return starts a new visual line, so each piece is looked at on its own.
-  return line.split('\r').some((piece) => {
-    const trimmed = piece.trimStart();
-    return trimmed.startsWith(BLOCK_OPENING) || LABEL_SHAPE.test(trimmed);
-  });
+/** True when `piece` (one visual line) could pass for a block line, or open with a label, in a reader's eyes. */
+function looksStructural(piece: string, marker: string): boolean {
+  if (marker !== '' && piece.includes(marker)) return true;
+  const visible = piece.replace(INVISIBLE_LEAD, '');
+  return visible.startsWith(BLOCK_OPENING) || LABEL_SHAPE.test(visible);
 }
 
-/** `text` with the two-character prefix in front of every line of it that could pass for structure. */
+/**
+ * `text` with the two-character prefix in front of every visual line of it that could pass for
+ * structure. A line starts after any of the separators above, so the prefix goes in front of the
+ * piece itself; the separators and the rest of the text are untouched.
+ */
 export function guardText(text: string, marker: string): string {
   return text
-    .split(LINE_BREAK)
-    .map((line) => (looksStructural(line, marker) ? `${DATA_PREFIX}${line}` : line))
-    .join('\n');
+    .split(LINE_SEPARATOR)
+    .map((piece, at) => (at % 2 === 0 && looksStructural(piece, marker) ? `${DATA_PREFIX}${piece}` : piece))
+    .join('');
 }
 
 /** A title as one line of at most TITLE_MAX_CHARS characters (code points). */
@@ -70,4 +74,10 @@ export function makeBlock(marker: string, kind: BlockKind, label: string | null,
   if (header !== '') lines.push(guardText(header, marker));
   lines.push(guardText(body, marker), blockEndLine(marker));
   return lines.join('\n');
+}
+
+/** A title outside any block (a course or an attachment in a framing or an input line): one line of at most 120 characters, prefixed when it could pass for structure. */
+export function titleLine(text: string, marker: string): string {
+  const line = oneLine(text);
+  return looksStructural(line, marker) ? `${DATA_PREFIX}${line}` : line;
 }

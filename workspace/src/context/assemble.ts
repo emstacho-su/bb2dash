@@ -21,7 +21,7 @@ import {
 } from './budget.js';
 import { buildAttachedBlocks, type AttachmentOutcome } from './attachments.js';
 import { renderFeed, type Feed } from './feed.js';
-import { BLOCK_CLOSING, BLOCK_OPENING, blockEndLine, makeBlock, oneLine } from './fence.js';
+import { BLOCK_CLOSING, BLOCK_OPENING, blockEndLine, makeBlock, oneLine, titleLine } from './fence.js';
 import { buildTurnBlocks } from './turns.js';
 import type { AttachmentRead, Hit } from '../store-types.js';
 import type { TurnContext } from '../turn-context.js';
@@ -77,7 +77,7 @@ function fitted(cap: number, build: (body: string) => string, body: string): str
 function framingOf(input: AssembleInput): string {
   const { marker, context } = input;
   const open = `${BLOCK_OPENING} ${marker} <kind> <label>${BLOCK_CLOSING}`;
-  const courses = context.courses.map((course) => `${course.id}: ${oneLine(course.title)}`);
+  const courses = context.courses.map((course) => `${course.id}: ${titleLine(course.title, marker)}`);
   const kept: string[] = [];
   for (const line of courses) {
     if (utf8Bytes([...kept, line].join('; ')) > COURSE_LIST_MAX_BYTES) break;

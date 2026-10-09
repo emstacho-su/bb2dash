@@ -171,17 +171,44 @@ describe('a child that fails', () => {
 
   it('skips the search for 5 minutes after three failures in a row, on a fake clock, then tries again', async () => {
     const h = harness(() => okRun({ exitCode: 1, stderrChars: 3 }));
-    for (let i = 0; i < FAILURES_BEFORE_PAUSE; i += 1) expect((await h.retrieve(request())).state).toBe('failed');
+    for (let i = 0; i < FAILURES_BEFORE_PAUSE; i += 1) expect((await h.retrieve(request({ attachments: [] }))).state).toBe('failed');
     expect(h.runs).toBe(3);
-    const paused = await h.retrieve(request());
+    const paused = await h.retrieve(request({ attachments: [] }));
     expect(paused.state).toBe('paused');
     expect(h.runs).toBe(3);
     h.clock.now += PAUSE_MS - 1_000;
-    expect((await h.retrieve(request())).state).toBe('paused');
+    expect((await h.retrieve(request({ attachments: [] }))).state).toBe('paused');
     expect(h.runs).toBe(3);
     h.clock.now += 2_000;
-    expect((await h.retrieve(request())).state).toBe('failed');
+    expect((await h.retrieve(request({ attachments: [] }))).state).toBe('failed');
     expect(h.runs).toBe(4);
+  });
+
+  it('still reads the attachments during the pause: the child starts with no queries, the search stays paused (stored failed)', async () => {
+    const attachmentsOnly = JSON.stringify({ version: 1, queries: [], attachments: (JSON.parse(OK_STDOUT) as { attachments: unknown[] }).attachments });
+    const h = harness((n) => (n <= FAILURES_BEFORE_PAUSE ? okRun({ exitCode: 1 }) : okRun({ stdout: attachmentsOnly })));
+    for (let i = 0; i < FAILURES_BEFORE_PAUSE; i += 1) await h.retrieve(request());
+    const paused = await h.retrieve(request());
+    expect(h.runs).toBe(FAILURES_BEFORE_PAUSE + 1);
+    const sent = JSON.parse(h.inputs[FAILURES_BEFORE_PAUSE] ?? '{}') as { queries: unknown[]; attachments: unknown[] };
+    expect(sent.queries).toEqual([]);
+    expect(sent.attachments).toHaveLength(2);
+    expect(paused.state).toBe('paused');
+    expect(paused.hits).toEqual([]);
+    expect(paused.attachments.map((a) => a.state)).toEqual(['cut', 'read']);
+    // The pause goes on; the attachment read did not end it or count a failure.
+    h.clock.now += PAUSE_MS - 1_000;
+    expect((await h.retrieve(request())).attachments).toHaveLength(2);
+    h.clock.now += 2_000;
+    expect((await h.retrieve(request())).state).toBe('ok');
+  });
+
+  it('starts no child during the pause when nothing is attached', async () => {
+    const h = harness(() => okRun({ exitCode: 1 }));
+    for (let i = 0; i < FAILURES_BEFORE_PAUSE; i += 1) await h.retrieve(request());
+    const paused = await h.retrieve(request({ attachments: [] }));
+    expect(paused.state).toBe('paused');
+    expect(h.runs).toBe(FAILURES_BEFORE_PAUSE);
   });
 
   it('forgets earlier failures after a good answer', async () => {
@@ -245,9 +272,14 @@ describe('the merge', () => {
     expect(merged.map((h) => h.unitId)).toEqual([1, 3, 2, 4]);
   });
 
-  it('applies the 0.78 floor and puts keyword-only hits after the ones with a similarity', () => {
-    const merged = mergeHits([query(hit('material', 1, null), hit('material', 2, 0.9), hit('material', 3, 0.7), hit('material', 4, 0.8))]);
-    expect(merged.map((h) => h.unitId)).toEqual([2, 4, 1]);
+  it('drops nothing by similarity: hits at or above 0.78 first, then the others by rank, nulls last', () => {
+    const merged = mergeHits([query(hit('material', 1, null), hit('material', 2, 0.9), hit('material', 3, 0.74), hit('material', 4, 0.8))]);
+    expect(merged.map((h) => h.unitId)).toEqual([2, 4, 3, 1]);
+  });
+
+  it('keeps a keyword hit under the floor that follows a hit of 0.80, and stores it as found', () => {
+    const merged = mergeHits([query(hit('material', 1, 0.8), hit('material', 2, 0.74))]);
+    expect(merged.map((h) => h.unitId)).toEqual([1, 2]);
   });
 
   it('gives 14 passages for 15 hits, and 3 remembered items', () => {

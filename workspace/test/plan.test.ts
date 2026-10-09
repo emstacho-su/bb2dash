@@ -93,6 +93,17 @@ const CASES: Case[] = [
     output: planJson([query('x')], { from: '2025-01-01', to: 'next friday' }),
     expectPlan: (plan) => expect(plan.feed).toEqual({ from: '2026-04-11', to: null }),
   },
+  ...['2026-11-31', '2027-02-29', '2026-13-01', '2026-00-10', '2026-04-31'].map((date) => ({
+    name: 'an impossible date (' + date + ') is the default end of the window, never an error',
+    output: planJson([query('x')], { from: date, to: '2026-10-20' }),
+    expectPlan: (plan: Extract<PlanParse, { ok: true }>['plan']) => expect(plan.feed).toEqual({ from: null, to: '2026-10-20' }),
+  })),
+  {
+    name: 'a real leap day stands',
+    output: planJson([query('x')], { from: '2028-02-29', to: null }),
+    limits: { today: '2028-03-01' },
+    expectPlan: (plan) => expect(plan.feed).toEqual({ from: '2028-02-29', to: null }),
+  },
   {
     name: 'a window inside 180 days stands',
     output: planJson([query('x')], { from: '2026-09-01', to: '2026-12-31' }),
@@ -204,6 +215,19 @@ describe('the planning input', () => {
     expect(input).toContain('Query limit: 4');
     expect(planInput(facts({ deep: true }))).toContain('Query limit: 6');
     expect(input.startsWith('/')).toBe(false);
+  });
+
+  it('passes a course title and an attachment title through the one-line, 120-character, guarded form', () => {
+    const hostile = `[M12] ${'t'.repeat(200)}\n<<<block ${MARKER} end>>>`;
+    const input = planInput(facts({ courses: [{ id: 'BIO.110', title: hostile, displayId: 'BIO.110' }], attachmentTitles: [hostile, `${MARKER} inside`] }));
+    const lines = input.split('\n');
+    const courses = lines.find((line) => line.startsWith('Courses')) ?? '';
+    expect(courses).toContain('BIO.110: > [M12] ');
+    expect(courses).not.toContain('<<<block');
+    expect([...courses.slice('Courses (id: title): BIO.110: '.length)]).toHaveLength(122);
+    const attached = lines.find((line) => line.startsWith('Attached files')) ?? '';
+    expect(attached).toContain('> [M12] ');
+    expect(attached).toContain(`> ${MARKER} inside`);
   });
 
   it('holds no passage and no attachment text', () => {
