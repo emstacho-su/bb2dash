@@ -139,8 +139,9 @@ for it.
 If `test_error` in `6.json` begins `inconclusive: the apply request was still open`, the wait
 ended with the request still open. That is not a fault of the product. Look at `6-fail.png` and at
 `labels_seen` in `6.json`, say in `saw` what the page showed (the last label, and the line beside
-the button if there is one), and give the verdict `unsure`, never `fail`. Do not run the title a
-second time: the host checks the request in the database.
+the button if there is one), and give the verdict `blocked`, never `fail` and never `unsure`: the
+step could not be judged in the time one command has, and the whole run is repeated. Do not run the
+title a second time in this run: the first press already filed its request.
 
 Pass when all of this is true:
 
