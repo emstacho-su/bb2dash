@@ -7,7 +7,8 @@
 --   (2) 0 pre-existing week_no / session_id values changed
 --   (3) 0 storage_path / local_path values changed
 --   (4) every unlinked eligible file whose week holds >= 2 sessions (and no settled answer) has
---       exactly 1 open attention row
+--       exactly 1 open attention row; a settled answer is resolved, dismissed, or (migration 163)
+--       archived and not self-closed - the predicate link_file_sessions itself uses
 --   (5) a replay writes 0 (weeks_set, sessions_linked, attention_raised all 0)
 --   (6) the synthetic files: IST.352 -> week 5, the week's one session, confidence 0.8; GEO -> week
 --       4, unlinked, one open question
@@ -89,7 +90,9 @@ begin
            where s.course_id = f.course_id and s.week_no = f.week_no and s.kind <> 'no_class') >= 2
      and not exists (select 1 from attention_items ai
                       where ai.kind = 'stack_must_confirm' and ai.ref = 'session_link/' || f.id::text
-                        and ai.state in ('resolved', 'dismissed'))
+                        and (ai.state in ('resolved', 'dismissed')
+                             or (ai.state = 'archived'
+                                 and ai.decision->>'closed_itself' is distinct from 'true')))
      and (select count(*) from attention_items ai
            where ai.kind = 'stack_must_confirm' and ai.ref = 'session_link/' || f.id::text
              and ai.state = 'open') <> 1;
