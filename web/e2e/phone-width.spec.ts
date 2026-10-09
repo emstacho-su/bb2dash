@@ -77,6 +77,9 @@ const ROUTES = [
   '/no-such-page',
 ] as const;
 
+/** The first twelve routes are inside the shell (inventory rows 01 to 12). */
+const SHELL_ROUTES = 12;
+
 /** Inventory row 12's fixture: one answered question, in sample text. Nothing is read from the database. */
 const WORKSPACE_CONVERSATION = '22222222-2222-4222-8222-222222222201';
 const WORKSPACE_QUESTION = '22222222-2222-4222-8222-222222222202';
@@ -257,8 +260,21 @@ for (const path of ROUTES) {
       }
 
       const scrollWidth = await pageScrollWidth(page);
-      console.log(`route ${path} [${theme}]: page scrollWidth=${scrollWidth}`);
+      // Rows 01 to 12 sit in the shell's frame, whose content pane scrolls and whose document does not:
+      // the page's own width would pass with a table that is too wide, so the pane is measured too.
+      // Rows 13 to 16 are outside the shell and are measured as documents.
+      const inShell = ROUTES.indexOf(path) < SHELL_ROUTES;
+      const pane = inShell
+        ? await page.locator('main').evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }))
+        : null;
+      console.log(
+        `route ${path} [${theme}]: page scrollWidth=${scrollWidth}` +
+          (pane === null ? '' : ` pane scrollWidth=${pane.scroll} clientWidth=${pane.client}`),
+      );
       expect(scrollWidth, `route ${path} [${theme}]: page scrollWidth`).toBeLessThanOrEqual(PHONE.width);
+      if (pane !== null) {
+        expect(pane.scroll, `route ${path} [${theme}]: pane scrollWidth`).toBeLessThanOrEqual(pane.client);
+      }
 
       const boxSelector = SCROLL_BOXES[path];
       if (boxSelector !== undefined) {
