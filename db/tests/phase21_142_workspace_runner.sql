@@ -148,13 +148,19 @@ begin
     end if;
   end loop;
 
-  -- The five are exactly the SECURITY DEFINER functions the role can execute in public.
+  -- The eleven are exactly the SECURITY DEFINER functions the role can execute in public: 142's five
+  -- and 196's six (workspace_claim_v2, workspace_turn_context, workspace_turn_put,
+  -- workspace_planner_feed, workspace_job_claim, workspace_job_finish). On the Phase 24a branch this reads
+  -- RED against prod until 196 is applied (task 22 of brief 109); `main` keeps the list of five until the
+  -- port PR merges, the day 196 is applied.
   select string_agg(p.proname, ',' order by p.proname collate "C") into v_got
     from pg_proc p
    where p.pronamespace = 'public'::regnamespace and p.prosecdef
      and has_function_privilege('workspace_runner', p.oid, 'execute');
   if v_got is distinct from
-     'workspace_begin,workspace_claim,workspace_finish,workspace_heartbeat,workspace_stream' then
+     'workspace_begin,workspace_claim,workspace_claim_v2,workspace_finish,workspace_heartbeat,'
+     'workspace_job_claim,workspace_job_finish,workspace_planner_feed,workspace_stream,'
+     'workspace_turn_context,workspace_turn_put' then
     v_fail := v_fail || format('workspace_runner executes the SECURITY DEFINER functions [%s]', v_got);
   end if;
 
