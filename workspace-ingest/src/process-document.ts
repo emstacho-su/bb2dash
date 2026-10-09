@@ -36,12 +36,14 @@ export interface ProcessDeps {
 
 /** How a document ended before it was indexed. */
 interface End {
-  readonly outcome: 'failed' | 'retry';
-  readonly code: ErrorCode;
+  readonly outcome: 'failed' | 'retry' | 'release';
+  /** Null for a release: no failure is recorded. */
+  readonly code: ErrorCode | null;
 }
 
 const failed = (code: ErrorCode): End => ({ outcome: 'failed', code });
 const retry = (code: ErrorCode): End => ({ outcome: 'retry', code });
+const release: End = { outcome: 'release', code: null };
 
 /** A name for an error that is safe to log: a SQLSTATE or the error's class, never its message. */
 export function describeError(error: unknown): string {
@@ -118,10 +120,11 @@ async function embedStage(claim: IngestClaim, deps: ProcessDeps, deadlineMs: num
   try {
     const result = await deps.embed(claim.document_id, deadlineMs);
     if (result.exitCode === 0) return null;
-    // A try that ran out of time with parts stored is a retry too: the next claim finds the document in
-    // `text_ready` and continues from the stored parts. The database counts it as one of three tries.
+    // A try that ran out of its time having stored a part is a release (migration 199): the lease is freed,
+    // no try is counted, and the next claim finds the document in `text_ready` and goes on from the stored
+    // parts. A try that stored nothing, or failed another way, is a retry that counts.
     deps.log(`ingest: document ${claim.document_id} embed stopped (${result.stop ?? 'error'}${result.progressed ? ', progress made' : ''})`);
-    return retry('embed_failed');
+    return result.stop === 'timed_out' && result.progressed === true ? release : retry('embed_failed');
   } catch (error) {
     deps.log(`ingest: document ${claim.document_id} embed threw (${describeError(error)})`);
     return retry('embed_failed');
@@ -150,7 +153,7 @@ export async function processDocument(claim: IngestClaim, deps: ProcessDeps): Pr
   if (claim.step === 'read' && claim.kind === 'upload') end = await readStage(claim, deps);
   if (end === null) end = await embedStage(claim, deps, started + DOCUMENT_TIME_BUDGET_MS);
   const done = await finishWith(claim, end, deps);
-  const label = done.end === null ? done.state : `${done.state} ${done.end.code}`;
+  const label = done.end === null || done.end.code === null ? done.state : `${done.state} ${done.end.code}`;
   deps.log(`ingest: document ${claim.document_id} ${label} in ${deps.now() - started} ms (try ${claim.attempts + 1})`);
   return done.state;
 }

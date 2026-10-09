@@ -10,7 +10,8 @@ import type { Unit } from './units.js';
 
 export type DocumentKind = 'upload' | 'memory';
 export type ClaimStep = 'read' | 'embed';
-export type FinishOutcome = 'indexed' | 'failed' | 'retry';
+/** `release` (migration 199): a document in `text_ready` goes back unclaimed, no try counted. */
+export type FinishOutcome = 'indexed' | 'failed' | 'retry' | 'release';
 
 /** One document handed out by `workspace_ingest_claim` (ingest-claim.json). */
 export interface IngestClaim {
