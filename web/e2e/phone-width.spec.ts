@@ -47,9 +47,13 @@ const THEME_KEY = 'bb2dash.theme';
 const THEMES = ['dark', 'light'] as const;
 type Theme = (typeof THEMES)[number];
 
-/** These two buttons carry a count badge when something is unseen, and the badge is part of their accessible name, so they are found by their title. */
-const ACTIVITY_BUTTON = 'nav button[title^="Activity"]';
-const ANNOUNCEMENTS_BUTTON = 'nav button[title="Announcements"]';
+/**
+ * Activity and Announcements carry a count badge when something is unseen, and the badge is part of
+ * the accessible name ("Activity 44"). They are found by role and a name that allows the count: a
+ * substring match (not exact), so it also survives the title coming off the bar's icon buttons.
+ */
+const ACTIVITY_NAME = 'Activity';
+const ANNOUNCEMENTS_NAME = 'Announcements';
 
 const NAV_LINK_LABELS = ['Home', 'Planner', 'Inbox', 'Grades', 'Materials', 'Workspace'] as const;
 
@@ -79,6 +83,15 @@ const WORKSPACE_QUESTION = '22222222-2222-4222-8222-222222222202';
 const WORKSPACE_ANSWER = '22222222-2222-4222-8222-222222222203';
 const WORKSPACE_REQUEST_ID = 22_001;
 const WORKSPACE_PATH = `/workspace?c=${WORKSPACE_CONVERSATION}`;
+
+/**
+ * The two boxes that scroll sideways so the page does not, by their frozen hooks (brief 103,
+ * "Panels and wide content"): the gradebook's wrapper and the planner's board.
+ */
+const SCROLL_BOXES: Readonly<Record<string, string>> = {
+  '/course/IST.466/grades': '[data-scroll-box="gradebook"]',
+  '/planner': '[data-planner-board="true"]',
+};
 
 /** The path a route case opens: the `/workspace` case opens row 12's conversation. */
 function addressOf(path: (typeof ROUTES)[number]): string {
@@ -246,6 +259,19 @@ for (const path of ROUTES) {
       const scrollWidth = await pageScrollWidth(page);
       console.log(`route ${path} [${theme}]: page scrollWidth=${scrollWidth}`);
       expect(scrollWidth, `route ${path} [${theme}]: page scrollWidth`).toBeLessThanOrEqual(PHONE.width);
+
+      const boxSelector = SCROLL_BOXES[path];
+      if (boxSelector !== undefined) {
+        // The table or the week is wider than the phone, so it must scroll inside its own box.
+        const box = page.locator(boxSelector).first();
+        await expect(box, `route ${path} [${theme}]: the scroll box ${boxSelector}`).toBeVisible();
+        const { scroll, client } = await box.evaluate((element) => ({
+          scroll: element.scrollWidth,
+          client: element.clientWidth,
+        }));
+        console.log(`route ${path} [${theme}]: box scrollWidth=${scroll} clientWidth=${client}`);
+        expect(scroll, `route ${path} [${theme}]: box scrollWidth above its clientWidth`).toBeGreaterThan(client);
+      }
     });
   }
 }
@@ -308,7 +334,7 @@ const OPEN_STATES: readonly OpenState[] = [
     n: 1,
     name: 'bell',
     open: async (page) => {
-      await page.locator(ANNOUNCEMENTS_BUTTON).click();
+      await page.getByRole('button', { name: ANNOUNCEMENTS_NAME }).click();
       return { panel: page.getByRole('menu', { name: 'Announcements' }) };
     },
   },
@@ -316,7 +342,7 @@ const OPEN_STATES: readonly OpenState[] = [
     n: 2,
     name: 'activity',
     open: async (page) => {
-      await page.locator(ACTIVITY_BUTTON).click();
+      await page.getByRole('button', { name: ACTIVITY_NAME }).click();
       return { panel: page.getByRole('menu').filter({ hasText: 'Activity' }) };
     },
   },
@@ -398,8 +424,8 @@ function barControls(page: Page): Record<string, Locator> {
     Sync: page.getByTestId('sync-button'),
     Search: page.getByRole('button', { name: 'Search', exact: true }),
     'Courses sidebar': page.getByRole('button', { name: 'Courses sidebar', exact: true }),
-    Activity: page.locator(ACTIVITY_BUTTON),
-    Announcements: page.locator(ANNOUNCEMENTS_BUTTON),
+    Activity: page.getByRole('button', { name: ACTIVITY_NAME }),
+    Announcements: page.getByRole('button', { name: ANNOUNCEMENTS_NAME }),
     Account: page.getByRole('button', { name: 'Account', exact: true }),
   };
 }

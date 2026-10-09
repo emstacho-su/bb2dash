@@ -299,3 +299,23 @@ Not a token: `TopNav.tsx:209`'s `style={{ padding: 0 }}` (task 17 clears it with
 9. **Commit order.** The task-5 spec is its own commit (8979e1c) so the RED run could name a clean commit; the spec's Activity and Announcements
    lookup fix rides in the task-13 commit.
 10. **Not run here:** the route cases other than the `/` re-measure, because tasks 14 to 16 belong to the other workers; the 22 of task 13 are green.
+
+## Follow-up: the two scroll boxes, and the bar's icons by name
+
+After merging `origin/feat/styling-22` (W-70's task 14 and W-69's task 15), `phone-width.spec.ts` changed in two ways.
+`route /course/IST.466/grades [<theme>]` reads the first `[data-scroll-box="gradebook"]` and `route /planner [<theme>]` reads
+`[data-planner-board="true"]`: each must have `scrollWidth` above `clientWidth`, printed on the case's line. Activity and Announcements are found
+by role and a name that allows the count badge (`getByRole('button', { name: 'Activity' })`, a substring match, not exact), no longer by `title`.
+Account, Search, Courses sidebar and Menu carry no badge and are found by role with their exact name, which does not depend on `title`.
+A regular expression anchored on the word was tried first in an earlier attempt and did not match in the box, so the substring match is the default taken.
+
+Spec list: `Total: 54 tests in 1 file`. `npx vitest run test/walk22-lib.test.ts`: 48 passed. Harness run on the committed tree (`"dirty": false`, commit
+96a9fcc), `node scripts/walk-box.mjs web/e2e/phone-width.spec.ts -- -g "route /course/IST.466/grades |route /planner |open state|reachability|bar at|sidebar toggle|popout assignment"`:
+run **20261009T001508Z**, exit 0, `passed`, `26 passed`, 0 failed. The four box lines:
+
+```
+route /planner [dark]: box scrollWidth=764 clientWidth=368
+route /planner [light]: box scrollWidth=764 clientWidth=368
+route /course/IST.466/grades [dark]: box scrollWidth=620 clientWidth=345
+route /course/IST.466/grades [light]: box scrollWidth=620 clientWidth=345
+```
