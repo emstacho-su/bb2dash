@@ -70,6 +70,10 @@ Views: `v_upcoming` (not-yet-due, not finished), `v_overdue` (past due, still op
 `v_course_corpus` (files/stored/with-text per course+bucket), `v_course_map_latest`,
 `v_file_layout` (canonical storage/local paths + needs_move), `v_embedding_status`.
 
+`v_gradebook_latest.counts_toward_grade` (047; follows the picker since 107) is false when a
+`grade_column_links` row marks the column "Not graded" (`excluded`), true when a non-excluded link
+places it on a component, and otherwise true when any linked assignment has a `component_id`.
+
 ## Search layer (migrations 010–013, 021, 024–025, 121)
 
 Two retrieval tiers over the corpus, both scoped by course when wanted:
