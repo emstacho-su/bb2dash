@@ -753,3 +753,14 @@ test('main still exits 1 when Supabase answers the first read with an error', as
   const code = await main(['--notes-only'], { env: w.env, log: w.log, run: w.run, fetchImpl: async () => new Response('nope', { status: 500 }) });
   assert.equal(code, 1);
 });
+test('main exits 1, not 3, when Supabase was reached first and a later read was not: exit 3 means nothing was read or written', async (t) => {
+  const w = mainWorld(t, { rows: [row(3101)] });
+  const fetchImpl = async (url, init) => {
+    if (url.endsWith('/inbox_decisions_unlogged')) throw new TypeError('fetch failed');
+    return w.fetchImpl(url, init);
+  };
+  const code = await main([], { env: w.env, log: w.log, run: w.run, fetchImpl });
+  assert.equal(code, 1);
+  assert.deepEqual(w.fetches.map((f) => f.fn), ['inbox_decisions_unfiled'], 'the first read was answered before the one that failed');
+  assert.equal(w.lines.at(-1), 'inbox-decisions-result {"exit_code":1,"filed":0,"skipped":0,"not_filed":0}');
+});

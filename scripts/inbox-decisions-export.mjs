@@ -36,7 +36,8 @@
 // not_filed: the scheduled runner reads it for its state file.
 //
 // Exit 0 when every decision was filed (or there were none), 1 when one could not be, 2 on a
-// usage or configuration error.
+// usage or configuration error, 3 when the first read did not reach Supabase at all (no network
+// yet: nothing was read and nothing was written, so the scheduled runner tries again).
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -67,12 +68,22 @@ const USAGE =
 const EXIT_OK = 0;
 const EXIT_FAILED = 1;
 const EXIT_CONFIG = 2;
+/** The database could not be reached before anything was read: safe to start again, and the scheduled runner does. */
+export const EXIT_UNREACHABLE = 3;
 
 /** A usage or configuration failure: exit 2, and nothing was written. */
 export class ExportError extends Error {
   constructor(message) {
     super(message);
     this.name = 'ExportError';
+  }
+}
+
+/** A request that got no answer at all (no network, no route, no name): not Supabase refusing it. */
+export class UnreachableError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'UnreachableError';
   }
 }
 
@@ -187,6 +198,8 @@ function redact(text, secret) {
 
 /** The filing functions of migrations 182 and 187, over PostgREST as the service role. */
 export function createRpc({ supabaseUrl, serviceKey, fetchImpl = fetch }) {
+  /** How many requests got an answer, of any status: above 0 means the database was reached in this run. */
+  let answered = 0;
   async function call(fn, body) {
     let response;
     try {
@@ -196,8 +209,9 @@ export function createRpc({ supabaseUrl, serviceKey, fetchImpl = fetch }) {
         body: JSON.stringify(body),
       });
     } catch (error) {
-      throw new Error(`${fn}: the request did not reach Supabase: ${redact(error?.message ?? error, serviceKey)}`);
+      throw new UnreachableError(`${fn}: the request did not reach Supabase: ${redact(error?.message ?? error, serviceKey)}`);
     }
+    answered += 1;
     const textBody = await response.text();
     if (!response.ok) throw new Error(`${fn}: HTTP ${response.status}: ${redact(textBody, serviceKey).slice(0, 300)}`);
     return textBody === '' ? null : JSON.parse(textBody);
@@ -208,6 +222,8 @@ export function createRpc({ supabaseUrl, serviceKey, fetchImpl = fetch }) {
     return rows;
   }
   return {
+    /** True once any request of this run was answered. */
+    reached: () => answered > 0,
     unfiled: (limit) => list('inbox_decisions_unfiled', limit),
     unlogged: (limit) => list('inbox_decisions_unlogged', limit),
     async filed(id, filed) {
@@ -434,11 +450,12 @@ export function printLine(line) {
  */
 export async function runExport(argv, { env = process.env, log = printLine, run = runCommand, fetchImpl = fetch } = {}) {
   const none = { filed: 0, skipped: 0, notFiled: 0 };
+  let rpc = null;
   try {
     const options = parseArgs(argv);
     const config = readConfig({ env, options });
     const { vault, ingestProject } = resolveVault({ harnessDir: config.harnessDir, run });
-    const rpc = createRpc({ supabaseUrl: config.supabaseUrl, serviceKey: readServiceKey(config.secretsDir), fetchImpl });
+    rpc = createRpc({ supabaseUrl: config.supabaseUrl, serviceKey: readServiceKey(config.secretsDir), fetchImpl });
     const result = await exportDecisions({ rpc, vault, ingestProject, logDir: config.logDir, options, run, log });
     log(`inbox-decisions-export: filed ${result.filed.length}, skipped ${result.skipped.length}, not filed ${result.failed.length}`);
     return {
@@ -453,7 +470,10 @@ export async function runExport(argv, { env = process.env, log = printLine, run 
       return { exitCode: EXIT_CONFIG, ...none };
     }
     log(`inbox-decisions-export: failed: ${String(error?.message ?? error)}`);
-    return { exitCode: EXIT_FAILED, ...none };
+    // Only a read that stopped the whole run comes here: a row's own failure is counted, not thrown.
+    // Exit 3 promises that nothing was read or written, so it is given only when no request was answered.
+    const neverReached = error instanceof UnreachableError && rpc !== null && !rpc.reached();
+    return { exitCode: neverReached ? EXIT_UNREACHABLE : EXIT_FAILED, ...none };
   }
 }
 

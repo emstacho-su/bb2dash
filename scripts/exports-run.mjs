@@ -24,9 +24,15 @@
 // exit_code, reason, exporters. No path, no decision text and no error message is stored in it, and
 // the service key (which only the exporter reads, from its file) is scrubbed from the log.
 //
+// No network yet: the task starts five minutes after a logon and may start right after a wake, before
+// the network is up. The exporter says so with its exit 3 (its first read did not reach Supabase, so
+// nothing was read or written), and this run waits and starts it again: after 15 s, 30 s, 1, 2 and 4
+// minutes, six tries in under eight minutes. A run that never gets through is exit 1 with the reason
+// `no_network`. No other failure is tried again.
+//
 // Exit 0 when the exporter filed everything (or had nothing), 1 when a row was not filed or the run
-// failed, 2 when the checkout is not on main or a folder argument is missing or the exporter stopped
-// on its configuration.
+// failed or the database was never reached, 2 when the checkout is not on main or a folder argument
+// is missing or the exporter stopped on its configuration.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -34,7 +40,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // One copy of the process start, the line printer and the atomic write: the exporter's.
-import { RESULT_PREFIX, printLine, runCommand, writeAtomic } from './inbox-decisions-export.mjs';
+import { EXIT_UNREACHABLE, RESULT_PREFIX, printLine, runCommand, writeAtomic } from './inbox-decisions-export.mjs';
 
 export const STATE_SCHEMA = 1;
 export const STATE_FILE = 'state.json';
@@ -45,6 +51,13 @@ export const DEFAULT_STATE_DIRNAME = '.bb2dash-exports';
 export const MAX_LOG_BYTES = 256 * 1024;
 /** Below the task's own 15-minute limit, so a stuck exporter ends here and is recorded. */
 const EXPORTER_TIMEOUT_MS = 14 * 60 * 1000;
+/**
+ * How long the run waits before each new try while the database cannot be reached. An unreachable
+ * exporter ends in about a second, so the waits are nearly all of the time spent: 7 minutes 45 seconds
+ * for the five, inside the task's 15-minute limit.
+ */
+export const NETWORK_RETRY_WAITS_MS = Object.freeze([15_000, 30_000, 60_000, 120_000, 240_000]);
+const MS_PER_SECOND = 1000;
 const MAX_LOGGED_LINES = 200;
 const MAX_LOGGED_LINE_CHARS = 500;
 const MAIN_HEAD = 'ref: refs/heads/main';
@@ -121,6 +134,8 @@ function outcomeOf(exitCode, reason, exporterExit, counts = NO_COUNTS) {
 function judge(answer) {
   const counts = parseResultLine(answer.stdout);
   if (answer.status === 2) return outcomeOf(EXIT_STOPPED, 'config', 2, counts ?? NO_COUNTS);
+  // Reached only when every try ended this way: the run itself failed, and the reason says on what.
+  if (answer.status === EXIT_UNREACHABLE) return outcomeOf(EXIT_FAILED, 'no_network', EXIT_UNREACHABLE);
   if (answer.status === 0 && counts !== null) return outcomeOf(EXIT_OK, null, 0, counts);
   // Exit 1, a killed or timed-out exporter, any other code, and exit 0 without its result line: not trusted.
   return outcomeOf(EXIT_FAILED, 'error', EXIT_FAILED, counts ?? NO_COUNTS);
@@ -162,8 +177,40 @@ function buildState({ startedAt, endedAt, outcome }) {
   };
 }
 
+/** Starts the exporter once and puts what it printed into the log. */
+function startExporter({ repoRoot, run, env, folders, note }) {
+  const answer = run(process.execPath, [EXPORTER_FILE, '--notes-only'], {
+    cwd: repoRoot,
+    env: { ...env, SECRETS_DIR: folders.secretsDir, HARNESS_DIR: folders.harnessDir },
+  });
+  const lines = `${answer.stdout ?? ''}\n${answer.stderr ?? ''}`.split(/\r?\n/).filter((l) => l.trim() !== '');
+  for (const line of lines.slice(-MAX_LOGGED_LINES)) note(`exporter: ${line.slice(0, MAX_LOGGED_LINE_CHARS)}`);
+  return answer;
+}
+
+/**
+ * The exporter, started again after each wait while it answers that the database could not be reached.
+ * Returns the answer of the last start: the first that is anything else, or the unreachable one of
+ * the last try.
+ */
+async function exportWhenReachable({ start, sleep, note, waits = NETWORK_RETRY_WAITS_MS }) {
+  const tries = waits.length + 1;
+  for (let attempt = 1; ; attempt += 1) {
+    const answer = start();
+    if (answer.status !== EXIT_UNREACHABLE) return answer;
+    const said = `the exporter did not reach Supabase (try ${attempt} of ${tries})`;
+    if (attempt === tries) {
+      note(`${said}: giving up`);
+      return answer;
+    }
+    const wait = waits[attempt - 1];
+    note(`${said}: trying again in ${wait / MS_PER_SECOND} s`);
+    await sleep(wait);
+  }
+}
+
 /** The run itself, without the bookkeeping. Throws only for a real fault; the caller records it. */
-function runOnce({ argv, repoRoot, run, env, fsImpl, note }) {
+async function runOnce({ argv, repoRoot, run, env, fsImpl, note, sleep }) {
   let folders;
   try {
     folders = parseArgs(argv);
@@ -176,18 +223,13 @@ function runOnce({ argv, repoRoot, run, env, fsImpl, note }) {
     note('the checkout is not on main: nothing was filed');
     return outcomeOf(EXIT_STOPPED, 'not_main', EXIT_STOPPED);
   }
-  const answer = run(process.execPath, [EXPORTER_FILE, '--notes-only'], {
-    cwd: repoRoot,
-    env: { ...env, SECRETS_DIR: folders.secretsDir, HARNESS_DIR: folders.harnessDir },
-  });
-  const lines = `${answer.stdout ?? ''}\n${answer.stderr ?? ''}`.split(/\r?\n/).filter((l) => l.trim() !== '');
-  for (const line of lines.slice(-MAX_LOGGED_LINES)) note(`exporter: ${line.slice(0, MAX_LOGGED_LINE_CHARS)}`);
-  return judge(answer);
+  const start = () => startExporter({ repoRoot, run, env, folders, note });
+  return judge(await exportWhenReachable({ start, sleep, note }));
 }
 
 /**
  * One scheduled run. Returns the exit code. `deps` replaces the checkout, the state folder, the
- * clock, the output and the one command the run starts.
+ * clock, the wait between tries, the output and the one command the run starts.
  */
 export async function main(argv, deps = {}) {
   const {
@@ -196,6 +238,7 @@ export async function main(argv, deps = {}) {
     spawn,
     run = (command, args, options) => runCommand(command, args, options.cwd, { env: options.env, timeout: EXPORTER_TIMEOUT_MS, spawn }),
     now = () => new Date(),
+    sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); }),
     log = printLine,
     env = process.env,
     fsImpl = fs,
@@ -207,7 +250,7 @@ export async function main(argv, deps = {}) {
 
   let outcome;
   try {
-    outcome = runOnce({ argv, repoRoot, run, env, fsImpl, note });
+    outcome = await runOnce({ argv, repoRoot, run, env, fsImpl, note, sleep });
   } catch (error) {
     // The message goes to the log, scrubbed; the state file keeps only the reason.
     note(`failed: ${error?.message ?? error}`);

@@ -177,8 +177,9 @@ test('an exporter that exits 2 (its configuration) is exit 2, reason config, wit
   assert.equal(state.exporters[EXPORTER_KEY].exit_code, 2);
 });
 
+// The odd exit code here is 7: 3 is the exporter's "did not reach Supabase", which is tried again (below).
 test('an exporter that is killed, or says nothing, or exits 0 without its result line, is exit 1 with reason error', async (t) => {
-  for (const answer of [{ status: null, stdout: '', stderr: '' }, { status: 3, stdout: 'whatever', stderr: '' }, { status: 0, stdout: 'no result line here\n', stderr: '' }]) {
+  for (const answer of [{ status: null, stdout: '', stderr: '' }, { status: 7, stdout: 'whatever', stderr: '' }, { status: 0, stdout: 'no result line here\n', stderr: '' }]) {
     const w = world(t);
     assert.equal(await main(w.argv, w.deps(answer)), 1, JSON.stringify(answer));
     const state = w.state();
