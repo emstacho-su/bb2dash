@@ -86,3 +86,36 @@ hour label on the rule under the Events row; the Inbox's empty line under a fail
 caret, calendar and clock glyphs on selects and date fields (D-4); the disclosure triangle on "N earlier"
 (D-3 added no mark where no character stood); table columns that do not line up between course blocks on
 `/grades`; the assignment page marking Stream as the current tab.
+
+## /security-review
+
+Run 2026-10-09 by the PM, from inside `bb2dash-wt-22` on `feat/styling-22` at 0366290, over
+`origin/main...HEAD` (200 files). Required by the brief because the phase adds an inline script to the root
+layout of every page and reads a stored value into it, and because the desktop shell changes. The first pass
+was an independent read-only sub-task; it read in full every file with security bearing and compared the
+desktop's security baseline with `origin/main`. Its behaviour claims for Electron and Playwright are reasoned
+from the code, not observed in a running app.
+
+**Result: no finding at confidence 8 or above.** Nothing this branch adds is a concrete, exploitable
+vulnerability, so there was no finding to send through the false-positive pass.
+
+What was examined and dismissed, by area:
+
+| Area | What was checked | Why it is not a finding |
+|---|---|---|
+| The inline theme script | `THEME_BOOT_SCRIPT` in `web/src/lib/theme-preference.ts`, injected by the root layout | Its text is built from compile-time constants only. The stored value is compared with two fixed words; what reaches the page is the literal `light` or `dark` and two fixed hex colours. The `storage` listener compares a key; the observer on the head reads `data-theme` back and uses it only when it is exactly one of the two words |
+| `dangerouslySetInnerHTML` | one new use, in `web/src/app/layout.tsx` | One constant, the same shape as `SIDEBAR_BOOT_SCRIPT` on `main`; `raw-html.audit.test.ts` pins both files and each expression |
+| `ThemeMenu.tsx`, `usePaneScroll.ts` | what is written to and read from storage | The menu writes `light` or `auto` and reads through the same validator. The pane hook keeps only finite numbers from the parsed JSON, and its one sink is `scrollTop` |
+| The fonts stylesheet | the `<link>` to `fonts.googleapis.com` | A constant URL; `main` already loaded Google Fonts through the `@import`, so no new third party is trusted |
+| Marks and labels | `Mark`, `MarkedLabel`, `MARK_CHAR`; `attemptText` | Everything is rendered as React text; Blackboard's status string is a `Map` lookup that falls back to the raw string as text |
+| The desktop's security baseline | `WEB_PREFERENCES`, the navigation guards, the allowed origins, the preload, the update sender check | No changed line: eight files under `desktop/src` changed and none of these is among them |
+| The failed-load page | a `data:` page in the main window, so the preload attaches | Its CSP is `default-src 'none'` with inline style only and it holds no script, so nothing can call the one IPC method; main's sender check would refuse an opaque origin anyway. Only the app's own address is interpolated, attribute-escaped; the failing URL and the error text are never put into the page. Retry is a renderer navigation and still passes `will-navigate` |
+| `needsReload`, the theme-colour listener, the two menus | whether any can show or keep an origin the guards refuse, or run anything | They only load the app's address or the fixed `data:` page; the colour string is compared with one constant; both menus hold role items only, and the app menu is a subset of Electron's default menu, which `main` had |
+| The update prompt | `update-prompt.ts` | Only colours changed; its own partition, absent preload, navigation block and title allow-list are untouched |
+| The walk box (test-only) | secrets, shell injection, the wrong host, the write guard | The login and settings files are passed by path and never opened by the host script; nothing `login.mjs` prints is echoed; `run.json` holds no secret; docker and git are started from argument arrays with no shell; spec paths, container names and commit ids are pattern-checked; `--url` must be production, the preview pattern or a host named a second time; every write leaves the browser and is stopped by name or by path |
+
+Hardening notes below the bar, recorded and not changed: the walks' write guard is a list of paths (edge
+functions, auth other than sign-out and GraphQL pass through, and the app calls only the read-only `search`
+function there today); the failed-load page's safety rests on its CSP and on main's sender check, so a later
+script on that page must keep both; the Google Fonts stylesheet cannot carry an integrity hash and the web app
+has no CSP, as on `main`; with `--url` and `--keep` the share token sits in the kept container's environment.
