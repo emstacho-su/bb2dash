@@ -1,14 +1,1 @@
-{
-  "web/src/app/(app)/Shell.module.css": 2,
-  "web/src/components/popout/Popout.module.css": 15,
-  "web/src/components/popout/SubmissionBlock.module.css": 2,
-  "web/src/components/shell/ActivityMenu.tsx": 0,
-  "web/src/components/shell/Bell.module.css": 14,
-  "web/src/components/shell/Bell.tsx": 0,
-  "web/src/components/shell/CourseSidebar.module.css": 13,
-  "web/src/components/shell/NavSearch.module.css": 8,
-  "web/src/components/shell/SearchPanel.module.css": 17,
-  "web/src/components/shell/SyncButton.module.css": 9,
-  "web/src/components/shell/TopNav.module.css": 44,
-  "web/src/components/shell/TopNav.tsx": 1
-}
+{}

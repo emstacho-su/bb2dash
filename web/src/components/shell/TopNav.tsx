@@ -207,7 +207,7 @@ export function TopNav({ userEmail }: { userEmail: string | null }) {
           {user.open && (
             <div className={styles.ddUser} role="menu">
               <div className={styles.ddIdentity}>
-                <span className={styles.ddHead} style={{ padding: 0 }}>
+                <span className={styles.ddHeadFlush}>
                   Signed in
                 </span>
                 <span className={styles.ddEmail}>{userEmail ?? 'unknown'}</span>

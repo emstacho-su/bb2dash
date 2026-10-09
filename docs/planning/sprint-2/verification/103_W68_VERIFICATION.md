@@ -319,3 +319,52 @@ route /planner [light]: box scrollWidth=764 clientWidth=368
 route /course/IST.466/grades [dark]: box scrollWidth=620 clientWidth=345
 route /course/IST.466/grades [light]: box scrollWidth=620 clientWidth=345
 ```
+
+## Resume 2: the mount, the marks, the sweep
+
+Start checks (each by itself, all exit 0 and one line): `data-theme='light'` in `globals.css`, `.errorNotice` and `.tip` in `tokens.module.css`,
+`motion-control` and `size-target` in `globals.css`, `attemptText` in `queries.grades.ts`, `ThemeMenu.tsx` present on `origin/feat/styling-22`.
+
+### Task 10, the mount (6509975)
+
+One `<ThemeMenu />` line in `TopNav.tsx`, in the account menu between the desktop update row and Sign out. `cd web && npx vitest run test/ThemeMenu.test.tsx test/TopNav.update.test.tsx test/TopNav.fold.test.tsx`:
+3 files, 47 passed, exit 0. `grep -c "<ThemeMenu" web/src/components/shell/TopNav.tsx` prints 1. `TopNav.search` and `TopNav.workspace` tests also pass.
+
+### Task 31, `icons.tsx` (6e023d3), pushed by itself
+
+`Mark` (five marks: caret right, down, left, close, arrow up right), `MarkedLabel` and `MARK_CHAR` (six characters by name) are in
+`icons.tsx`; the bell and Sync are redrawn on the 256 grid (Phosphor regular paths) and `SyncButton.tsx`'s own 24-grid icon is gone
+(`grep -c 'viewBox="0 0 24 24"' web/src/components/shell/SyncButton.tsx` prints 0). `Mark.module.css` sizes a mark at `1em`.
+`git grep -c "export const MARK_CHAR" -- web/src/components/shell/icons.tsx` prints one line. `cd web && npx vitest run test/marks.test.tsx test/TopNav.search.test.tsx test/SyncButton.test.tsx test/Bell.test.tsx test/ItemPopout.test.tsx test/SubmissionBlock.test.tsx test/AssignmentPopout.test.tsx test/token-audit.test.ts`:
+8 files, 208 passed, exit 0; the six old files unedited. (`marks.test.tsx` was written with the component and not run red on its own; I did not stash the component to show it.)
+Mark characters before my own files of this task: `41 20`.
+The Phosphor paths are written from memory of the regular weight set and checked only by a test that each path is non-empty and distinct;
+nobody has looked at the drawn marks yet (the PM's shots 03, 06 and 28 are the first look).
+
+### Task 17, the sweep of the shell cluster
+
+`shell.json` is `{}` (every file at 0, taken out of the JSON). Printed lines:
+
+```
+Baseline sum (shell.json)      0
+Weight check (shell, popout)   (nothing, exit 1)
+Time check (shell paths)       (nothing, exit 1)
+Field check                    5 2 2
+No-select check (5 files)      5 0 0
+Strength check                 8 5
+Ring check (shell, popout)     17 0 0
+Red files (components/shell)   Bell.module.css, CourseSidebar.module.css, TopNav.module.css
+Notice files (popout)          components/popout/Popout.module.css
+```
+
+`git grep -c "cursor: progress"` over shell and popout: `Popout.module.css:1`, `SearchPanel.module.css:1`, `SyncButton.module.css:1`.
+`@starting-style`: Popout (2: the backdrop and the panel), Bell, NavSearch, SyncButton, TopNav (2: `.dd` and the phone menu), five files.
+`overscroll-behavior: contain`: Bell, SearchPanel, TopNav, Popout, four files. `backdrop-filter` in Popout: 0. `outline: none|0` in shell and popout: nothing (exit 1).
+`var(--color-panel)` in CourseSidebar 1, `var(--radius-control)` in SyncButton 1, `var(--shadow-mark)` in TopNav 1.
+`cd web && npm test`: 167 files, 3301 passed, exit 0. `npm run typecheck` exit 0. `npx eslint . --max-warnings 0` exit 0.
+`ScreenStub.tsx` (no importer) and `.stub`, `.stubTitle`, `.stubMeta` are deleted; `.stubBody` is swept. `TopNav.tsx:154`'s `padding: 0` is the class `.ddHeadFlush`.
+
+Defaults taken in the sweep: the Field and Strength rules for a disabled select/field carry `:disabled:not([aria-busy='true'])`
+for `SearchPanel`'s `.courseSelect` now (the other rules follow with task 37); the nav-search pill keeps the one ring and the field inside it is
+`outline-color: transparent` rather than `outline: none` (the Ring check counts the latter as a removed ring); `--size-nav-search-width` (240px) is used for the
+three 240 px literals of the shell (account menu, search field, course select) because it is the only declared name for that value.

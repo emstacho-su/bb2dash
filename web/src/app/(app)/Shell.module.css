@@ -40,7 +40,7 @@
 }
 
 .kicker {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-accent);
@@ -50,35 +50,11 @@
   margin: 0;
 }
 
-.stub {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-8);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.stubTitle {
-  font-family: var(--font-heading);
-  font-weight: var(--font-heading-weight);
-  font-size: var(--text-lg);
-  margin: 0;
-}
-
 .stubBody {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-14);
   color: var(--color-muted);
   max-width: 62ch;
-}
-
-.stubMeta {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  margin-top: var(--space-2);
 }
 
 @media (max-width: 720px) {
