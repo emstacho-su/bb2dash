@@ -195,7 +195,8 @@ services:
     environment:
       # The CLI's config lives on a tmpfs (freeze amendment F-4): no session persists.
       CLAUDE_CONFIG_DIR: /home/node/.claude
-      # Memory jobs (the rolling summary and the remembered items) are off until Stack turns them on.
+      # Off turns off the memory jobs only (the remembered items). The rolling summary of a long
+      # conversation is on from 24a whatever this says.
       WORKSPACE_MEMORY_JOBS: "off"
       # No telemetry, error reports or update checks: the firewall allows api.anthropic.com only.
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
