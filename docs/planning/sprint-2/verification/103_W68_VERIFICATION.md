@@ -559,3 +559,10 @@ Loaded at the start of the round and `MASTER.md` was in hand (read earlier this 
 `cd web && npm test`: 183 files, 3404 passed; typecheck 0; eslint 0; audit 89 passed.
 
 Full run on the committed and pushed tree, `node scripts/walk-box.mjs web/e2e/phone-width.spec.ts`: run **20261009T041719Z**, commit 4b77389, `"dirty": false`, exit 0, `"result": "passed"`, `54 passed`; the badge and the 800 px lines above are printed again in it.
+
+### V-15, the popout's panel draws no ring (33519ca)
+
+`Popout.module.css` `.panel:focus-visible` (the ring on the dialog `PopoutShell` focuses by script) is deleted, and no `outline: none` takes its place: the global rule leaves a `role="dialog"` container out, and the first Tab inside shows the ring on a real control.
+Read of every `focus-visible` rule in the shell and the popout: the others are controls, menu rows, a field, or `CourseSidebar` `.rail:focus-visible` (an `aside` with `tabIndex={-1}`, not a dialog), and they keep theirs. No test of mine pinned the deleted rule.
+Ring check `37 0 0`; `git grep -c -E "outline:\s*(none|0)\b"` over shell and popout prints nothing; `cd web && npm test` 187 files, 3426 passed; typecheck 0; eslint 0; audit 89 passed.
+`node scripts/walk-box.mjs web/e2e/theme-walk.spec.ts -- -g "17 assignment-popout|18 session-popout"`: run **20261009T062419Z**, commit 33519ca, `"dirty": false`, exit 0, `4 passed`.
