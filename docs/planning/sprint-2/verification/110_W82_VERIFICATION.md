@@ -260,3 +260,86 @@ Defaults: the same-named `-WindowStyle Hidden` still flashes a console for a mom
 starts, as the logon task does; a refused skip that comes with a thrown error stays "not filed"; the
 `applied_at` rule compares the whole text with every line starting `applied_at: ` blanked (the note
 has one such line, in its front matter).
+
+## Round 3 (the PR-level code review)
+
+Step 0: `git merge origin/fix/phase23-followups` (clean, none of the other workers' files touched).
+"Round 3" of the brief was read.
+
+**Red** (commit a2666ef, tests only), before any fix:
+
+```
+node --test scripts/register-exports.test.mjs scripts/exports-run.test.mjs scripts/inbox-decisions-export.test.mjs
+SyntaxError: The requested module './inbox-decisions-export.mjs' does not provide an export named 'writeAtomic'
+✖ the script holds no control character except tab, CR and LF
+✖ it holds the exact powershell.exe path literal, with its backslashes
+✖ the only command the runner starts is the exporter, ...      (the runner still had its own spawnSync)
+✖ a timed-out exporter logs its spawn error, and no message reaches the state file
+```
+
+**Greens**: fix 1 aac56a3; fixes 2, 3 and the exporter half of 4 in 6c63fc7; fix 5 and the runner half of
+4 in c4c21e9. Final run of `node --test scripts/register-exports.test.mjs scripts/exports-run.test.mjs
+scripts/inbox-decisions-export.test.mjs scripts/inbox-decisions-pr.test.mjs scripts/inbox-decision-render.test.mjs`:
+`ℹ tests 72   ℹ pass 72   ℹ fail 0`.
+
+### Fix 1 (CRITICAL): the corrupt powershell.exe path
+
+Only line 102 was damaged. Every other backslash in the file was checked by eye (`TrimEnd('\', '/')` twice,
+`$env:USERPROFILE\.bb2dash-exports\state.json`) and by the new test; nothing else was lost. The line was
+rewritten with a JS `String.raw` literal (no escape processing). Bytes after the fix:
+
+```
+$ grep -n System32 scripts/register-exports.ps1 | cat -A
+102:$powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'$
+$ grep -c -F 'System32\WindowsPowerShell\v1.0\powershell.exe' scripts/register-exports.ps1
+1
+$ grep -c -P '[\x00-\x08\x0B\x0C\x0E-\x1F]' scripts/register-exports.ps1
+0
+PowerShell parse errors: 0
+```
+
+(The command as quoted in the PM's note, `grep -c 'System32\\WindowsPowerShell\\v1.0\\powershell.exe'`, gave 0
+in this shell because the Bash tool strips one level of backslashes in a single-quoted pattern; the `-F` form
+and a bracket-class form `System32[\]WindowsPowerShell[\]v1[.]0[\]powershell[.]exe` both give 1.)
+
+New `scripts/register-exports.test.mjs` (added to the `test` line of `scripts/package.json`, nothing else on
+the line), 5 tests, none runs the script: no control character except tab, CR and LF; the exact path literal;
+the other two backslash sites; the action line starts hidden, uses `-Command` and the command ends
+`; exit $LASTEXITCODE'`; every folder check comes before `Register-ScheduledTask`, no `git`, `gh` or `docker`
+command and no `.env` or secrets-file read in the code.
+
+### Fix 2: every unlogged row gets its entry
+
+`logRows` no longer skips test-shaped rows. Test: `R5: a test-shaped row filed by --notes-only after a
+refused skip gets its entry and its log stamp at the next default run`.
+
+### Fix 3: a refused skip is told apart from a row another run took
+
+On a false from `inbox_decision_skipped`, `skipTestQuestions` reads the unfiled list again (same RPC, same
+limit, once per run for all refused rows). Still on it: filed like any other. Gone: one log line
+(`taken by another run; nothing written`), no file, not skipped, not failed. The re-read throws: those rows
+are `not filed`, nothing written. Tests: `a refused skip whose row is gone from the re-read list was taken by
+another run: ...`, `a refused skip whose row is still on the re-read list has a logged write and is filed
+like any other`, `a re-read that throws counts the refused row as not filed and writes nothing for it`
+(and the two R5 tests of round 2, which now also pass through the re-read).
+
+### Fix 4: timeouts say so
+
+`runCommand` (the exporter's, now `runCommand(command, args, cwd, { env, timeout, spawn })`) appends
+`result.error.message` to stderr whenever `error` is set. Tests: `runCommand puts a spawn error in stderr (a
+timeout says ETIMEDOUT), and hands env and timeout to the spawn` (stand-in
+`{status: null, stderr: '', error: {message: 'spawnSync node ETIMEDOUT'}}`) and, at the runner,
+`a timed-out exporter logs its spawn error, and no message reaches the state file` (the log holds ETIMEDOUT,
+`state.json` keeps exactly the fixed keys and does not hold the message; exit 1, reason `error`).
+
+### Fix 5: one copy
+
+The exporter exports `writeAtomic`, `printLine` and `runCommand` (with optional `env`, `timeout`, `spawn`).
+`exports-run.mjs` imports them and has no `child_process` import, no `spawnSync`, no temp-file code, no
+printer of its own; the runner test now asserts that and that `runCommand(` is called once. The default
+`maxBuffer` of 10 MiB now applies to every exporter command (the resolver and the ingest too). No other
+behaviour change. One more smoke of the real spawn path in a temp checkout (as in the first hand-in) still
+gives exit 2, reason `config`, the fixed keys.
+
+Defaults: `status: null` from a killed child is now mapped to 1 inside `runCommand`, so the runner sees 1
+rather than null (same outcome: exit 1, reason `error`); one re-read per run, not one per refused row.
