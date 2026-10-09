@@ -205,3 +205,101 @@ before the first apply; each of the rest is dry-run in its turn, after the one b
 
 After the three, one read of prod: no relation and no function of the phase exists, no bucket
 `workspace-uploads`, no role `workspace_ingest_runner`, and no migration named 190 to 199.
+
+## Task 21: the nine applies, 2026-10-08 night (2026-10-09 01:5xZ to 02:5xZ)
+
+Stack's word, in the terminal, after the three dry runs above: "apply and merge" (the nine in numeric
+order, each after its own clean dry run, a stop at the first that is not; and the port PR's merge).
+He did not say "not 198".
+
+Each apply was `apply_migration` under the file's name with the file's whole text, then
+`md5(statements[1])` and its length read back from `supabase_migrations.schema_migrations` and held
+against `git show HEAD:<file> | md5sum`, then the unit through the runner. 191 and 198 by the PM; the
+others by one helper agent a migration on the PM's written procedure (dry run, apply, compare, unit).
+
+| migration | dry run | md5 on prod = md5 of the file | bytes | unit after the apply |
+|---|---|---|---|---|
+| `190_workspace_store` | clean | `b122452916886e563deebb567c1ba7d3` | 35270 | `phase24_190_store` PASS; `phase21_140_workspace_tables` PASS, unedited |
+| `191_workspace_uploads_bucket` | clean | `e88010819381ba9c72eb119dec70e9e4` | 6655 | `phase24_191_bucket` PASS |
+| `192_workspace_search` | clean on the second (below) | `c5f159d17b73e001b0c3ba6baff40a50` | 21602 | `phase24_192_search` PASS |
+| `193_workspace_ingest_role` | clean on the second (below) | `032665f142d0e84bb2307c18bcf888f7` | 25911 | `phase24_193_ingest_role` PASS; `phase24_190_store` still PASS |
+| `194_workspace_ask_options` | clean | `146fa6df504fd0021b9eb261e9ffab9f` | 24735 | `phase24_194_ask_options` PASS |
+| `195_workspace_turn_state` | clean | `7bf979014d3177d9015ea38dd7f9f45b` (the file was brought to this, below) | 15629 | `phase24_195_turn_state` PASS; `phase21_140` PASS |
+| `196_workspace_runner_v2` | clean, once with each of its two units | `b9c67b9da012a0f958fd0dc979d4b93f` | 50158 | `phase24_196_runner_v2`, `phase24_196b_feed_jobs`, `phase21_142`, `phase21_143`, `phase21_140` PASS |
+| `197_workspace_index_status` | clean on the second (below) | `dd7812a5eac490fc2b3102250272bfc9` | 7185 | `phase24_197_index_status` PASS; `phase15_100` PASS |
+| `198_text_embeddings_anon_insert_drop` | clean (before the first apply) | `858722294304c42cc649401fee4033c1` | 2820 | `phase24_198_anon_insert_drop` PASS |
+
+`select name from supabase_migrations.schema_migrations where name ~ '^19[0-8]_'` lists the nine
+names, one statement each. **After the ninth, `node scripts/db-test.mjs --only phase24_store_proof.sql`
+prints PASS against prod** (task 49, proofs 1 to 7 and 7b).
+
+**What stopped a dry run, and what was done. Nothing was applied by a stopped run, and each was read
+back as rolled back.**
+
+* **192, the unit.** The migration and its guard ran; the unit raised on the function's argument
+  list, which Postgres prints as `vector` when `extensions` is on the session's path and as
+  `extensions.vector` when it is not. The unit now takes the prefix off before it compares (3bcedec).
+  The other units were read for the same comparison: none.
+* **193 and 197, the harness.** A pasted dry run runs as `postgres`, which cannot `set role` into a
+  login role it is not a member of with the set option. 193's unit and the two of 196 say so in
+  their headers and name the one line a dry run adds inside its own transaction
+  (`grant <role> to postgres with inherit false, set true;`); 197's header lacked the note and has
+  it now (0be7aa4). The line was in dry runs only, never in an apply; the count of such memberships
+  read 0 before and after each.
+* **192, a shape.** Before 192 went on, the frozen search row gained a last column, `written_at`
+  (W-77's finding: the row had nowhere to carry the date the prompt shows beside a remembered item).
+  W-76 added it to 192 and its unit, W-78 widened the row it checks, the PM changed the fixtures
+  (2c474f4). 192 as applied carries it.
+
+**One apply did not match its file, and the file was changed, not prod.** 195 went on with every
+statement exact and one header comment broken a word early ("A source's title / is" where the file
+had "title is /"): the same length, another md5. The rule is that the repo file is byte-identical
+to what was applied, so the file took prod's line break (04fbdfb). Prod was not touched. The
+helper's instructions for 196 and 197 then said to copy every line as it stands and never re-wrap a
+comment; both matched at the first try.
+
+**Advisors after the ninth apply (security).** Three kinds of line.
+
+* `authenticated_security_definer_function_executable` (WARN) lists the browser's four,
+  `workspace_ask_with`, `workspace_document_delete`, `workspace_upload_register` and
+  `workspace_upload_retry`, beside the two it listed before. The brief said to expect it: each is
+  definer because the tables behind it give the browser select only, and each refuses anyone but
+  the owner as its first statement (the units prove it). Recorded here and not counted as a new
+  finding. The same lint names `inbox_accept_question`, which is the follow-ups'.
+* `rls_enabled_no_policy` (INFO) names `workspace_text_embeddings`. That is the design: row
+  security on and no policy, so only the service role, which bypasses it, reaches a vector. The
+  same lint names `inbox_apply_holds`, the follow-ups'.
+* `auth_leaked_password_protection` (WARN) is older than this phase.
+
+**The units on `main`, and the port PR.** PR #86 (`test/phase24-port`, four files) is open; from that
+branch `phase15_100`, `phase21_142` and `phase21_143` PASS against prod. `phase15_101` reads red there
+and on `main` for one function that is not this phase's, `inbox_accept_question()` (the follow-ups'
+187, on prod since 2026-10-09): it was red on `main` before this phase's first apply. The merge of
+#86 is Stack's hand: the session's merge command was refused by its permission check.
+
+**`main` moved during the sitting.** The follow-ups merged (#85, 696d35e; bb2dash-stack #6, 0fd659f).
+`origin/main` was merged into the phase branch (eb9fd0e): two files conflicted, `DATA_SYNTAX.md` and
+`project-state/DECISIONS.md`, each side having added rows, and both sets are kept. Re-done after it:
+`node docker/apply/fork-firewall.mjs --write` and `--check` (exit 0, and `git diff --exit-code
+docker/apply` prints nothing); `cd apply && npm run typecheck && npm run build && npx vitest run`
+(136 tests); the five container test files (63 tests); `docker compose config` resolves. The
+resolved `sync` and `apply` services are identical to `main`'s.
+
+## The workers' second hand-backs
+
+| worker | merged | read by the PM on the merged branch |
+|---|---|---|
+| W-77, tasks 28 to 35 | f3a376b | `workspace`: typecheck clean, 982 tests (97.39 % lines of `src/` by its own run); `apply` typecheck and 123 tests from the same tree; no `--resume` and no `mcp__rag__` in `src/`. One test failed once beside other suites and passed on every rerun: not yet named |
+| W-78 round 2 | 6839087 | `mcp-server` 143 tests; the row with `written_at` |
+| W-76 round 2 | deae4a9 | 192 and its unit only; no applied file touched |
+| W-79, tasks 37 and 38 and the test fix | 9e58951 | the five container suites pass; `grep -c harness_database_url compose.yaml` gives 0; the Workspace block: three secrets, no volume, a tmpfs at `/home/node/.claude`, no hostname, `WORKSPACE_MEMORY_JOBS` off; `workspace-ingest` and `workspace-extract` as F-3 has them; the exchange volume tmpfs, `gid=1100,mode=0770` |
+
+**The ingest image is not built, and that is blocked, not failed.** Its build stops in `apt-get
+update`: on the network the laptop was on that night, `http://deb.debian.org` answers from
+158.115.141.246 on port 443 with a certificate nothing trusts. The same happens in the bare
+`node:22-bookworm-slim` image with no file of ours (the PM's run). The Workspace and apply test
+images built because their package layers were cached (`bb2dash-workspace:wt24` 93c654c69d62,
+1.17 GB; `bb2dash-apply:wt24` 0fd2a1a825df). The four live tags' ids were the same before and after
+W-79's builds. P-7, P-11 and the upload half of the walk wait for a build on another network. W-79
+also reports one build that began a few seconds after a `bb2dash-walk22-` container appeared (a
+cached build of 12 s).
