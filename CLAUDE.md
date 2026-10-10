@@ -81,10 +81,10 @@ Supabase project: `goultdzqcavefcgnifdy` (us-east-1, Postgres 17). Full access v
   a logged write is never skipped.
   The sync still holds no LLM (B-43). Claude's SQL there is two tools: `query` (one select, in a read-only
   transaction) and `apply_item` (one item; the server runs the transaction and checks each statement against
-  an allow-list). Migrations 180–187 are frozen (183 went on at the cut-over, 2026-10-07; 187, the follow-ups'
-  apply side, on 2026-10-09); 188 (the transform reads an archived superseded-file answer, and the fold
-  stamps `applied_at` on a session answer whose pick its file carries) is applied at the follow-ups'
-  cut-over and frozen from then; a fix is migration 189, the one number left. Since 185 the role also reads `bb_files` (21 columns, never `source_url`,
+  an allow-list). Migrations 180–188 are frozen (183 went on at the cut-over, 2026-10-07; 187, the follow-ups'
+  apply side, on 2026-10-09; 188, where the transform reads an archived superseded-file answer and the fold
+  stamps `applied_at` on a session answer whose pick its file carries, at the follow-ups' cut-over the same
+  day); a fix is migration 189, the one number left. Since 185 the role also reads `bb_files` (21 columns, never `source_url`,
   `local_path` or `sha256`) and `sessions`, and writes neither: a session answer (`session_link/<file id>`)
   is `link_file_sessions`'s to apply, and the worker records it only when the file already shows it. Since 107 (2026-10-09)
   the role also reads `grade_column_links` (select only), because `v_gradebook_latest`, which it already read,
